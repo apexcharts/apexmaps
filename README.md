@@ -39,7 +39,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Data | GeoJSON, TopoJSON, bare geometry, feature arrays; automatic winding repair; join-key auto-detection |
 | Joins | Explicit `joinBy`, mismatch diagnostics with suggestions, FIPS leading-zero repair, opt-in `fuzzyJoin` |
 | Scales | quantile, equal interval, Jenks, threshold, linear, log, sqrt, ordinal; OkLab-sampled ramps; 17 palettes; automatic diverging selection; square-root size scales with nested-circle legends |
-| Interaction | Anchored wheel zoom, inertial pan, pinch, double-click zoom, hover states, selection, legend class muting |
+| Interaction | Anchored wheel zoom, inertial pan, pinch, double-click zoom, hover states, selection, legend class muting, drilldown with automatic parent detection and a breadcrumb |
 | Camera | `flyTo` (Van Wijk zoom-and-pan path), `easeTo`, `jumpTo`, `fitBounds`, `frameFeature`, `resetView`, interruptible and retargeting |
 | Components | Classed, gradient and nested-circle legends, HTML tooltips with edge flipping, collision-avoiding labels with halos |
 | Accessibility | ARIA roles, auto-generated description, roving-tabindex keyboard navigation, live-region announcements, optional data table, `prefers-reduced-motion` |
@@ -244,6 +244,72 @@ Clicking a cluster flies to the bounds of its members, and emits `clusterClick` 
 rather do something else. Members that share a position would give a zero-size box and ask the camera
 for infinite zoom, so that case steps in by a fixed amount instead.
 
+## Drilldown
+
+Click a state, get its counties. One option:
+
+```js
+series: [
+  {
+    name: 'Adoption',
+    joinBy: { data: 'key' },
+    data: rows,
+    drilldown: { map: 'us/counties' },
+  },
+]
+```
+
+The child level is **restricted to the feature that was clicked**, which is the part that makes it a
+drilldown rather than a zoom: showing all 3,231 US counties after clicking California leaves the
+reader to find California again. Which counties belong to California is not configuration, because
+published hierarchical geometry already says so, in one of two ways:
+
+- **A property naming the parent.** TIGER counties carry `state_abbr` and `state_fips`, Eurostat NUTS
+  carries `cntr_code`, Natural Earth admin-1 carries `adm0_a3`. The field is detected by matching
+  against the parent's key, scoring candidates by how many children they match so a coincidence in
+  one row cannot pick the hierarchy.
+- **A key prefix.** County FIPS `06037` sits under state FIPS `06`, NUTS `DE12` under `DE1`. This is
+  the fallback, and it is what carries NUTS below level 1 where `cntr_code` stops distinguishing
+  levels.
+
+Set `parentField` to name the property yourself, or `scope: 'all'` to draw the whole child map. When
+neither route matches anything, **the drilldown is declined rather than performed**, with the reason
+in the dev-mode diagnostics: landing on an empty map costs the reader the level they were reading and
+gives nothing back.
+
+Going deeper is a function of the clicked feature, so levels can differ, and returning `null`
+declines:
+
+```js
+drilldown: {
+  map: (context) => (context.depth === 1 ? 'eu/nuts2' : 'eu/nuts3'),
+  animate: 'zoom',              // frames the parent before the swap. 'none' cuts
+  breadcrumb: { rootLabel: 'Europe' },
+}
+```
+
+Data for the deeper level can arrive two ways. Rows for every level can live in one array, since the
+join takes whatever matches the level on screen, and the diagnostic says so instead of reporting the
+other level's rows as a broken join. Or fetch per level from the event, which fires once the child is
+already on screen:
+
+```js
+map.on('drilldown', ({ key, name, depth, featureCount }) => {
+  fetchCounties(key).then((rows) => map.updateSeries([{ ...series, data: rows }]))
+})
+map.on('drillup', ({ depth }) => {})
+```
+
+Getting back out is deliberately over-provided, because a drilldown with no visible exit is a trap:
+the breadcrumb above the map (real buttons, keyboard reachable), Escape, or `drillUp()` /
+`drillUp(Infinity)`. None of them refetch: each level's geometry is still held, so climbing back is
+synchronous. `drillTo(key)` drills programmatically, and `drillDepth` says where you are.
+
+Two details worth knowing. The camera frames the clicked feature *before* the geometry swaps, so the
+two levels line up and the change reads as a zoom instead of a cut, and the reverse runs on the way
+back. And the selection does not survive a level change, because those keys belong to the level you
+left.
+
 ## Opinionated defaults, and why
 
 - **Equal Earth, not Web Mercator.** Most developers never choose a projection, so the default has to
@@ -280,6 +346,7 @@ const map = new ApexMaps(element, {
       normalizeBy: 'population',      // legend retitles itself
       scale: { type: 'quantile', classes: 5, palette: 'blues' },
       stroke: { color: '#ffffff', width: 0.5 },
+      drilldown: { map: 'us/counties' },  // child level, scoped to the clicked feature
     },
     {
       type: 'bubble',
@@ -316,6 +383,7 @@ await map.render()
 
 map.camera.flyTo({ center: [2.35, 48.85], zoom: 8 })
 await map.frameFeature('FRA', { padding: 40 })
+await map.drillTo('FRA')       // as a click would; drillUp() / drillUp(Infinity) climb back
 map.setSelection(['FRA', 'DEU'])
 map.updateSeries([{ name: 'Unemployment rate', joinBy: ['iso_a3', 'code'], data: next }])
 await map.updateOptions({ geo: { projection: 'mercator' } })

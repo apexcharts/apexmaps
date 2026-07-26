@@ -115,6 +115,26 @@ describe('createScale', () => {
     expect(scale.color(NaN)).toBe(scale.nullColor)
   })
 
+  it('keeps no-data out of the classification, not at zero', () => {
+    // `Number(null)` is 0, so a coercion-first pass files every feature with no
+    // data as a zero. On a map where a third of the areas have data, that puts
+    // most of the breaks at zero and publishes classes that contain nothing.
+    const sparse = [40, 55, 70, 83, null, undefined, '', null, null, null, null, null]
+    const scale = createScale(sparse)
+
+    expect(scale.domain).toEqual([40, 83])
+    expect(scale.breaks.every((b) => b >= 40)).toBe(true)
+    // Every class boundary distinct: no "0 to 0" entries in the legend.
+    const labels = scale.legendItems({}).map((i) => i.label)
+    expect(new Set(labels).size).toBe(labels.length)
+  })
+
+  it('does not count booleans as values', () => {
+    // `Number(false)` is 0 and `Number(true)` is 1, either of which would move the
+    // domain of a scale built from a field that turned out to be a flag.
+    expect(createScale([10, 20, true, false]).domain).toEqual([10, 20])
+  })
+
   it('never maps a real value to the no-data colour', () => {
     const scale = createScale(values)
     for (const v of values) expect(scale.color(v)).not.toBe(scale.nullColor)

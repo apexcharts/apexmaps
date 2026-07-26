@@ -223,6 +223,47 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* --- breadcrumb ----------------------------------------------------------- */
+
+.apexmaps-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px 8px;
+  font-size: var(--apexmaps-font-size);
+}
+
+.apexmaps-breadcrumb-item {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--apexmaps-fg-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.apexmaps-breadcrumb-item:hover {
+  background: var(--apexmaps-border);
+  color: var(--apexmaps-fg);
+}
+
+.apexmaps-breadcrumb-item:focus-visible {
+  outline: 2px solid var(--apexmaps-focus);
+  outline-offset: 1px;
+}
+
+.apexmaps-breadcrumb-sep {
+  color: var(--apexmaps-fg-muted);
+  opacity: 0.7;
+}
+
+.apexmaps-breadcrumb-current {
+  padding: 2px 6px;
+  font-weight: 600;
+}
+
 /* --- attribution ---------------------------------------------------------- */
 
 .apexmaps-attribution {

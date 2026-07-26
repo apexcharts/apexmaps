@@ -84,6 +84,19 @@ export class A11y {
   }
 
   /**
+   * Rewrite the label and description in place.
+   *
+   * Called whenever the map's content changes (a data update, a drilldown), so
+   * assistive technology is never left describing a level the reader has left.
+   */
+  update({ label, description }: { label: string; description: string }): void {
+    if (!this.svgRoot) return
+    this.svgRoot.setAttribute('aria-label', label)
+    const desc = this.svgRoot.querySelector('desc')
+    if (desc) desc.textContent = description
+  }
+
+  /**
    * @param anchorOf World-space anchor lookup, used only for reading order.
    */
   setNavigationOrder(

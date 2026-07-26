@@ -30,6 +30,14 @@ const DEFAULT_NULL_COLOR = '#eeeeee'
 function cleanNumbers(values: readonly unknown[]): number[] {
   const out: number[] = []
   for (const v of values) {
+    // No-data is skipped before any coercion, because `Number(null)`, `Number('')`
+    // and `Number(false)` are all 0. Coercing first files every feature with no
+    // data as a zero, which is the worst possible failure here: the map renders it
+    // as no-data (`color()` checks for null explicitly) while the classification
+    // silently counts it. A US map with 15 of 51 states carrying data then puts
+    // three of its five quantile breaks at zero, and publishes a legend reading
+    // "0 to 0" for classes that contain nothing.
+    if (v == null || v === '' || typeof v === 'boolean') continue
     const n = typeof v === 'number' ? v : Number(v)
     if (Number.isFinite(n)) out.push(n)
   }

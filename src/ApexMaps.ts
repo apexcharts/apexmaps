@@ -43,6 +43,9 @@ import type { LegendSection } from './components/Legend'
 import { Tooltip } from './components/Tooltip'
 import { Labels, labelAnchor } from './components/Labels'
 import type { LabelCandidate } from './components/Labels'
+import { Breadcrumb } from './components/Breadcrumb'
+import type { Crumb } from './components/Breadcrumb'
+import { scopeToParent } from './data/Hierarchy'
 import { ZoomPan } from './interaction/ZoomPan'
 import { registerPalette } from './scales/Palettes'
 import type { Palette } from './scales/Palettes'
@@ -55,6 +58,9 @@ import type {
   ApexMapsEventMap,
   ApexMapsEventName,
   ApexMapsOptions,
+  CameraState,
+  DrilldownContext,
+  DrilldownOptions,
   GeoInput,
   LonLat,
   MapSource,
@@ -88,6 +94,13 @@ const PREMIUM_FEATURES = new Set([
 /** Anything the renderer can draw. */
 type AnySeries = ChoroplethSeries | BubbleSeries | ArcSeries | MarkerSeries | BaseFeatures
 
+/** The series kinds bound to geometry, which are the ones a drilldown applies to. */
+type FeatureSeries = ChoroplethSeries | BaseFeatures
+
+function isFeatureSeries(series: AnySeries): series is FeatureSeries {
+  return series.kind === 'features'
+}
+
 /** A resolved mark, uniform across series types, for events and tooltips. */
 interface ResolvedMark {
   series: AnySeries
@@ -104,6 +117,23 @@ interface ResolvedMark {
   cluster?: Cluster
   /** DOM key used by the renderer for this mark. */
   markKey: string | number
+}
+
+/**
+ * One level of a drilldown, held so that climbing back is exact and synchronous:
+ * the geometry that was on screen, where the camera was, and what the caller had
+ * set as `geo.map`.
+ */
+interface DrillFrame {
+  /** `geo.map` as the caller had it at this level. */
+  mapSource: MapSource | null | undefined
+  mapId?: string
+  mapMeta?: MapMeta
+  /** The geometry that was displayed, already scoped if that level was drilled. */
+  geo: NormalizedGeo
+  camera: CameraState
+  /** Key of the feature that was clicked to leave this level. */
+  key: string
 }
 
 interface GlobalScope {
@@ -147,12 +177,16 @@ class ApexMaps extends BaseChart {
   mapId?: string
   mapMeta?: MapMeta
 
+  /** Levels drilled into, outermost first. Empty at the top level. */
+  readonly drillPath: { key: string; name?: string; mapId?: string }[] = []
+
   plot: HTMLElement | null = null
   legend: Legend | null = null
   tooltip: Tooltip | null = null
   labels: Labels | null = null
   a11y: A11y | null = null
   zoomPan: ZoomPan | null = null
+  breadcrumb: Breadcrumb | null = null
 
   private _listeners: Partial<Record<string, ((payload: never) => void)[]>> = {}
   private readonly _premiumUsed = new Set<string>()
@@ -160,11 +194,15 @@ class ApexMaps extends BaseChart {
   private _renderRaf: number | null = null
   private _attribution: HTMLElement | null = null
   private _a11yMounted = false
+  private readonly _drillStack: DrillFrame[] = []
+  /** Guards against a second click landing while a level is still loading. */
+  private _drilling = false
 
   private readonly _onMarkPointerOver: (event: Event) => void
   private readonly _onMarkPointerMove: (event: Event) => void
   private readonly _onMarkPointerOut: (event: Event) => void
   private readonly _onMarkClick: (event: Event) => void
+  private readonly _onKeyDown: (event: KeyboardEvent) => void
 
   constructor(element: HTMLElement, options: ApexMapsOptions = {}) {
     super(element)
@@ -178,6 +216,7 @@ class ApexMaps extends BaseChart {
     this._onMarkPointerMove = this._handleMarkPointerMove.bind(this)
     this._onMarkPointerOut = this._handleMarkPointerOut.bind(this)
     this._onMarkClick = this._handleMarkClick.bind(this)
+    this._onKeyDown = this._handleKeyDown.bind(this)
 
     GLOBAL.instances.push({
       id: this.getInstanceId(),
@@ -219,14 +258,19 @@ class ApexMaps extends BaseChart {
     return this
   }
 
-  private _ingest(data: GeoInput): NormalizedGeo {
+  /**
+   * @param meta Provenance for the geometry being ingested. Defaults to the
+   *   current map's, and is passed explicitly while drilling, where the child
+   *   pack's recommended key is not yet the instance's.
+   */
+  private _ingest(data: GeoInput, meta: MapMeta | undefined = this.mapMeta): NormalizedGeo {
     return normalizeGeo(data, {
       // A catalogue pack states its own recommended key, and it is right more
       // often than generic detection can be: an admin-1 pack carries `adm0_a3`
       // (the *country* code, identical for all 47 Japanese prefectures) which
       // scores higher than the correct `iso_3166_2` in any fixed candidate order.
       // Explicit config still wins.
-      keyField: this.config.geo.keyField ?? (this.mapMeta?.keyField as string | undefined),
+      keyField: this.config.geo.keyField ?? (meta?.keyField as string | undefined),
       nameField: this.config.geo.nameField,
       object: this.config.geo.object,
       repairWinding: this.config.geo.repairWinding,
@@ -254,6 +298,11 @@ class ApexMaps extends BaseChart {
       options: this.config.tooltip,
     })
     this.tooltip.mount()
+
+    this.breadcrumb = new Breadcrumb({
+      container: this.element,
+      onSelect: (up) => void this.drillUp(up),
+    })
 
     this.a11y = new A11y({
       container: this.element,
@@ -708,6 +757,11 @@ class ApexMaps extends BaseChart {
     if (!this._a11yMounted) {
       this.a11y.mount(this.renderer.root, { label, description })
       this._a11yMounted = true
+    } else {
+      // Drilling and `updateSeries` both change what the map says, so the
+      // description has to change with them. A stale description is worse than a
+      // generic one: it describes a level the reader has already left.
+      this.a11y.update({ label, description })
     }
     this.a11y.setNavigationOrder(this.geo.features, (f) => this.anchors.get(f.index)?.world)
 
@@ -727,6 +781,10 @@ class ApexMaps extends BaseChart {
 
   private _attachInteraction(): void {
     if (!this.camera || !this.plot) return
+    // On the container rather than the plot, so Escape works while focus is on the
+    // breadcrumb or the legend, and in the capture phase so a drilldown can claim
+    // it before the a11y handler treats it as "leave the map".
+    this.element.addEventListener('keydown', this._onKeyDown, true)
     this.zoomPan = new ZoomPan({
       container: this.plot,
       camera: this.camera,
@@ -855,8 +913,29 @@ class ApexMaps extends BaseChart {
       return
     }
 
+    // A feature on a series with a drilldown means "go deeper", so it does not
+    // also toggle selection: the key would belong to a level that is about to
+    // disappear. The click event still fires first, before anything moves.
+    const drilldown = mark.feature && isFeatureSeries(mark.series) ? drilldownOf(mark.series) : null
+    if (drilldown && mark.feature && isFeatureSeries(mark.series)) {
+      this.emit('featureClick', this._eventPayload(mark) as never)
+      void this._drill(mark.feature, mark.series, drilldown)
+      return
+    }
+
     if (this.config.interaction.selection?.enabled !== false) this.toggleSelection(mark.key)
     this.emit(mark.feature ? 'featureClick' : 'markClick', this._eventPayload(mark) as never)
+  }
+
+  private _handleKeyDown(event: KeyboardEvent): void {
+    if (event.key !== 'Escape') return
+    if (!this._drillStack.length) return
+    // Capture phase, so this beats the a11y handler's "leave the map" Escape.
+    // With somewhere to go back to, Escape means "up one level"; at the top level
+    // this returns early and the a11y meaning stands.
+    event.stopPropagation()
+    event.preventDefault()
+    void this.drillUp()
   }
 
   /**
@@ -883,6 +962,314 @@ class ApexMaps extends BaseChart {
       ],
       { padding: 60, maxZoom: 64 },
     )
+  }
+
+  // --- drilldown ------------------------------------------------------------
+
+  /** Levels below the top level currently displayed. */
+  get drillDepth(): number {
+    return this._drillStack.length
+  }
+
+  /**
+   * Drill into a feature by key, exactly as a click on it would.
+   *
+   * @returns Whether a deeper level was entered. False means the drilldown
+   *   declined: no such feature, no `drilldown` configured, the child map is the
+   *   one already on screen, or no child feature belongs to this parent. Each
+   *   case explains itself in the dev-mode diagnostics.
+   */
+  async drillTo(key: string): Promise<boolean> {
+    const feature = this.geo?.features.find((f) => f.key === key)
+    if (!feature) return false
+    const series = this.renderTargets.find(
+      (s): s is FeatureSeries => isFeatureSeries(s) && !!drilldownOf(s),
+    )
+    const options = series ? drilldownOf(series) : null
+    if (!series || !options) return false
+    return this._drill(feature, series, options)
+  }
+
+  /**
+   * Climb back out. `levels` of `Infinity` returns to the top.
+   *
+   * Synchronous work, awaited only for the camera move: the geometry for each
+   * level above is still held, so going back never refetches or re-ingests.
+   */
+  async drillUp(levels = 1): Promise<boolean> {
+    if (this._drilling || !this._drillStack.length) return false
+    const steps = Math.min(Math.max(1, Math.floor(levels) || 1), this._drillStack.length)
+
+    this._drilling = true
+    try {
+      let frame = this._drillStack.pop() as DrillFrame
+      for (let i = 1; i < steps; i++) {
+        this.drillPath.pop()
+        frame = this._drillStack.pop() as DrillFrame
+      }
+      this.drillPath.pop()
+
+      const animate = this._drillAnimation() !== 'none'
+      const cameFrom = frame.key
+
+      this._restoreLevel(frame)
+
+      // Frame where the reader just was, then pull back out to where they left
+      // the camera: the reverse of the move that brought them in, so the two
+      // levels stay visually connected.
+      if (animate && this.camera) {
+        const feature = this.geo?.features.find((f) => f.key === cameFrom)
+        const bounds = feature
+          ? this.viewport.measure({
+              type: 'Feature',
+              geometry: feature.geometry,
+              properties: {},
+            })
+          : null
+        if (bounds) {
+          this.viewport.camera = this.viewport.cameraForBounds(bounds, { padding: 24 })
+        }
+      }
+
+      this._buildSeries()
+      this._draw()
+      this.renderer?.applyCamera()
+      this._renderBreadcrumb()
+      this._reportDiagnostics()
+
+      if (animate && this.camera) {
+        await this.camera.easeTo({ ...frame.camera, duration: 320 })
+      }
+
+      this.a11y?.announce(this._drillAnnouncement())
+      this.emit('drillup', {
+        to: this.mapId,
+        depth: this._drillStack.length,
+        instance: this,
+      })
+      return true
+    } finally {
+      this._drilling = false
+    }
+  }
+
+  /**
+   * Replace the map with a deeper level, scoped to one feature.
+   *
+   * The two halves are deliberately ordered: geometry starts loading immediately
+   * but the camera move runs first, so a cold child pack downloads while the
+   * reader watches the parent feature fill the frame, and the swap then happens
+   * between two views of the same geography at the same size. Ordering it the
+   * other way makes the click feel unresponsive for as long as the fetch takes.
+   */
+  private async _drill(
+    feature: NormalizedFeature,
+    series: FeatureSeries,
+    options: DrilldownOptions,
+  ): Promise<boolean> {
+    if (this._drilling || !this.geo || !this.renderer) return false
+
+    const context: DrilldownContext = {
+      key: feature.key,
+      name: feature.name,
+      datum: series.datumFor(feature),
+      properties: feature.properties,
+      depth: this._drillStack.length + 1,
+      from: this.mapId,
+    }
+    const target = typeof options.map === 'function' ? options.map(context) : options.map
+    if (!target) return false
+
+    if (this._isCurrentMap(target)) {
+      this.warnings.push(
+        `drilldown from "${feature.key}" was declined: its child map is the one already on screen. ` +
+          'Use the function form of drilldown.map to choose a different map per level, or return null to stop.',
+      )
+      this._reportDiagnostics()
+      return false
+    }
+
+    this._drilling = true
+    const camera: CameraState = { ...this.viewport.camera }
+
+    try {
+      const loading = resolveMap(target as MapSource)
+      if (options.animate !== 'none') {
+        await this.frameFeature(feature.key, {
+          padding: 24,
+          duration: 320,
+          transition: 'ease',
+        })
+      }
+
+      let resolved: Awaited<ReturnType<typeof resolveMap>>
+      try {
+        resolved = await loading
+      } catch (error) {
+        this.camera?.jumpTo(camera)
+        this.warnings.push(
+          `drilldown into "${feature.key}" failed: ${(error as Error).message ?? String(error)}`,
+        )
+        this._reportDiagnostics()
+        return false
+      }
+
+      const meta = resolved.meta ?? (resolved.id ? mapMeta(resolved.id) : undefined)
+      const ingested = this._ingest(resolved.data, meta)
+      const scoped = scopeToParent(ingested, feature.key, options)
+
+      if (!scoped.count) {
+        // Landing on an empty map is worse than not drilling: the reader loses the
+        // level they were reading and gets nothing in exchange.
+        this.camera?.jumpTo(camera)
+        this.warnings.push(`drilldown into "${feature.key}" was cancelled: ${scoped.note}`)
+        this._reportDiagnostics()
+        return false
+      }
+
+      this._drillStack.push({
+        mapSource: this.userOptions.geo?.map,
+        mapId: this.mapId,
+        mapMeta: this.mapMeta,
+        geo: this.geo,
+        camera,
+        key: feature.key,
+      })
+      this.drillPath.push({
+        key: feature.key,
+        name: feature.name,
+        mapId: resolved.id,
+      })
+
+      this._enterLevel({ mapSource: target, mapId: resolved.id, mapMeta: meta, geo: scoped.geo })
+      this.warnings.push(...ingested.warnings, `drilldown: ${scoped.note}`)
+
+      // The child level is fitted to its own extent, so the camera starts neutral.
+      // Whatever zoom brought the reader here describes the parent projection and
+      // is meaningless under the new fit.
+      this.camera?.stop()
+      this.viewport.camera = { k: 1, x: 0, y: 0 }
+
+      this._buildSeries()
+      this._draw()
+      this.renderer.applyCamera()
+      this._renderBreadcrumb()
+      this._reportDiagnostics()
+
+      this.a11y?.announce(this._drillAnnouncement())
+      this.emit('drilldown', {
+        key: feature.key,
+        name: feature.name,
+        from: context.from,
+        to: resolved.id,
+        depth: this._drillStack.length,
+        featureCount: scoped.count,
+        instance: this,
+      })
+      return true
+    } finally {
+      this._drilling = false
+    }
+  }
+
+  /** Swap in a level's geometry, keeping `geo.map` honest for later updates. */
+  private _enterLevel({
+    mapSource,
+    mapId,
+    mapMeta: meta,
+    geo,
+  }: {
+    mapSource: MapSource | null | undefined
+    mapId?: string
+    mapMeta?: MapMeta
+    geo: NormalizedGeo
+  }): void {
+    // `userOptions` has to move with the level, not just `config`: every later
+    // rebuild starts from `userOptions`, so leaving the parent id there would make
+    // the next `updateOptions` call silently drill back up.
+    this.userOptions = {
+      ...this.userOptions,
+      geo: { ...(this.userOptions.geo ?? {}), map: mapSource ?? undefined },
+    }
+    this.config = applyResponsive(buildConfig(this.userOptions), this.viewport.width)
+    this.mapId = mapId
+    this.mapMeta = meta
+    this.geo = geo
+    // Selected keys belong to the level being left, so they are dropped rather
+    // than carried into a level where they match nothing.
+    this.selection.clear()
+    this.warnings = []
+    this.labels?.destroy()
+    this._buildViewport()
+  }
+
+  private _resetDrill(): void {
+    if (!this._drillStack.length) return
+    this._drillStack.length = 0
+    this.drillPath.length = 0
+    this.breadcrumb?.destroy()
+  }
+
+  private _restoreLevel(frame: DrillFrame): void {
+    this._enterLevel({
+      mapSource: frame.mapSource,
+      mapId: frame.mapId,
+      mapMeta: frame.mapMeta,
+      geo: frame.geo,
+    })
+    this.camera?.stop()
+    this.viewport.camera = { ...frame.camera }
+  }
+
+  private _isCurrentMap(target: MapSource): boolean {
+    if (typeof target !== 'string') return target === this.config.geo.map
+    if (target === this.mapId) return true
+    const packId = this.mapMeta?.packId
+    return !!packId && mapMeta(target)?.packId === packId
+  }
+
+  private _drilldownOptions(): DrilldownOptions | null {
+    for (const series of this.renderTargets) {
+      const options = drilldownOf(series)
+      if (options) return options
+    }
+    return null
+  }
+
+  private _drillAnimation(): 'zoom' | 'none' {
+    return this._drilldownOptions()?.animate ?? 'zoom'
+  }
+
+  private _renderBreadcrumb(): void {
+    if (!this.breadcrumb) return
+    const setting = this._drilldownOptions()?.breadcrumb
+    if (setting === false) {
+      this.breadcrumb.destroy()
+      return
+    }
+
+    const rootLabel =
+      (typeof setting === 'object' ? setting.rootLabel : undefined) ??
+      (this._drillStack[0]?.mapMeta?.levelName as string | undefined) ??
+      'All areas'
+
+    const crumbs: Crumb[] = [{ label: rootLabel, up: this.drillPath.length }]
+    this.drillPath.forEach((level, i) => {
+      crumbs.push({
+        label: level.name ?? level.key,
+        up: this.drillPath.length - 1 - i,
+      })
+    })
+    this.breadcrumb.render(crumbs)
+  }
+
+  private _drillAnnouncement(): string {
+    const where = this.drillPath.map((l) => l.name ?? l.key).join(', ')
+    const count = this.geo?.features.length ?? 0
+    const level = (this.mapMeta?.levelName as string | undefined)?.toLowerCase() ?? 'areas'
+    return where
+      ? `Showing ${count} ${level} in ${where}. Press Escape to go back.`
+      : `Showing ${count} ${level}.`
   }
 
   private _eventPayload(mark: ResolvedMark) {
@@ -1121,10 +1508,15 @@ class ApexMaps extends BaseChart {
 
     if (redrawGeometry || mapChanged || projectionChanged) {
       if (mapChanged) {
+        // A caller changing the map is a new starting point, so any drilldown
+        // trail is abandoned rather than left pointing at levels that no longer
+        // relate to what is on screen. Drilling changes the map through its own
+        // path, so it never reaches here.
+        this._resetDrill()
         const resolved = await resolveMap(this.config.geo.map as MapSource)
         this.mapId = resolved.id
-        this.mapMeta = resolved.meta
-        this.geo = this._ingest(resolved.data)
+        this.mapMeta = resolved.meta ?? (resolved.id ? mapMeta(resolved.id) : undefined)
+        this.geo = this._ingest(resolved.data, this.mapMeta)
       }
       this.labels?.destroy()
       this._buildViewport()
@@ -1341,6 +1733,14 @@ class ApexMaps extends BaseChart {
       if (join && this.config.debug?.joinDiagnostics !== false) {
         if (join.unmatchedData.length > 0 || join.applied.length > 0 || join.matched === 0) {
           lines.push(join.report())
+          // One data array covering several levels is the declarative way to feed a
+          // drilldown, and it leaves every other level's rows unmatched here. Saying
+          // so keeps a normal setup from reading as a broken join.
+          if (join.unmatchedData.length > 0 && drilldownOf(series)) {
+            lines.push(
+              '  this series has a drilldown, so rows belonging to other levels are expected to be unmatched here',
+            )
+          }
         }
       }
       for (const note of series.advise()) lines.push(`  advice: ${note}`)
@@ -1401,6 +1801,7 @@ class ApexMaps extends BaseChart {
     this.camera?.stop()
     this.zoomPan?.detach()
     this._resizeObserver?.disconnect()
+    this.element.removeEventListener('keydown', this._onKeyDown, true)
 
     for (const layer of [this.renderer?.marksLayer, this.renderer?.symbolLayer]) {
       if (!layer) continue
@@ -1413,6 +1814,7 @@ class ApexMaps extends BaseChart {
     this.labels?.destroy()
     this.legend?.destroy()
     this.tooltip?.destroy()
+    this.breadcrumb?.destroy()
     this.a11y?.destroy()
     this.renderer?.destroy()
     remove(this._attribution)
@@ -1503,6 +1905,19 @@ class ApexMaps extends BaseChart {
   static get version(): string {
     return VERSION
   }
+}
+
+/**
+ * A series' drilldown config, if it has a usable one.
+ *
+ * Read off the config rather than the class, because the basemap pseudo-series is
+ * also a feature series and a caller can configure a drilldown on a map with no
+ * data at all.
+ */
+function drilldownOf(series: AnySeries): DrilldownOptions | null {
+  if (series.kind !== 'features') return null
+  const options = (series.config as { drilldown?: DrilldownOptions }).drilldown
+  return options && options.map ? options : null
 }
 
 function resolveLabelText({

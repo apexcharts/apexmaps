@@ -206,6 +206,25 @@
       </div>
 
       <div class="card">
+        <h2>Drilldown: states into counties</h2>
+        <p class="note">
+          Click a state. The counties pack loads on demand, the child level is restricted to the
+          state that was clicked, and the camera frames that state before the swap so the two views
+          line up. Which counties belong to California is not configured: TIGER counties carry
+          <code>state_abbr</code>, and that is detected. Escape or the trail goes back up, and going
+          back never refetches. Data for the level being entered is filled in from the
+          <code>drilldown</code> event, which is the pattern for per-level fetching.
+        </p>
+        <div class="row">
+          <button id="drill-ca">Drill into California</button>
+          <button id="drill-tx">Drill into Texas</button>
+          <button id="drill-up">drillUp()</button>
+          <span class="label" id="drill-status"></span>
+        </div>
+        <div id="drilldown"></div>
+      </div>
+
+      <div class="card">
         <h2>What is in the catalogue</h2>
         <p class="note">
           <code>ApexMaps.catalogue()</code>, unmodified. Every pack knows what one of its features
@@ -535,7 +554,64 @@
             usStates.resetView()
           })
 
-          // --- 8. the catalogue, straight from the api -----------------------
+          // --- 8. drilldown --------------------------------------------------
+          /** Deterministic stand-in for real data at whatever level is on screen. */
+          const valueFor = (key) => {
+            let h = 0
+            for (let c = 0; c < key.length; c++) h = (h * 33 + key.charCodeAt(c)) % 1009
+            return Math.round((h / 1009) * 78 + 12)
+          }
+          const rowsFor = (keys) => keys.map((key) => ({ key, value: valueFor(key) }))
+
+          const STATE_KEYS = ['CA', 'TX', 'NY', 'FL', 'WA', 'IL', 'MA', 'CO', 'OR', 'AZ', 'GA', 'OH', 'PA', 'MI', 'NC']
+          const drillSeries = (data) => ({
+            name: 'Adoption',
+            joinBy: { data: 'key' },
+            data,
+            scale: { palette: 'purples' },
+            drilldown: {
+              map: 'us/counties',
+              breadcrumb: { rootLabel: 'United States' },
+            },
+          })
+
+          const drilldown = new ApexMaps(document.getElementById('drilldown'), {
+            chart: { height: 520 },
+            geo: { map: 'us' },
+            series: [drillSeries(rowsFor(STATE_KEYS))],
+            dataLabels: { enabled: false },
+          })
+
+          const drillStatus = document.getElementById('drill-status')
+          drilldown.on('drilldown', ({ name, featureCount }) => {
+            // The child level is already on screen, so a handler can fill in its
+            // data. A real app would fetch here; this one hashes the keys.
+            drilldown.updateSeries([
+              drillSeries(rowsFor(drilldown.geo.features.map((f) => f.key))),
+            ])
+            drillStatus.textContent = `${featureCount} counties in ${name}`
+          })
+          drilldown.on('drillup', ({ depth }) => {
+            if (depth === 0) {
+              drilldown.updateSeries([drillSeries(rowsFor(STATE_KEYS))])
+              drillStatus.textContent = '51 states and DC'
+            }
+          })
+          drilldown.render().then(() => {
+            drillStatus.textContent = '51 states and DC'
+          })
+
+          document.getElementById('drill-ca').addEventListener('click', () => {
+            drilldown.drillTo('CA')
+          })
+          document.getElementById('drill-tx').addEventListener('click', () => {
+            drilldown.drillTo('TX')
+          })
+          document.getElementById('drill-up').addEventListener('click', () => {
+            drilldown.drillUp()
+          })
+
+          // --- 9. the catalogue, straight from the api -----------------------
           document.getElementById('catalogue').textContent = ApexMaps.catalogue()
             .map(
               (p) =>
@@ -545,7 +621,7 @@
             )
             .join('\n')
 
-          // --- 9. join diagnostics ------------------------------------------
+          // --- 10. join diagnostics -----------------------------------------
           const messyData = [
             { name: 'France', value: 62 },
             { name: 'Brazil', value: 41 },
@@ -588,6 +664,7 @@
             arcs,
             joins,
             markers,
+            drilldown,
             usStates,
             deStates,
             euNuts,

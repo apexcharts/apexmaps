@@ -21,7 +21,7 @@ Build the former. Integrate the latter. Every feature request gets this test bef
 Audited against the code on 2026-07-26, not from memory. Section numbering below is unchanged, so
 existing references still resolve.
 
-**Shipped and tested** (241 tests, 51 kB gzipped of a 150 kB budget):
+**Shipped and tested** (274 tests, 52 kB gzipped of a 150 kB budget):
 
 | Area | State |
 |---|---|
@@ -30,7 +30,7 @@ existing references still resolve.
 | Projections | 13 named, composite `albersUsa`, spec objects with rotate/parallels/clipAngle, `registerProjection` |
 | Series | choropleth, bubble (sqrt area, nested-circle legend), marker (7 shapes, categorical colour, distance-based clustering), arc (geodesic, antimeridian-cut), automatic basemap |
 | Presentation | quantile/Jenks/equal-interval/threshold/linear/log/sqrt/ordinal, 17 OkLab-sampled palettes, classed + gradient + size legends, tooltips, collision-avoiding labels, dark mode, responsive |
-| Interaction | wheel/pinch/double-click zoom, inertial pan, hover, selection, legend muting, roving-tabindex keyboard navigation |
+| Interaction | wheel/pinch/double-click zoom, inertial pan, hover, selection, legend muting, roving-tabindex keyboard navigation, drilldown (parent detection, scoped child level, breadcrumb, Escape) |
 | Camera | `flyTo`, `easeTo`, `jumpTo`, `fitBounds`, `frameFeature`, `resetView`, interruptible and retargeting |
 | Geo registry v1 | 26 packs: world countries and land, US states and counties, EU NUTS 0-3, admin-1 for 15 countries, each with recommended key, projection, view and provenance |
 | Accessibility | ARIA roles, generated description, keyboard navigation, live region, data table, `prefers-reduced-motion` |
@@ -43,7 +43,6 @@ set them and get silence. Either build them or stop advertising them, and warn i
 | Option | Current reality |
 |---|---|
 | `chart.renderer: 'auto'` | Config default only. No Canvas tier and no `RendererController` wiring, so it is always SVG |
-| `drilldown` | Type plus a `undefined` default. Nothing reads it |
 | `link: { group }` | Only registers the instance in the global list. No selection propagation |
 | `annotations` | Type plus an empty-array default. Nothing renders |
 
@@ -131,6 +130,8 @@ Append only. Each entry: date, decision, rationale, and what would reverse it.
 | 2026-07-26 | **The perf budget is guarded by an invariant test, not a millisecond assertion** | A wall-clock budget in CI fails on a loaded runner, gets marked skip, and then nothing is enforced. The property that matters is that a camera frame applies one transform to one group and never touches feature geometry: deterministic, machine-independent, and exactly what a refactor would break. Reprojecting 3,000 features per frame would still pass a generous millisecond budget on a fast laptop | A renderer where the invariant genuinely does not hold, for example a Canvas tier that must redraw per frame; that tier needs its own guard |
 | 2026-07-26 | **Clustering is an option on the marker series, not a separate series type** (a deliberate deviation from the roadmap, which listed `cluster` among the series) | The data is identical; clustering only changes how points that would overlap are drawn. A separate type forks position resolution, hit testing, colouring and the legend, and forces the caller to swap series at a zoom threshold | A clustering mode that genuinely cannot be expressed as a drawing decision, for example server-side aggregation returning pre-clustered rows |
 | 2026-07-26 | **Per-series defaults live in `seriesDefaults`, never in the series classes alone** | Config always beats a `?? fallback` inside a class, so a shared default silently overrode each series' intended opacity and stroke: arcs rendered fully opaque with `?? 0.75` sitting in unreachable code. `test/config.test.ts` now pins every type's resolved values | None |
+| 2026-07-26 | **A drilldown scopes the child level to the clicked parent, and detects the relationship rather than asking for it** | Swapping in the whole child level is a zoom, not a drilldown: clicking California and getting 3,231 counties leaves the reader to find California again. The relationship is already in published geometry (TIGER `state_abbr`, NUTS `cntr_code`, Natural Earth `adm0_a3`, or a hierarchical key prefix), and requiring the caller to name it means requiring them to know the internals of a pack they never opened. When neither route matches, the drilldown is declined with a reason rather than performed onto an empty map | A pack whose hierarchy is expressed some third way, which would argue for a resolver function rather than for dropping detection |
+| 2026-07-26 | **No-data never enters a classification.** `cleanNumbers` skips null, empty string and boolean before coercion | `Number(null)` is 0, so coercing first filed every feature with no data as a zero: a US map with 15 of 51 states carrying data put three of its five quantile breaks at zero and published a legend reading "0 to 0" for classes containing nothing, while `color()` correctly drew those features as no-data. Rendering and classification disagreeing silently is the exact failure mode this product exists to prevent. Found by the drilldown demo, fixed in `scales/Scale`, pinned by two tests | None |
 | 2026-07-26 | **A join key maps to a list of features, not one** | Published geometry shares keys on purpose (Natural Earth gives Australia's external territories the same `iso_a3`; Lord Howe Island carries `AU-NSW`). Last-one-wins left mainland Australia in no-data grey while colouring an uninhabited island, silently, which is the exact failure the join diagnostic exists to prevent | None |
 
 ---

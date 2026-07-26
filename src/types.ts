@@ -220,6 +220,48 @@ interface SeriesCommon {
   valueField?: string | ((datum: unknown) => number | null | undefined)
 }
 
+/** What a drilldown decision gets told about the feature that was clicked. */
+export interface DrilldownContext {
+  /** Join key of the clicked feature: the key the child level is scoped by. */
+  key: string
+  name?: string
+  /** The joined data row, when the feature had one. */
+  datum: unknown
+  properties?: Record<string, unknown>
+  /** Level being entered. 1 is the first level below the top. */
+  depth: number
+  /** Map currently displayed, when it came from the registry. */
+  from?: string
+}
+
+export interface DrilldownOptions {
+  /**
+   * The child map: a registry id, a URL, or geometry. The function form receives
+   * the clicked feature and may return `null` to refuse, which is how a map with
+   * children for only some features declines the rest.
+   */
+  map: string | ((context: DrilldownContext) => MapSource | null | undefined)
+  /**
+   * Which child features belong to the clicked parent.
+   *
+   * `'auto'` (default) looks for a child property holding the parent's key
+   * (`state_abbr`, `cntr_code`, `adm0_a3`), then falls back to a key prefix
+   * (county FIPS `06037` under state `06`, NUTS `DE12` under `DE1`). Published
+   * hierarchical geometry nearly always carries one or the other, so the common
+   * case needs no configuration. `'all'` draws the whole child map.
+   */
+  scope?: 'auto' | 'property' | 'keyPrefix' | 'all'
+  /** Child property holding the parent's key. Skips detection. */
+  parentField?: string
+  /**
+   * `'zoom'` (default) frames the clicked feature before the child level appears,
+   * so the two views line up and the swap reads as a zoom rather than a cut.
+   */
+  animate?: 'zoom' | 'none'
+  /** Trail above the map, with a way back up. Default true. */
+  breadcrumb?: boolean | { rootLabel?: string }
+}
+
 export interface ChoroplethSeriesOptions extends SeriesCommon {
   type?: 'choropleth'
   joinBy?: JoinSpec
@@ -233,10 +275,15 @@ export interface ChoroplethSeriesOptions extends SeriesCommon {
    * mostly redraws the population map.
    */
   normalizeBy?: string
-  drilldown?: {
-    map: string | ((datum: unknown) => string)
-    animate?: 'zoom' | 'none'
-  }
+  /**
+   * Click a feature to replace the map with a deeper level.
+   *
+   * The series keeps its own `data` across levels, so a single array holding rows
+   * for both levels (states and counties, keyed the same way) needs no extra
+   * wiring. For data fetched per level, listen for the `drilldown` event and call
+   * `updateSeries` from the handler: the child level is already on screen by then.
+   */
+  drilldown?: DrilldownOptions
 }
 
 /** A bubble datum: either an explicit position, or a join key resolved to a centroid. */
@@ -567,6 +614,20 @@ export interface ApexMapsEventMap {
   markHover: FeatureEventPayload
   /** A point cluster was clicked. Fires before the camera moves to its members. */
   clusterClick: FeatureEventPayload
+  /** A deeper level is on screen. Fires after it renders, so a handler can update data. */
+  drilldown: {
+    key: string
+    name?: string
+    /** Map left behind. */
+    from?: string
+    /** Map now displayed. */
+    to?: string
+    depth: number
+    /** Features the child level was scoped to. */
+    featureCount: number
+    instance: unknown
+  }
+  drillup: { to?: string; depth: number; instance: unknown }
   selectionChange: { ids: string[]; source: string }
   legendToggle: { classIndex: number; instance: unknown }
   zoom: { k: number }
