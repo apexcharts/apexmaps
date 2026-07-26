@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Basemap only · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Basemap only</nav>
+
+      <div class="card">
+        <h1>Basemap only</h1>
+        <p class="note">
+          Geometry with no series still renders, with labels, hover and tooltips. There is no "empty
+          state" branch anywhere in the drawing path: when no series is configured the map draws a
+          basemap pseudo-series instead, so hit testing, labelling and accessibility all work the same
+          way they do with data. A basemap is also drawn underneath point-only series, because bubbles
+          floating in the void with no coastline is not a map.
+        </p>
+        <div class="row">
+          <button id="labels">Toggle labels</button>
+          <button id="sphere">Toggle sphere and graticule</button>
+          <span class="label" id="status"></span>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Label collision</h2>
+        <p class="note">
+          Labels are laid out in screen space every frame and dropped when they would overlap, largest
+          feature and largest value first, so the labels that survive a crowded view are the
+          informative ones. <code>minFeatureArea</code> skips labels for shapes too small to carry one.
+          Zoom in: more labels appear as the collisions resolve.
+        </p>
+        <pre>
+dataLabels: { enabled: true, collision: 'hide', minFeatureArea: 900 }</pre
+        >
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      let labels = true
+      let sphere = false
+      const status = document.getElementById('status')
+
+      const map = Demo.watch(
+        'basemap',
+        new ApexMaps(document.getElementById('map'), {
+          chart: { height: 440 },
+          geo: { map: 'world/countries@110m', projection: 'naturalEarth' },
+          dataLabels: { enabled: true, minFeatureArea: 900 },
+        }),
+      )
+
+      const report = () => {
+        const drawn = document.querySelectorAll('#map .apexmaps-label').length
+        status.textContent = `${map.geo.features.length} features, ${drawn} labels survived collision`
+      }
+
+      Demo.ready(map.render().then(report))
+
+      document.getElementById('labels').addEventListener('click', async () => {
+        labels = !labels
+        await map.updateOptions({ dataLabels: { enabled: labels } })
+        report()
+      })
+      document.getElementById('sphere').addEventListener('click', async () => {
+        sphere = !sphere
+        await map.updateOptions({
+          geo: { sphere: { show: sphere }, graticule: { show: sphere } },
+        })
+        report()
+      })
+    </script>
+  </body>
+</html>

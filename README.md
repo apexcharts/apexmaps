@@ -49,16 +49,43 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 
 ```sh
 npm install
-npm run examples       # builds, then serves on http://localhost:8080/examples/
+npm run examples          # builds, then serves on http://localhost:8084/examples/
+npm run check:examples    # loads every demo and fails on one that errors or draws nothing
 ```
 
 That is all: the geometry packs are committed under `geo/`, so nothing has to be downloaded or
 generated first. `npm run data:build` only exists to regenerate them from source.
 
-The examples cover default styling, projection switching, a basemap with no data, bubbles, arcs,
-markers and clustering, the geometry registry, drilling from states into counties, box selection across
-a linked pair of maps, a printout of the catalogue, and a live join diagnostics panel. `bench.html` on
-the same server measures frame times in your browser.
+**One page per feature**, so each demo loads on its own, can be linked to directly, and cannot be
+broken by an unrelated one:
+
+| Demo | Shows |
+|---|---|
+| [choropleth](examples/choropleth.html) | What two option keys and no styling produce |
+| [scales](examples/scales.html) | Quantile, Jenks, equal interval and threshold on one skewed dataset |
+| [palettes](examples/palettes.html) | All 17 ramps, and the automatic diverging choice |
+| [normalize](examples/normalize.html) | Counts versus rates, side by side |
+| [projections](examples/projections.html) | Eight projections, spec objects, rotation |
+| [basemap](examples/basemap.html) | Geometry with no data, and label collision |
+| [bubbles](examples/bubbles.html) | Square-root versus linear sizing, second colour encoding |
+| [markers](examples/markers.html) | Seven shapes, categorical colour, clustering |
+| [arcs](examples/arcs.html) | Great circles, antimeridian cutting, curvature |
+| [registry](examples/registry.html) | Three packs with no configuration, plus the catalogue |
+| [joins](examples/joins.html) | A failing join explained, then repaired |
+| [drilldown](examples/drilldown.html) | States into counties, and back out |
+| [selection](examples/selection.html) | Box selection brushing a linked pair of maps |
+| [camera](examples/camera.html) | flyTo, easeTo, fitBounds, interruption |
+| [a11y](examples/a11y.html) | Keyboard navigation, generated description, data table |
+| [theming](examples/theming.html) | Dark mode, CSS custom properties, responsive rules |
+| [extending](examples/extending.html) | registerMap with a floor plan, registerPalette, a loader function |
+| [bench](examples/bench.html) | Frame times in your own browser, up to 3,231 features |
+
+`npm run check:examples` opens all of them in headless Chromium and fails on a console error, a demo
+that never becomes ready, a map that drew zero marks, or a page missing from the index. The blank-map
+case is the one worth automating: a demo that throws is obvious, while a demo that renders nothing
+because a pack id moved looks fine in a diff. Playwright is not a dependency here (a browser download
+does not belong in a clone that only runs unit tests), so the check resolves it from wherever it
+already exists and reports itself as **skipped** rather than passing when it finds none.
 
 ## The geometry registry
 
@@ -453,6 +480,10 @@ ApexMaps.registerProjection(name, factory)
 ApexMaps.registerPalette(name, { kind, stops })
 ApexMaps.listMaps()
 ApexMaps.listProjections()
+ApexMaps.listPalettes()
+ApexMaps.palette('blues')                       // { kind, stops, colorblindSafe }
+ApexMaps.mapMeta('us/counties@10m')             // source, licence, vintage, key, view
+ApexMaps.catalogue()                            // every built-in pack, with provenance
 ```
 
 ## Licensing
@@ -513,15 +544,21 @@ views, and `mapMeta(id).boundaries` says so.
 ## Development
 
 ```sh
-npm test              # vitest, 295 tests, including the real geometry packs and perf invariants
+npm test                # vitest, 296 tests, including the real geometry packs and perf invariants
 npm run test:coverage
 npm run lint
 npm run typecheck
-npm run format        # prettier, config matches apexcharts-js
-npm run build         # rollup bundles + tsc declarations
-npm run examples      # build, then serve examples/ on :8080
-npm run data:build    # regenerate geo/ from source (needs network, ~45 MB of downloads)
+npm run format          # prettier, config matches apexcharts-js
+npm run build           # rollup bundles + tsc declarations
+npm run examples        # build, then serve examples/ on :8084
+npm run check:examples  # load every demo in Chromium, fail on an error or an empty map
+npm run data:build      # regenerate geo/ from source (needs network, ~45 MB of downloads)
 ```
+
+A feature is not finished until it has a demo page that `check:examples` loads: the unit tests prove
+the behaviour, the demo proves someone can use it, and the check stops the demo rotting. Playwright is
+resolved from wherever it already exists rather than installed here, and the check skips loudly when it
+finds none.
 
 `data:build` is the only script that touches the network. It caches its downloads in `.geo-cache/`,
 and it fails if the packs it produced and the ids declared in `src/core/GeoCatalogue.ts` disagree,

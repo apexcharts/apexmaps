@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Theming and responsive · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+    <style>
+      /* The theming surface is CSS custom properties on the container, so a host
+         dashboard can restyle the map without touching the spec. */
+      #branded {
+        --apexmaps-fg: #f8fafc;
+        --apexmaps-fg-muted: #cbd5f5;
+        --apexmaps-surface: #1e1b4b;
+        --apexmaps-border: rgba(255, 255, 255, 0.24);
+        --apexmaps-focus: #f472b6;
+        --apexmaps-radius: 2px;
+        --apexmaps-font-size: 13px;
+        background: #312e81;
+        padding: 10px;
+        border-radius: 8px;
+      }
+      #frame {
+        /* An explicit width, or a resizable box reports its max-content width and
+           the map inside sizes itself to that instead of to the page. */
+        width: 100%;
+        max-width: 100%;
+        min-width: 320px;
+        border: 1px dashed var(--card-border);
+        border-radius: 8px;
+        padding: 8px;
+        overflow: hidden;
+        resize: horizontal;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Theming and responsive</nav>
+
+      <div class="card">
+        <h1>Dark mode</h1>
+        <p class="note">
+          <code>theme.mode</code> is <code>'light'</code>, <code>'dark'</code> or <code>'auto'</code>.
+          Dark mode is a class on the container rather than only a media query, so a dashboard can force
+          it independently of the operating system, and <code>'auto'</code> follows
+          <code>prefers-color-scheme</code>. The palette is unchanged: what changes is the chrome, the
+          no-data colour and the text.
+        </p>
+        <div class="row">
+          <button data-mode="light">light</button>
+          <button data-mode="dark">dark</button>
+          <button data-mode="auto">auto</button>
+          <span class="label" id="mode-status"></span>
+        </div>
+        <div id="theme"></div>
+      </div>
+
+      <div class="card">
+        <h1>CSS custom properties</h1>
+        <p class="note">
+          Every piece of chrome the library draws reads from <code>--apexmaps-*</code> on the container,
+          so brand styling needs no options at all. This map has no theme configuration: the surrounding
+          CSS sets eight properties and the legend, tooltip and attribution follow. Hover a country to see
+          the tooltip pick it up.
+        </p>
+        <div id="branded"></div>
+      </div>
+
+      <div class="card">
+        <h1>Responsive rules</h1>
+        <p class="note">
+          Drag the container's bottom-right corner to resize it. <code>responsive</code> rules match on
+          measured width, narrowest matching breakpoint winning, so they can be declared in any order.
+          Here the legend moves and the labels switch off below 560px, and the map keeps the reader's
+          position across the resize rather than refitting and silently discarding wherever they had
+          navigated to.
+        </p>
+        <div class="row"><span class="label" id="size-status"></span></div>
+        <div id="frame"><div id="responsive"></div></div>
+        <pre>
+responsive: [
+  { breakpoint: 560, options: { legend: { position: 'bottom' }, dataLabels: { enabled: false } } },
+  { breakpoint: 900, options: { legend: { position: 'right' } } },
+]</pre
+        >
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      const KEYS = ['DE', 'FR', 'IT', 'ES', 'PL', 'NL', 'SE', 'IE', 'PT', 'EL', 'FI', 'AT', 'BE']
+      const series = (palette) => ({
+        name: 'Adoption',
+        joinBy: ['nuts_id', 'key'],
+        data: Demo.rows(KEYS),
+        scale: { palette },
+      })
+
+      const theme = Demo.watch(
+        'theme',
+        new ApexMaps(document.getElementById('theme'), {
+          chart: { height: 320 },
+          geo: { map: 'eu/nuts0@20m' },
+          series: [series('blues')],
+          theme: { mode: 'light' },
+          dataLabels: { enabled: true },
+        }),
+      )
+
+      const branded = Demo.watch(
+        'branded',
+        new ApexMaps(document.getElementById('branded'), {
+          chart: { height: 320, background: 'transparent' },
+          geo: { map: 'eu/nuts0@20m' },
+          series: [series('magma')],
+        }),
+      )
+
+      const responsive = Demo.watch(
+        'responsive',
+        new ApexMaps(document.getElementById('responsive'), {
+          chart: { width: '100%', height: 300 },
+          geo: { map: 'eu/nuts0@20m' },
+          series: [series('greens')],
+          dataLabels: { enabled: true },
+          responsive: [
+            {
+              breakpoint: 560,
+              options: { legend: { position: 'bottom' }, dataLabels: { enabled: false } },
+            },
+            { breakpoint: 900, options: { legend: { position: 'right' } } },
+          ],
+        }),
+      )
+
+      const sizeStatus = document.getElementById('size-status')
+      const reportSize = () => {
+        sizeStatus.textContent = `${responsive.viewport.width}×${responsive.viewport.height}, legend ${responsive.config.legend.position}, labels ${
+          responsive.config.dataLabels.enabled ? 'on' : 'off'
+        }`
+      }
+      responsive.on('resized', reportSize)
+
+      Demo.ready(
+        Promise.all([theme.render(), branded.render(), responsive.render()]).then(() => {
+          document.getElementById('mode-status').textContent = `mode: ${theme.config.theme.mode}`
+          reportSize()
+        }),
+      )
+
+      for (const button of document.querySelectorAll('[data-mode]')) {
+        button.addEventListener('click', async () => {
+          const mode = button.dataset.mode
+          await theme.updateOptions({ theme: { mode } })
+          document.getElementById('mode-status').textContent = `mode: ${mode}${
+            mode === 'auto' ? ` (resolved ${theme.element.classList.contains('apexmaps--dark') ? 'dark' : 'light'})` : ''
+          }`
+        })
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Join diagnostics · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Join diagnostics</nav>
+
+      <div class="card">
+        <h1>Join diagnostics</h1>
+        <p class="note">
+          Six data rows against Natural Earth country names. Three are the spellings real datasets
+          actually publish, and they fail. Every other library renders them grey and says nothing, so the
+          developer spends an hour diffing strings. The report below is
+          <code>map.diagnoseJoin().report()</code>, and the same thing prints to the console in dev mode
+          without being asked for.
+        </p>
+        <div class="two">
+          <div id="map"></div>
+          <pre id="report">…</pre>
+        </div>
+        <div class="row" style="margin-top: 12px">
+          <button id="fuzzy">Retry with fuzzyJoin: true</button>
+          <button id="exact">Back to exact matching</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Why matching is exact by default</h2>
+        <p class="note">
+          Silent fuzzy matching trades an obvious failure for a plausible wrong answer, which is worse:
+          nobody audits a map that looks fine. So normalisation, a curated alias table and edit distance
+          are used to <em>explain</em> failures, and <code>fuzzyJoin: true</code> applies them only when
+          asked, logging every substitution it made. One repair is applied unasked, because it is lossless
+          and unambiguous: a FIPS or GEOID code that lost its leading zero in a spreadsheet.
+        </p>
+        <pre>
+series: [{ joinBy: 'name', data: messyData, fuzzyJoin: false }]
+
+map.diagnoseJoin()   // { matched, unmatchedData, unmatchedFeatures, applied, sharedKeys, report() }</pre
+        >
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      const messyData = [
+        { name: 'France', value: 62 },
+        { name: 'Brazil', value: 41 },
+        { name: 'Japan', value: 77 },
+        { name: 'Ivory Coast', value: 33 },
+        { name: 'United States', value: 88 },
+        { name: 'Democratic Republic of the Congo', value: 21 },
+      ]
+
+      const report = document.getElementById('report')
+      const map = Demo.watch(
+        'joins',
+        new ApexMaps(document.getElementById('map'), {
+          chart: { height: 320 },
+          geo: { map: 'world/countries@110m' },
+          legend: { show: false },
+          // Three classes, because only three of the six rows match: five would leave
+          // classes with nothing in them, and the scale says so in dev mode.
+          series: [{ name: 'Coverage', joinBy: 'name', data: messyData, scale: { classes: 3 } }],
+        }),
+      )
+
+      const show = () => {
+        report.textContent = map.diagnoseJoin().report()
+      }
+
+      Demo.ready(map.render().then(show))
+
+      document.getElementById('fuzzy').addEventListener('click', () => {
+        map.updateSeries([
+          { name: 'Coverage', joinBy: 'name', fuzzyJoin: true, data: messyData, scale: { classes: 3 } },
+        ])
+        show()
+      })
+      document.getElementById('exact').addEventListener('click', () => {
+        map.updateSeries([{ name: 'Coverage', joinBy: 'name', data: messyData, scale: { classes: 3 } }])
+        show()
+      })
+    </script>
+  </body>
+</html>

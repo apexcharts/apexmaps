@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Classification · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Classification</nav>
+
+      <div class="card">
+        <h1>Classification: the same data, four conclusions</h1>
+        <p class="note">
+          One dataset, four classifications, four different maps. This is the most consequential choice
+          in a choropleth and the one most often left to a default, so the breaks are always printed in
+          the legend rather than hidden: a reader can see where the lines were drawn. The distribution
+          here is deliberately skewed, which is what real data looks like and what pulls the methods
+          apart.
+        </p>
+        <div class="row">
+          <label class="label" style="margin: 0">Classes</label>
+          <select id="classes">
+            <option>3</option>
+            <option>4</option>
+            <option selected>5</option>
+            <option>6</option>
+            <option>7</option>
+            <option>9</option>
+          </select>
+          <span class="label" id="status"></span>
+        </div>
+        <div class="two">
+          <div>
+            <div class="label"><code>quantile</code> · equal counts per class</div>
+            <div id="quantile"></div>
+          </div>
+          <div>
+            <div class="label"><code>jenks</code> · minimises within-class variance</div>
+            <div id="jenks"></div>
+          </div>
+          <div>
+            <div class="label"><code>equalInterval</code> · equal value ranges</div>
+            <div id="equal"></div>
+          </div>
+          <div>
+            <div class="label"><code>threshold</code> · breaks you chose yourself</div>
+            <div id="threshold"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Which to use</h2>
+        <p class="note">
+          <strong>Quantile</strong> is the default because every class is populated, so no part of the
+          legend is decoration. It flatters skewed data by construction, which is a trade, not a free
+          win. <strong>Jenks</strong> finds the breaks the data itself suggests and is the honest choice
+          when clusters matter, at more compute. <strong>Equal interval</strong> is the only one whose
+          legend is arithmetic a reader can do in their head, and on skewed data it leaves classes empty.
+          <strong>Threshold</strong> is for when the breaks are the point: a statutory limit, a target, a
+          zero crossing. A continuous <code>linear</code>, <code>log</code> or <code>sqrt</code> scale
+          skips classing altogether and draws a gradient legend.
+        </p>
+        <pre>
+scale: { type: 'quantile', classes: 5 }
+scale: { type: 'jenks', classes: 5 }
+scale: { type: 'equalInterval', classes: 5 }
+scale: { type: 'threshold', breaks: [5, 25, 100, 400], palette: 'reds' }
+scale: { type: 'log' }                      // continuous, gradient legend</pre
+        >
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      const status = document.getElementById('status')
+      let classes = 5
+
+      /** Skewed on purpose: a few very large values, a long tail of small ones. */
+      const skew = (name) => {
+        const base = Demo.value(name, 1, 100)
+        return Math.round(Math.pow(base / 100, 3) * 900 + base / 10)
+      }
+
+      const build = (id, scale, data) =>
+        Demo.watch(
+          id,
+          new ApexMaps(document.getElementById(id), {
+            chart: { height: 260 },
+            geo: { map: 'world/countries@110m' },
+            series: [{ name: 'Exposure', joinBy: 'name', data, scale }],
+          }),
+        )
+
+      Demo.ready(
+        Demo.names('world-countries-110m.json').then(async (names) => {
+          const data = names.map((name) => ({ name, value: skew(name) }))
+          const maps = {
+            quantile: build('quantile', { type: 'quantile', classes }, data),
+            jenks: build('jenks', { type: 'jenks', classes }, data),
+            equal: build('equal', { type: 'equalInterval', classes }, data),
+            threshold: build(
+              'threshold',
+              { type: 'threshold', breaks: [5, 25, 100, 400], palette: 'reds' },
+              data,
+            ),
+          }
+
+          await Promise.all(Object.values(maps).map((m) => m.render()))
+
+          const report = () => {
+            const q = maps.quantile.series[0].scale
+            status.textContent = `${data.length} areas, values ${Math.min(
+              ...data.map((d) => d.value),
+            )} to ${Math.max(...data.map((d) => d.value))}, quantile breaks at ${q.breaks
+              .map((b) => Math.round(b))
+              .join(', ')}`
+          }
+          report()
+
+          document.getElementById('classes').addEventListener('change', async (event) => {
+            classes = Number(event.target.value)
+            // Threshold keeps its own breaks: that is the point of it.
+            maps.quantile.updateSeries([
+              { name: 'Exposure', joinBy: 'name', data, scale: { type: 'quantile', classes } },
+            ])
+            maps.jenks.updateSeries([
+              { name: 'Exposure', joinBy: 'name', data, scale: { type: 'jenks', classes } },
+            ])
+            maps.equal.updateSeries([
+              { name: 'Exposure', joinBy: 'name', data, scale: { type: 'equalInterval', classes } },
+            ])
+            report()
+          })
+        }),
+      )
+    </script>
+  </body>
+</html>

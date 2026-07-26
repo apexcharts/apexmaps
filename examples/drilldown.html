@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Drilldown · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Drilldown</nav>
+
+      <div class="card">
+        <h1>Drilldown: states into counties</h1>
+        <p class="note">
+          Click a state. The counties pack loads on demand, the child level is restricted to the state
+          that was clicked, and the camera frames that state before the swap so the two views line up.
+          Which counties belong to California is not configured: TIGER counties carry
+          <code>state_abbr</code>, and that is detected. Escape or the trail goes back up, and going back
+          never refetches. Data for the level being entered is filled in from the
+          <code>drilldown</code> event, which is the pattern for per-level fetching.
+        </p>
+        <div class="row">
+          <button id="ca">Drill into California</button>
+          <button id="tx">Drill into Texas</button>
+          <button id="up">drillUp()</button>
+          <span class="label" id="status"></span>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">One option</h2>
+        <p class="note">
+          The child level is scoped by a property holding the parent's key (TIGER
+          <code>state_abbr</code>, Eurostat <code>cntr_code</code>, Natural Earth
+          <code>adm0_a3</code>) or by a hierarchical key prefix (county FIPS <code>06037</code> under
+          state <code>06</code>, NUTS <code>DE12</code> under <code>DE1</code>). Property detection runs
+          first because it is exact. When neither route matches anything, the drilldown is declined with
+          a reason rather than performed onto an empty map.
+        </p>
+        <pre>
+series: [{
+  name: 'Adoption',
+  joinBy: { data: 'key' },
+  data: rows,
+  drilldown: { map: 'us/counties' },
+}]
+
+map.on('drilldown', ({ key, name, depth, featureCount }) => { /* fetch this level */ })
+map.drillTo('CA')       // as a click would
+map.drillUp(Infinity)   // back to the top; never refetches</pre
+        >
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      const STATES = [
+        'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA',
+        'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+        'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT',
+        'VA', 'WA', 'WV', 'WI', 'WY', 'DC',
+      ]
+
+      const series = (data) => ({
+        name: 'Adoption',
+        joinBy: { data: 'key' },
+        data,
+        scale: { palette: 'purples' },
+        drilldown: {
+          map: 'us/counties',
+          breadcrumb: { rootLabel: 'United States' },
+        },
+      })
+
+      const status = document.getElementById('status')
+      const map = Demo.watch(
+        'drilldown',
+        new ApexMaps(document.getElementById('map'), {
+          chart: { height: 520 },
+          geo: { map: 'us' },
+          series: [series(Demo.rows(STATES))],
+        }),
+      )
+
+      map.on('drilldown', ({ name, featureCount }) => {
+        // The child level is already on screen, so a handler can fill in its data. A
+        // real app would fetch here; this one hashes the keys.
+        map.updateSeries([series(Demo.rows(map.geo.features.map((f) => f.key)))])
+        status.textContent = `${featureCount} counties in ${name}`
+      })
+      map.on('drillup', ({ depth }) => {
+        if (depth === 0) {
+          map.updateSeries([series(Demo.rows(STATES))])
+          status.textContent = '51 states and DC'
+        }
+      })
+
+      Demo.ready(
+        map.render().then(() => {
+          status.textContent = '51 states and DC'
+        }),
+      )
+
+      document.getElementById('ca').addEventListener('click', () => map.drillTo('CA'))
+      document.getElementById('tx').addEventListener('click', () => map.drillTo('TX'))
+      document.getElementById('up').addEventListener('click', () => map.drillUp())
+    </script>
+  </body>
+</html>

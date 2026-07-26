@@ -132,9 +132,18 @@ describe('ApexMaps render', () => {
     await render()
     const svg = el.querySelector('svg')
     expect(svg?.getAttribute('role')).toBe('application')
-    expect(svg?.getAttribute('aria-label')).toContain('choropleth map of 3 areas')
-    expect(svg?.querySelector('desc')?.textContent).toContain('Score')
-    expect(svg?.querySelector('desc')?.textContent).toContain('Gamma')
+    expect(svg?.getAttribute('aria-label')).toContain('Choropleth map of 3 areas')
+    const description = svg?.querySelector('desc')?.textContent ?? ''
+    expect(description).toContain('Score')
+    expect(description).toContain('Gamma')
+    // Each clause is a sentence, so each one starts with a capital: this text is
+    // read aloud, and "map of 3 areas. showing Score. values range from" is what
+    // machine output sounds like.
+    for (const sentence of description.split('. ')) {
+      if (sentence.trim()) expect(sentence.trim()[0]).toBe(sentence.trim()[0].toUpperCase())
+    }
+    // And the class summary names a span, not four numbers joined by three "to"s.
+    expect(description).toMatch(/\d+ classes spanning .+ to .+, the lowest being/)
     expect(el.querySelector('[aria-live="polite"]')).toBeTruthy()
   })
 
@@ -360,6 +369,23 @@ describe('ApexMaps render', () => {
     })
     expect(el.querySelectorAll('path.apexmaps-feature')).toHaveLength(3)
     expect(map.mapMeta.vintage).toBe('2026')
+  })
+
+  it('exposes the palette registry, so a picker does not hard-code the list', () => {
+    // The counterpart of listMaps() and listProjections(). Without it, any palette
+    // UI (or docs table, or demo gallery) has to keep its own copy of the list.
+    const names = ApexMaps.listPalettes()
+    expect(names).toContain('blues')
+    expect(names).toContain('okabeIto')
+    expect(names.length).toBeGreaterThanOrEqual(17)
+
+    const blues = ApexMaps.palette('blues')
+    expect(blues.kind).toBe('sequential')
+    expect(blues.stops[0]).toMatch(/^#/)
+    expect(ApexMaps.palette('no-such-palette')).toBeUndefined()
+
+    ApexMaps.registerPalette('test/ramp', { kind: 'sequential', stops: ['#000', '#fff'] })
+    expect(ApexMaps.listPalettes()).toContain('test/ramp')
   })
 
   it('renders an attribution string automatically when the licence requires it', async () => {

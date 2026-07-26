@@ -30,6 +30,7 @@
     "build": "rollup -c && npm run build:types",
     "examples": "npm run build && node scripts/serve.mjs 8084",
     "serve": "node scripts/serve.mjs",
+    "check:examples": "node scripts/check-examples.mjs",
     "build:types": "tsc -p tsconfig.json",
     "dev": "rollup -c -w --bundleConfigAsCjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Camera · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Camera</nav>
+
+      <div class="card">
+        <h1>Camera</h1>
+        <p class="note">
+          <code>flyTo</code> follows the Van Wijk and Nuij zoom-and-pan path, which arcs out to a wider
+          zoom during a long move and derives its own duration from the distance travelled: crossing a
+          continent takes longer than nudging to a neighbouring country, without anyone tuning a number.
+          Interpolating centre and scale linearly instead feels wrong, because perceived motion is
+          logarithmic in scale, and that difference is what separates a camera that reads as cinematic from
+          one that reads as a slideshow.
+        </p>
+        <div class="row">
+          <button data-fly="2.35,48.86,8">flyTo Paris</button>
+          <button data-fly="139.69,35.69,8">flyTo Tokyo</button>
+          <button data-fly="-58.38,-34.6,8">flyTo Buenos Aires</button>
+          <button id="ease">easeTo (fixed 400ms)</button>
+          <button id="jump">jumpTo</button>
+        </div>
+        <div class="row">
+          <button id="frame-fra">frameFeature('France')</button>
+          <button id="fit">fitBounds(the Alps)</button>
+          <button id="reset">resetView()</button>
+          <span class="label" id="status"></span>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Interruptible, and retargeting</h2>
+        <p class="note">
+          Click two flights in quick succession. The second does not queue behind the first and does not
+          snap: it starts from wherever the camera has interpolated to. In a scroll-driven story the reader
+          can outrun any animation at any moment, so every move has to be interruptible or the map ends up
+          somewhere the narrative did not ask for. Panning or zooming by hand stops an in-flight move for
+          the same reason.
+        </p>
+        <pre>
+map.camera.flyTo({ center: [2.35, 48.86], zoom: 8 })   // Van Wijk path, derived duration
+map.camera.easeTo({ center: [2.35, 48.86], zoom: 8, duration: 400, ease: 'cubicInOut' })
+map.camera.jumpTo({ zoom: 4 })
+map.camera.fitBounds(worldBounds, { padding: 40, maxZoom: 12 })
+await map.frameFeature('France', { padding: 40 })
+await map.resetView()</pre
+        >
+        <p class="note" style="margin-top: 10px">
+          Every one of these honours <code>prefers-reduced-motion</code> by jumping instead of animating,
+          rather than by breaking.
+        </p>
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      const status = document.getElementById('status')
+      const map = Demo.watch(
+        'camera',
+        new ApexMaps(document.getElementById('map'), {
+          chart: { height: 460 },
+          geo: { map: 'world/countries@110m', sphere: { show: true } },
+          legend: { show: false },
+          series: [
+            {
+              name: 'Index',
+              joinBy: 'name',
+              data: Demo.rows([
+                'France', 'Japan', 'Argentina', 'Germany', 'Italy', 'Switzerland',
+                'Spain', 'Brazil', 'Canada', 'Australia', 'India', 'Kenya',
+              ]).map(
+                ({ key, value }) => ({ name: key, value }),
+              ),
+              scale: { palette: 'blues' },
+            },
+          ],
+        }),
+      )
+
+      const report = (what) => {
+        const { k, x, y } = map.viewport.camera
+        status.textContent = `${what} · k ${k.toFixed(2)}, x ${Math.round(x)}, y ${Math.round(y)}`
+      }
+
+      Demo.ready(map.render().then(() => report('initial fit')))
+
+      for (const button of document.querySelectorAll('[data-fly]')) {
+        button.addEventListener('click', async () => {
+          const [lon, lat, zoom] = button.dataset.fly.split(',').map(Number)
+          report(`flying to ${button.textContent.replace('flyTo ', '')}`)
+          await map.camera.flyTo({ center: [lon, lat], zoom })
+          report('arrived')
+        })
+      }
+
+      document.getElementById('ease').addEventListener('click', async () => {
+        await map.camera.easeTo({ center: [2.35, 48.86], zoom: 6, duration: 400 })
+        report('eased')
+      })
+      document.getElementById('jump').addEventListener('click', () => {
+        map.camera.jumpTo({ center: [2.35, 48.86], zoom: 6 })
+        report('jumped')
+      })
+      document.getElementById('frame-fra').addEventListener('click', async () => {
+        await map.frameFeature('France', { padding: 40 })
+        report("framed 'France'")
+      })
+      document.getElementById('fit').addEventListener('click', async () => {
+        // A geographic box, projected to world space, then framed.
+        const [west, south, east, north] = [5.9, 44.3, 13.9, 47.8]
+        const a = map.viewport.project([west, north])
+        const b = map.viewport.project([east, south])
+        await map.camera.fitBounds(
+          [
+            [Math.min(a[0], b[0]), Math.min(a[1], b[1])],
+            [Math.max(a[0], b[0]), Math.max(a[1], b[1])],
+          ],
+          { padding: 40, maxZoom: 24 },
+        )
+        report('fitted the Alps')
+      })
+      document.getElementById('reset').addEventListener('click', async () => {
+        await map.resetView()
+        report('reset')
+      })
+    </script>
+  </body>
+</html>

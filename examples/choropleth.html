@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Choropleth defaults · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Choropleth defaults</nav>
+
+      <div class="card">
+        <h1>Choropleth, default configuration</h1>
+        <p class="note">
+          No styling passed: Equal Earth projection, quantile classification, an OkLab-sampled ramp,
+          computed class breaks in the legend, and a no-data swatch. Click a legend class to mute it.
+          Hover, scroll to zoom, drag to pan, double-click to zoom in, shift-drag to select.
+        </p>
+        <div id="map"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">The whole configuration</h2>
+        <p class="note">
+          Two keys. Everything the map decides beyond this, it decides because the default is meant to
+          be publishable rather than neutral.
+        </p>
+        <pre>
+new ApexMaps(element, {
+  geo: { map: 'world/countries@110m' },
+  series: [{ name: 'Index score', joinBy: 'name', data }],
+})</pre
+        >
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      Demo.ready(
+        Demo.names('world-countries-110m.json').then((names) => {
+          const map = Demo.watch(
+            'choropleth',
+            new ApexMaps(document.getElementById('map'), {
+              chart: { height: 480 },
+              geo: { map: 'world/countries@110m' },
+              series: [
+                {
+                  name: 'Index score',
+                  joinBy: 'name',
+                  data: names.map((name) => ({ name, value: Demo.value(name) })),
+                },
+              ],
+              dataLabels: { enabled: true },
+            }),
+          )
+          return map.render()
+        }),
+      )
+    </script>
+  </body>
+</html>

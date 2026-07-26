@@ -297,8 +297,14 @@ export class Scale {
     // signal that the classification is wrong for this data.
     this.counts = this._countClasses(sorted)
     if (!this.continuous && this.counts.some((c) => c === 0)) {
+      // Quantile cannot be the advice when quantile is what produced the empty
+      // class, which happens when there are fewer distinct values than classes.
+      const remedy =
+        this.type === 'quantile'
+          ? `fewer than ${classes} classes (there are ${new Set(sorted).size} distinct values)`
+          : "'quantile', or fewer classes"
       this.warnings.push(
-        `classification "${this.type}" produced an empty class; consider 'quantile' or fewer classes`,
+        `classification "${this.type}" produced an empty class; consider ${remedy}`,
       )
     }
   }

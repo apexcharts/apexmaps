@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The geometry registry · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › The geometry registry</nav>
+
+      <div class="card">
+        <h1>The geometry registry</h1>
+        <p class="note">
+          Three packs, no geometry handling, no join configuration, no projection and no view. Each pack
+          states its own recommended key, which is why <code>"CA"</code> and <code>"DE-BY"</code> just
+          join; recommends how it is meant to be drawn, which is why the US gets Alaska inset and Europe
+          is not lost inside a view that reaches Réunion; and carries its licence, so the Eurostat
+          attribution renders without being asked for.
+        </p>
+        <div class="three">
+          <div>
+            <div class="label"><code>map: 'us'</code> · joins on <code>abbr</code></div>
+            <div id="us"></div>
+          </div>
+          <div>
+            <div class="label"><code>map: 'de'</code> · joins on <code>iso_3166_2</code></div>
+            <div id="de"></div>
+          </div>
+          <div>
+            <div class="label"><code>map: 'eu/regions'</code> · NUTS-1</div>
+            <div id="eu"></div>
+          </div>
+        </div>
+        <pre id="meta" style="margin-top: 12px">…</pre>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">What is in the catalogue</h2>
+        <p class="note">
+          <code>ApexMaps.catalogue()</code>, unmodified. Every pack knows what one of its features is,
+          which field to join on, where it came from and what its licence requires. Ids are declared in
+          reviewed source rather than generated, because once <code>map: 'us/counties@10m'</code> is in
+          someone's dashboard it cannot be renamed.
+        </p>
+        <pre id="catalogue"></pre>
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      const pack = (id, keys, joinField, palette) =>
+        new ApexMaps(document.getElementById(id), {
+          chart: { height: 240 },
+          legend: { show: false },
+          geo: { map: id === 'us' ? 'us' : id === 'de' ? 'de' : 'eu/regions' },
+          series: [
+            {
+              name: 'Adoption',
+              data: Demo.rows(keys),
+              joinBy: [joinField, 'key'],
+              // A handful of data points does not support five classes: ties put two
+              // values in one class and leave another empty, and the scale says so.
+              scale: { palette, classes: 4 },
+            },
+          ],
+        })
+
+      // Data keyed the way this data is actually keyed: USPS abbreviations, ISO
+      // 3166-2 codes, NUTS level-1 codes.
+      const us = Demo.watch(
+        'us',
+        pack('us', ['CA', 'TX', 'NY', 'FL', 'WA', 'IL', 'MA', 'CO', 'OR', 'AZ'], 'abbr', 'blues'),
+      )
+      const de = Demo.watch(
+        'de',
+        pack(
+          'de',
+          ['DE-BY', 'DE-BE', 'DE-NW', 'DE-HH', 'DE-SN', 'DE-HE', 'DE-BW', 'DE-NI', 'DE-RP'],
+          'iso_3166_2',
+          'greens',
+        ),
+      )
+      const eu = Demo.watch(
+        'eu',
+        pack('eu', ['FR1', 'DE1', 'ES3', 'ITC', 'PL9', 'NL3', 'SE1'], 'nuts_id', 'oranges'),
+      )
+
+      Demo.ready(
+        Promise.all([us.render(), de.render(), eu.render()]).then(() => {
+          const describe = (map) => {
+            const meta = map.mapMeta ?? {}
+            return `${meta.packId}
+  ${meta.levelName}, ${map.geo.features.length} features, join on "${map.geo.keyField}"
+  ${meta.source} (${meta.license})${meta.attribution ? `\n  renders: ${meta.attribution}` : ''}`
+          }
+          document.getElementById('meta').textContent = [us, de, eu].map(describe).join('\n\n')
+        }),
+      )
+
+      document.getElementById('catalogue').textContent = ApexMaps.catalogue()
+        .map(
+          (p) =>
+            `${p.id.padEnd(22)} ${p.levelName.padEnd(30)} ${(p.keyField ?? '-').padEnd(12)} ${p.license}`,
+        )
+        .join('\n')
+    </script>
+  </body>
+</html>

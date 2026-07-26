@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Box selection and linked maps · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Box selection and linked maps</nav>
+
+      <div class="card">
+        <h1>Box selection and linked maps</h1>
+        <p class="note">
+          Shift-drag either map to select what the box encloses, Alt to add to the selection, Escape to
+          abandon it, and a box over nothing clears it. A plain drag still pans, and the click that ends a
+          drag is not a click on whatever it landed on. Both maps declare the same
+          <code>link: { group }</code>, so a selection made on one applies to the other and everything
+          unselected steps back on both. Linked selection is a licensed feature, so this pair carries the
+          evaluation watermark.
+        </p>
+        <div class="row">
+          <button id="west">setSelection(west coast)</button>
+          <button id="clear">clearSelection()</button>
+          <span class="label" id="status"></span>
+        </div>
+        <div class="two">
+          <div>
+            <div class="label">Adoption</div>
+            <div id="a"></div>
+          </div>
+          <div>
+            <div class="label">Support load, same states</div>
+            <div id="b"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Anchors, not bounding boxes</h2>
+        <p class="note">
+          A box tests each candidate's label anchor, which sits inside the shape. Bounding-box
+          intersection reads plausibly and behaves badly: Alaska's bbox spans the Pacific, so any box
+          touching the Aleutians would select it, and a box over the Great Lakes would select half a dozen
+          states it does not visibly cover. Point marks are tested at their own position, and the
+          automatic basemap is left out, since a country drawn only so bubbles have a coastline carries no
+          data and could not filter anything.
+        </p>
+        <pre>
+interaction: {
+  selection: { multiple: true, rectangle: true, modifier: 'shift' },
+},
+states: { muted: { opacity: 0.25 } },   // 1 turns dimming off
+link: { group: 'us-dashboard', filter: 'bidirectional' },   // or 'emit' / 'receive'</pre
+        >
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      const STATES = [
+        'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA',
+        'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+        'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT',
+        'VA', 'WA', 'WV', 'WI', 'WY', 'DC',
+      ]
+
+      const linked = (id, palette, salt) =>
+        new ApexMaps(document.getElementById(id), {
+          chart: { height: 300 },
+          geo: { map: 'us' },
+          legend: { show: false },
+          // Both maps name the same group, and both are keyed on `abbr`, which is what
+          // makes a selection mean the same thing on each.
+          link: { group: 'us-dashboard' },
+          series: [
+            {
+              name: 'Value',
+              joinBy: ['abbr', 'key'],
+              data: STATES.map((key, i) => ({ key, value: ((i * salt) % 80) + 10 })),
+              scale: { palette },
+            },
+          ],
+        })
+
+      const a = Demo.watch('link-a', linked('a', 'blues', 37))
+      const b = Demo.watch('link-b', linked('b', 'oranges', 53))
+
+      const status = document.getElementById('status')
+      a.on('selectionChange', ({ ids, source }) => {
+        const from = source === a.getInstanceId() ? 'left' : 'right'
+        status.textContent = ids.length
+          ? `${ids.length} selected from the ${from} map: ${ids.slice(0, 8).join(', ')}${ids.length > 8 ? '…' : ''}`
+          : 'nothing selected'
+      })
+
+      Demo.ready(
+        Promise.all([a.render(), b.render()]).then(() => {
+          status.textContent = 'shift-drag a box'
+        }),
+      )
+
+      document.getElementById('west').addEventListener('click', () => {
+        a.setSelection(['CA', 'OR', 'WA', 'NV', 'AZ'])
+      })
+      document.getElementById('clear').addEventListener('click', () => a.clearSelection())
+    </script>
+  </body>
+</html>

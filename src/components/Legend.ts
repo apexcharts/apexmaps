@@ -274,7 +274,14 @@ export class Legend {
   static describe(items: LegendItem[]): string {
     const real = items.filter((i) => !i.isNull)
     if (!real.length) return ''
-    return `${real.length} classes from ${real[0].label} to ${real[real.length - 1].label}`
+    // Class labels are ranges, so naming the lowest and highest label produced
+    // "5 classes from 12 to 19 to 82 to 92": four numbers and three "to"s, which a
+    // screen reader has no way to parse. Say the span, then the lowest class.
+    const lowest = real[0]
+    const highest = real[real.length - 1]
+    const from = lowest.from ?? lowest.label
+    const to = highest.to ?? highest.label
+    return `${real.length} classes spanning ${from} to ${to}, the lowest being ${lowest.label}`
   }
 
   reset(): void {

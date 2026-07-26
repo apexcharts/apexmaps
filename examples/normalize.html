@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Counts versus rates · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Counts versus rates</nav>
+
+      <div class="card">
+        <h1>Counts versus rates</h1>
+        <p class="note">
+          The same numbers, mapped two ways. On the left, raw counts: the map is bright where the people
+          are, which is nearly always what a count map shows and almost never what its author meant. On
+          the right, the same counts divided by population, which is the actual story. This is the most
+          common way to publish a misleading choropleth, so <code>normalizeBy</code> is one option, and
+          the legend retitles itself when it is used so the two maps cannot be confused for each other.
+        </p>
+        <div class="two">
+          <div>
+            <div class="label">No normalisation · <code>value</code></div>
+            <div id="counts"></div>
+          </div>
+          <div>
+            <div class="label">
+              <code>normalizeBy: 'population'</code> · cases per million
+            </div>
+            <div id="rates"></div>
+          </div>
+        </div>
+        <div class="row" style="margin-top: 12px">
+          <button id="advice">Show what the advisor says</button>
+          <span class="label" id="status"></span>
+        </div>
+        <pre id="report">…</pre>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">The dev-mode nudge</h2>
+        <p class="note">
+          A choropleth whose values are large integers with no normalisation gets a note in the dev-mode
+          diagnostics, because that shape of data is a count nine times out of ten. It is advice, not a
+          block: sometimes a count map is exactly right, and the library is not in a position to know. The
+          bubble series is the other answer, since a circle's area is immune to how big the country under
+          it happens to be.
+        </p>
+        <pre>
+series: [{
+  name: 'Cases',
+  joinBy: ['iso_a3', 'code'],
+  data,                          // [{ code, value, population }]
+  normalizeBy: 'population',     // legend becomes "Cases (per population)"
+}]</pre
+        >
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      /*
+       * Synthetic but structured like the real thing: population is roughly right,
+       * and the count is population times a per-capita rate that varies by country,
+       * so the count map mostly redraws population while the rate map does not.
+       */
+      const POPULATION = {
+        CHN: 1412, IND: 1408, USA: 333, IDN: 276, PAK: 235, BRA: 214, NGA: 219, BGD: 169,
+        RUS: 143, MEX: 127, JPN: 125, ETH: 120, PHL: 114, EGY: 109, VNM: 98, COD: 96,
+        TUR: 85, IRN: 88, DEU: 84, THA: 72, GBR: 67, FRA: 68, ITA: 59, ZAF: 60,
+        TZA: 63, MMR: 54, KEN: 53, KOR: 52, COL: 51, ESP: 47, ARG: 46, DZA: 44,
+        UGA: 46, IRQ: 43, CAN: 38, POL: 38, MAR: 37, SAU: 35, UZB: 34, PER: 33,
+        MYS: 33, AGO: 34, MOZ: 32, GHA: 32, YEM: 33, NPL: 30, VEN: 28, AUS: 26,
+        NLD: 17, CHL: 19, ROU: 19, KAZ: 19, SWE: 10, NOR: 5, FIN: 6, DNK: 6,
+        CHE: 9, AUT: 9, BEL: 12, PRT: 10, GRC: 10, CZE: 11, HUN: 10, ISR: 9,
+        NZL: 5, IRL: 5, SGP: 6, ARE: 10, NGA2: 1,
+      }
+
+      const DATA = Object.entries(POPULATION)
+        .filter(([code]) => code.length === 3)
+        .map(([code, population]) => ({
+          code,
+          population,
+          // Cases per million varies 40x between countries; the count does not show it.
+          value: Math.round(population * (Demo.value(code, 5, 200) / 100)),
+        }))
+
+      const series = (normalize) => ({
+        name: 'Cases',
+        joinBy: ['iso_a3', 'code'],
+        data: DATA,
+        scale: { palette: 'reds', classes: 5 },
+        ...(normalize ? { normalizeBy: 'population' } : {}),
+      })
+
+      const build = (id, normalize) =>
+        Demo.watch(
+          id,
+          new ApexMaps(document.getElementById(id), {
+            chart: { height: 300 },
+            geo: { map: 'world/countries@110m' },
+            debug: { enabled: true },
+            series: [series(normalize)],
+          }),
+        )
+
+      const counts = build('counts', false)
+      const rates = build('rates', true)
+
+      Demo.ready(
+        Promise.all([counts.render(), rates.render()]).then(() => {
+          document.getElementById('status').textContent =
+            `${DATA.length} countries, ${counts.series[0].legendTitle()} vs ${rates.series[0].legendTitle()}`
+        }),
+      )
+
+      document.getElementById('advice').addEventListener('click', () => {
+        const lines = [
+          `counts map advice:\n  ${counts.series[0].advise().join('\n  ') || '(none)'}`,
+          `rates map advice:\n  ${rates.series[0].advise().join('\n  ') || '(none)'}`,
+        ]
+        document.getElementById('report').textContent = lines.join('\n\n')
+      })
+    </script>
+  </body>
+</html>

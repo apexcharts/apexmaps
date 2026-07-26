@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bubbles · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Bubbles</nav>
+
+      <div class="card">
+        <h1>Bubble series: proportional symbols</h1>
+        <p class="note">
+          The right mark for absolute magnitudes. Area is proportional to value (square-root radius
+          scaling), largest painted first so small circles stay clickable, and the legend nests three
+          reference circles so areas can actually be decoded. Zoom in: the circles hold their size,
+          because a radius that grew with the camera would no longer encode the value.
+        </p>
+        <div class="row">
+          <select id="scale">
+            <option value="sqrt">size.scale: 'sqrt' (default)</option>
+            <option value="linear">size.scale: 'linear'</option>
+          </select>
+          <button id="colour">Toggle second encoding</button>
+          <span class="label" id="status"></span>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Why square root is the default</h2>
+        <p class="note">
+          With <code>linear</code>, radius grows with the value, so a city twice the size draws four
+          times the ink. Switch the select and watch Tokyo swallow Japan: the ranking survives but every
+          comparison is overstated. The option exists because some publications standardise on it, and
+          it warns in dev mode.
+        </p>
+        <pre>
+{
+  type: 'bubble',
+  name: 'Metro population',
+  data: [{ name: 'Tokyo', lon: 139.69, lat: 35.69, value: 37400068 }],
+  size: { scale: 'sqrt', range: [3, 30] },
+  colorScale: { palette: 'reds' },   // optional second variable
+  colorField: 'growth',
+}</pre
+        >
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      const CITIES = [
+        { name: 'Tokyo', lon: 139.69, lat: 35.69, value: 37400068, growth: 0.2 },
+        { name: 'Delhi', lon: 77.21, lat: 28.61, value: 28514000, growth: 3.6 },
+        { name: 'Shanghai', lon: 121.47, lat: 31.23, value: 25582000, growth: 2.4 },
+        { name: 'São Paulo', lon: -46.63, lat: -23.55, value: 21650000, growth: 0.9 },
+        { name: 'Mexico City', lon: -99.13, lat: 19.43, value: 21581000, growth: 1.0 },
+        { name: 'Cairo', lon: 31.24, lat: 30.04, value: 20076000, growth: 2.6 },
+        { name: 'Mumbai', lon: 72.88, lat: 19.08, value: 19980000, growth: 1.7 },
+        { name: 'Beijing', lon: 116.41, lat: 39.9, value: 19618000, growth: 2.2 },
+        { name: 'Dhaka', lon: 90.41, lat: 23.81, value: 19578000, growth: 3.9 },
+        { name: 'Osaka', lon: 135.5, lat: 34.69, value: 19281000, growth: -0.1 },
+        { name: 'New York', lon: -74.01, lat: 40.71, value: 18819000, growth: 0.3 },
+        { name: 'Karachi', lon: 67.01, lat: 24.86, value: 15400000, growth: 2.5 },
+        { name: 'Buenos Aires', lon: -58.38, lat: -34.6, value: 14967000, growth: 1.1 },
+        { name: 'Istanbul', lon: 28.98, lat: 41.01, value: 14751000, growth: 1.6 },
+        { name: 'Kolkata', lon: 88.36, lat: 22.57, value: 14681000, growth: 0.8 },
+        { name: 'Lagos', lon: 3.38, lat: 6.52, value: 13904000, growth: 3.5 },
+        { name: 'Manila', lon: 120.98, lat: 14.6, value: 13482000, growth: 1.9 },
+        { name: 'Rio de Janeiro', lon: -43.17, lat: -22.91, value: 13293000, growth: 0.6 },
+        { name: 'Moscow', lon: 37.62, lat: 55.75, value: 12410000, growth: 0.4 },
+        { name: 'Los Angeles', lon: -118.24, lat: 34.05, value: 12458000, growth: 0.4 },
+        { name: 'Paris', lon: 2.35, lat: 48.86, value: 10901000, growth: 0.5 },
+        { name: 'Lima', lon: -77.04, lat: -12.05, value: 10391000, growth: 1.6 },
+        { name: 'Bangkok', lon: 100.5, lat: 13.76, value: 10156000, growth: 1.4 },
+        { name: 'Johannesburg', lon: 28.05, lat: -26.2, value: 9399000, growth: 1.8 },
+        { name: 'London', lon: -0.13, lat: 51.51, value: 9046000, growth: 1.0 },
+      ]
+
+      let sizeScale = 'sqrt'
+      let coloured = false
+      const status = document.getElementById('status')
+
+      const series = () => ({
+        type: 'bubble',
+        name: 'Metro population',
+        data: CITIES,
+        size: { scale: sizeScale, range: [3, 30] },
+        color: '#FF4560',
+        ...(coloured
+          ? { colorField: 'growth', colorScale: { palette: 'rdylgn', classes: 5 } }
+          : {}),
+      })
+
+      const map = Demo.watch(
+        'bubbles',
+        new ApexMaps(document.getElementById('map'), {
+          chart: { height: 460 },
+          geo: { map: 'world/countries@110m' },
+          series: [series()],
+        }),
+      )
+
+      const report = () => {
+        status.textContent = `${CITIES.length} cities, area ${
+          sizeScale === 'sqrt' ? 'proportional to value' : 'proportional to value squared'
+        }${coloured ? ', coloured by annual growth' : ''}`
+      }
+
+      Demo.ready(map.render().then(report))
+
+      document.getElementById('scale').addEventListener('change', (event) => {
+        sizeScale = event.target.value
+        map.updateSeries([series()])
+        report()
+      })
+      document.getElementById('colour').addEventListener('click', () => {
+        coloured = !coloured
+        map.updateSeries([series()])
+        report()
+      })
+    </script>
+  </body>
+</html>

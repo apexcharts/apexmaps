@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Extension points · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Extension points</nav>
+
+      <div class="card">
+        <h1>Bring your own geometry</h1>
+        <p class="note">
+          <code>ApexMaps.registerMap(id, geometry, meta)</code> puts anything into the registry under an
+          id, with the same provenance fields the built-in packs carry. The geometry below is hand-written
+          in this page: a schematic six-zone floor plan in a flat coordinate space, drawn with the
+          <code>identity</code> projection. Nothing about the engine assumes the earth, which is why a
+          floor plan, a stadium or a wafer map works the same way a country does.
+        </p>
+        <div class="two">
+          <div>
+            <div class="label"><code>map: 'demo/floor'</code> · identity projection</div>
+            <div id="floor"></div>
+          </div>
+          <div>
+            <div class="label">
+              <code>registerPalette('demo/heat', …)</code> · a custom ramp on real geometry
+            </div>
+            <div id="custom-palette"></div>
+          </div>
+        </div>
+        <pre id="meta" style="margin-top: 12px">…</pre>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Where geometry comes from</h2>
+        <p class="note">
+          <code>setGeoSource()</code> takes a base URL or a loader function, so a self-hosted copy, an
+          air-gapped install and a bundler import are all the same feature. This page uses the function
+          form: every pack request goes through the loader below, which is also how you would pull packs
+          out of the npm dataset with no network at all. The counter proves it ran.
+        </p>
+        <div class="row">
+          <button id="load-japan">Load 'jp/prefectures' through the loader</button>
+          <span class="label" id="loader-status">loader has served 0 packs</span>
+        </div>
+        <div id="japan"></div>
+        <pre>
+// A base URL
+ApexMaps.setGeoSource('https://cdn.example.com/apexmaps-geo/')
+
+// Or a function: bundler imports, air-gapped paths, an authenticated fetch
+ApexMaps.setGeoSource((file) => import(`apexmaps-geo/${file}`).then((m) => m.default))</pre
+        >
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Projections</h2>
+        <p class="note">
+          Thirteen projections ship in core, and any of them can be configured as a spec object with
+          <code>rotate</code>, <code>center</code>, <code>parallels</code>, <code>clipAngle</code> and
+          <code>angle</code>, which covers nearly every real requirement. For the rest of the
+          <code>d3-geo-projection</code> catalogue, register the factory. That needs a dependency this
+          page does not load, so it is shown as code rather than pretended:
+        </p>
+        <pre>
+import { geoRobinson } from 'd3-geo-projection'
+
+ApexMaps.registerProjection('robinson', () => geoRobinson())
+ApexMaps.listProjections()   // now includes 'robinson'
+
+// geo: { projection: 'robinson' }</pre
+        >
+        <p class="note">
+          A <code>proj4</code> escape hatch for non-WGS84 coordinate systems is on the phase-1 list and not
+          built yet, which is stated in <code>SCOPE.md</code> rather than implied by an option that does
+          nothing.
+        </p>
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      /* ---- 1. geometry that is not the earth ------------------------------- */
+      const zone = (id, name, x, y, w, h) => ({
+        type: 'Feature',
+        properties: { id, name },
+        geometry: {
+          type: 'Polygon',
+          // Clockwise, which is the winding d3-geo reads as "the inside is here".
+          // Ingest repairs it either way and reports what it changed.
+          coordinates: [
+            [
+              [x, y],
+              [x, y + h],
+              [x + w, y + h],
+              [x + w, y],
+              [x, y],
+            ],
+          ],
+        },
+      })
+
+      ApexMaps.registerMap(
+        'demo/floor',
+        {
+          type: 'FeatureCollection',
+          features: [
+            zone('A', 'Assembly', 0, 0, 40, 30),
+            zone('B', 'Paint', 40, 0, 25, 30),
+            zone('C', 'Store', 65, 0, 20, 30),
+            zone('D', 'QA', 0, 30, 30, 20),
+            zone('E', 'Packing', 30, 30, 30, 20),
+            zone('F', 'Loading', 60, 30, 25, 20),
+          ],
+        },
+        {
+          source: 'hand-drawn in examples/extending.html',
+          license: 'n/a',
+          vintage: '2026',
+          keyField: 'id',
+          levelName: 'Zones',
+        },
+      )
+
+      const floor = Demo.watch(
+        'floor',
+        new ApexMaps(document.getElementById('floor'), {
+          chart: { height: 260 },
+          // Identity: the coordinates are already a flat plan, not longitude and
+          // latitude, so nothing should be projected.
+          geo: { map: 'demo/floor', projection: 'identity', keyField: 'id' },
+          series: [
+            {
+              name: 'Utilisation',
+              joinBy: ['id', 'key'],
+              data: Demo.rows(['A', 'B', 'C', 'D', 'E', 'F']),
+              // Six zones, so three classes: five would leave some empty.
+              scale: { palette: 'oranges', classes: 3 },
+            },
+          ],
+          dataLabels: { enabled: true, minFeatureArea: 0 },
+        }),
+      )
+
+      /* ---- 2. a custom palette -------------------------------------------- */
+      ApexMaps.registerPalette('demo/heat', {
+        kind: 'sequential',
+        stops: ['#f7f4ff', '#d9c7ff', '#b18aff', '#7d4bd6', '#4b1d96'],
+        colorblindSafe: true,
+      })
+
+      const custom = Demo.watch(
+        'custom-palette',
+        new ApexMaps(document.getElementById('custom-palette'), {
+          chart: { height: 260 },
+          geo: { map: 'eu/nuts0@20m' },
+          series: [
+            {
+              name: 'Adoption',
+              joinBy: ['nuts_id', 'key'],
+              data: Demo.rows(['DE', 'FR', 'IT', 'ES', 'PL', 'NL', 'SE', 'PT', 'FI', 'EL']),
+              scale: { palette: 'demo/heat' },
+            },
+          ],
+        }),
+      )
+
+      /* ---- 3. a loader function for the dataset ---------------------------- */
+      let served = 0
+      const loaderStatus = document.getElementById('loader-status')
+      ApexMaps.setGeoSource(async (file) => {
+        const response = await fetch(`../geo/${file}`)
+        if (!response.ok) throw new Error(`HTTP ${response.status} for ${file}`)
+        served++
+        loaderStatus.textContent = `loader has served ${served} pack${served === 1 ? '' : 's'} (last: ${file})`
+        return response.json()
+      })
+
+      const japan = new ApexMaps(document.getElementById('japan'), {
+        chart: { height: 320 },
+        geo: { map: 'jp/prefectures' },
+        legend: { show: false },
+        series: [
+          {
+            name: 'Adoption',
+            joinBy: ['iso_3166_2', 'key'],
+            data: Demo.rows(['JP-13', 'JP-27', 'JP-01', 'JP-40', 'JP-23', 'JP-14']),
+            scale: { palette: 'reds' },
+          },
+        ],
+      })
+
+      let japanRendered = false
+      document.getElementById('load-japan').addEventListener('click', () => {
+        if (japanRendered) return
+        japanRendered = true
+        Demo.watch('japan', japan)
+        japan.render()
+      })
+
+      Demo.ready(
+        Promise.all([floor.render(), custom.render()]).then(() => {
+          const meta = ApexMaps.mapMeta('demo/floor')
+          document.getElementById('meta').textContent = [
+            `registered: demo/floor`,
+            `  ${meta.levelName}, ${floor.geo.features.length} features, join on "${floor.geo.keyField}"`,
+            `  source: ${meta.source}`,
+            `  projection: ${floor.viewport.projectionName}`,
+            '',
+            `palettes now registered: ${ApexMaps.listPalettes().length} (includes "demo/heat")`,
+          ].join('\n')
+        }),
+      )
+    </script>
+  </body>
+</html>

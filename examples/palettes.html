@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Palettes · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+    <style>
+      .ramp {
+        display: grid;
+        grid-template-columns: 130px 1fr auto;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 6px;
+      }
+      .ramp .strip {
+        display: flex;
+        height: 16px;
+        border-radius: 3px;
+        overflow: hidden;
+        border: 1px solid var(--card-border);
+      }
+      .ramp .strip span {
+        flex: 1;
+      }
+      .ramp code {
+        cursor: pointer;
+      }
+      .ramp .kind {
+        color: var(--muted);
+        font-size: 11px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Palettes</nav>
+
+      <div class="card">
+        <h1>Palettes</h1>
+        <p class="note">
+          Every registered palette, from <code>ApexMaps.listPalettes()</code>. Click a name to apply it
+          to the map. The strips show each palette's anchor stops; the class colours the map actually
+          draws are those stops resampled <strong>in OkLab</strong> at render time, which is why a
+          4-class and a 9-class map of the same data stay perceptually consistent, and why ramp midpoints
+          do not go muddy grey the way sRGB interpolation makes them.
+        </p>
+        <div class="two">
+          <div id="list"></div>
+          <div>
+            <div class="row">
+              <select id="classes">
+                <option>3</option>
+                <option selected>5</option>
+                <option>7</option>
+                <option>9</option>
+              </select>
+              <button id="reverse">Reverse</button>
+              <span class="label" id="status"></span>
+            </div>
+            <div id="map"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">The automatic diverging choice</h2>
+        <p class="note">
+          When no palette is named and the data straddles zero, a diverging ramp is chosen, because a
+          sequential ramp hides the sign: the reader cannot see where the change from negative to positive
+          happens. The map on the left has data from -40 to 40 and no <code>palette</code> set at all; the
+          one on the right is the same data forced onto a sequential ramp.
+        </p>
+        <div class="two">
+          <div>
+            <div class="label">No palette set · diverging chosen automatically</div>
+            <div id="auto"></div>
+          </div>
+          <div>
+            <div class="label"><code>palette: 'blues'</code> · sign is invisible</div>
+            <div id="forced"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      let palette = 'blues'
+      let classes = 5
+      let reversed = false
+      const status = document.getElementById('status')
+
+      // Swatch strips straight from the registry, so this list cannot go stale.
+      const list = document.getElementById('list')
+      for (const name of ApexMaps.listPalettes()) {
+        const definition = ApexMaps.palette(name)
+        const row = document.createElement('div')
+        row.className = 'ramp'
+        const label = document.createElement('code')
+        label.textContent = name
+        label.addEventListener('click', () => {
+          palette = name
+          apply()
+        })
+        const strip = document.createElement('div')
+        strip.className = 'strip'
+        for (const stop of definition.stops) {
+          const cell = document.createElement('span')
+          cell.style.background = stop
+          strip.appendChild(cell)
+        }
+        const kind = document.createElement('span')
+        kind.className = 'kind'
+        kind.textContent = definition.colorblindSafe
+          ? `${definition.kind}, cb-safe`
+          : definition.kind
+        row.append(label, strip, kind)
+        list.appendChild(row)
+      }
+
+      const map = Demo.watch(
+        'palettes',
+        new ApexMaps(document.getElementById('map'), {
+          chart: { height: 300 },
+          geo: { map: 'world/countries@110m' },
+          series: [{ name: 'Index', joinBy: 'name', data: [] }],
+        }),
+      )
+
+      const diverging = (id, options) =>
+        Demo.watch(
+          id,
+          new ApexMaps(document.getElementById(id), {
+            chart: { height: 260 },
+            geo: { map: 'world/countries@110m' },
+            series: [{ name: 'Change', joinBy: 'name', data: [], scale: options }],
+          }),
+        )
+      const auto = diverging('auto', { classes: 5 })
+      const forced = diverging('forced', { classes: 5, palette: 'blues' })
+
+      let rows = []
+      let signed = []
+
+      const apply = () => {
+        map.updateSeries([
+          {
+            name: 'Index',
+            joinBy: 'name',
+            data: rows,
+            scale: { type: 'quantile', classes, palette, reverse: reversed },
+          },
+        ])
+        const scale = map.series[0].scale
+        status.textContent = `${palette}, ${classes} classes${reversed ? ', reversed' : ''} · ${scale.colors.join(' ')}`
+      }
+
+      Demo.ready(
+        Demo.names('world-countries-110m.json').then(async (names) => {
+          rows = names.map((name) => ({ name, value: Demo.value(name) }))
+          signed = names.map((name) => ({ name, value: Demo.value(name, -40, 40) }))
+
+          await Promise.all([map.render(), auto.render(), forced.render()])
+          auto.updateSeries([{ name: 'Change', joinBy: 'name', data: signed, scale: { classes: 5 } }])
+          forced.updateSeries([
+            { name: 'Change', joinBy: 'name', data: signed, scale: { classes: 5, palette: 'blues' } },
+          ])
+          apply()
+        }),
+      )
+
+      document.getElementById('classes').addEventListener('change', (event) => {
+        classes = Number(event.target.value)
+        apply()
+      })
+      document.getElementById('reverse').addEventListener('click', () => {
+        reversed = !reversed
+        apply()
+      })
+    </script>
+  </body>
+</html>

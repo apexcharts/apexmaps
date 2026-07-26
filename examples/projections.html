@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Projections · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Projections</nav>
+
+      <div class="card">
+        <h1>Projections</h1>
+        <p class="note">
+          Same data, different lie about the earth. Switching projection reprojects the geometry once
+          and refits the view; panning and zooming afterwards never reproject. Equal Earth is the
+          default because a world thematic map in Web Mercator overstates high-latitude area by an
+          order of magnitude, and most callers never choose a projection at all.
+        </p>
+        <div class="row">
+          <select id="projection">
+            <option value="equalEarth">Equal Earth (equal-area)</option>
+            <option value="mercator">Web Mercator (conformal)</option>
+            <option value="naturalEarth">Natural Earth (compromise)</option>
+            <option value="orthographic">Orthographic (globe)</option>
+            <option value="equirectangular">Plate Carrée</option>
+            <option value="azimuthalEqualArea">Azimuthal Equal Area</option>
+            <option value="conicEqualArea">Conic Equal Area</option>
+            <option value="transverseMercator">Transverse Mercator</option>
+          </select>
+          <button id="graticule">Toggle graticule</button>
+          <button id="rotate">Rotate 30°</button>
+          <span class="label" id="status"></span>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Spec objects</h2>
+        <p class="note">
+          A projection can be a name, or an object with <code>rotate</code>, <code>center</code>,
+          <code>parallels</code>, <code>clipAngle</code> and the rest. Rotating is how a Pacific-centred
+          world or a country that crosses the antimeridian gets drawn without tearing.
+        </p>
+        <pre>
+geo: { projection: { name: 'conicEqualArea', rotate: [-100, 0], parallels: [50, 70] } }</pre
+        >
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      const status = document.getElementById('status')
+      let rotation = 0
+      let graticuleOn = false
+      let projection = 'equalEarth'
+
+      Demo.ready(
+        Demo.names('world-countries-110m.json').then(async (names) => {
+          const map = Demo.watch(
+            'projections',
+            new ApexMaps(document.getElementById('map'), {
+              chart: { height: 420 },
+              geo: { map: 'world/countries@110m', sphere: { show: true } },
+              legend: { show: false },
+              series: [
+                {
+                  name: 'Index score',
+                  joinBy: 'name',
+                  data: names.map((name) => ({ name, value: Demo.value(name) })),
+                  scale: { palette: 'viridis' },
+                },
+              ],
+            }),
+          )
+          await map.render()
+          status.textContent = `${map.viewport.projectionName}, ${map.geo.features.length} features`
+
+          const apply = () =>
+            map
+              .updateOptions({
+                geo: {
+                  projection: rotation ? { name: projection, rotate: [rotation, 0] } : projection,
+                  graticule: { show: graticuleOn },
+                },
+              })
+              .then(() => {
+                status.textContent = `${map.viewport.projectionName}${rotation ? `, rotated ${rotation}°` : ''}`
+              })
+
+          document.getElementById('projection').addEventListener('change', (event) => {
+            projection = event.target.value
+            apply()
+          })
+          document.getElementById('graticule').addEventListener('click', () => {
+            graticuleOn = !graticuleOn
+            apply()
+          })
+          document.getElementById('rotate').addEventListener('click', () => {
+            rotation = (rotation - 30) % 360
+            apply()
+          })
+        }),
+      )
+    </script>
+  </body>
+</html>

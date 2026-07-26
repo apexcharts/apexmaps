@@ -48,7 +48,7 @@ import type { Crumb } from './components/Breadcrumb'
 import { scopeToParent } from './data/Hierarchy'
 import { ZoomPan } from './interaction/ZoomPan'
 import type { SelectBox, SelectBoxPhase } from './interaction/ZoomPan'
-import { registerPalette } from './scales/Palettes'
+import { registerPalette, listPalettes, getPalette } from './scales/Palettes'
 import type { Palette } from './scales/Palettes'
 import { html, remove, resolveSize, pointerPosition, hasDom } from './utils/dom'
 import { darken } from './scales/Color'
@@ -193,6 +193,7 @@ class ApexMaps extends BaseChart {
   private readonly _premiumUsed = new Set<string>()
   private _resizeObserver: ResizeObserver | null = null
   private _renderRaf: number | null = null
+  private _resizeRaf: number | null = null
   private _attribution: HTMLElement | null = null
   private _a11yMounted = false
   private _warnedLinkKeys = false
@@ -1461,7 +1462,19 @@ class ApexMaps extends BaseChart {
       const rect = this.element.getBoundingClientRect()
       const width = Math.max(1, Math.round(resolveSize(this.config.chart.width, rect.width, 600)))
       if (Math.abs(width - this.viewport.width) < 2) return
-      this._relayout()
+
+      // Relayout writes layout (the plot's own width and height), and writing layout
+      // inside a ResizeObserver callback re-entering the same observer is what
+      // produces "ResizeObserver loop completed with undelivered notifications" in
+      // Chromium: a real console error, in a container whose size depends on its
+      // contents. Deferring to the next frame moves the write out of the delivery
+      // cycle, and coalesces a drag-resize's burst of entries into one relayout.
+      if (this._resizeRaf !== null) return
+      this._resizeRaf = requestAnimationFrame(() => {
+        this._resizeRaf = null
+        if (!this.rendered) return
+        this._relayout()
+      })
     })
     this._resizeObserver.observe(this.element)
   }
@@ -1974,6 +1987,7 @@ class ApexMaps extends BaseChart {
   /** Tear down: listeners, observers, animation frames, DOM. */
   override destroy(): void {
     if (this._renderRaf !== null) cancelAnimationFrame(this._renderRaf)
+    if (this._resizeRaf !== null) cancelAnimationFrame(this._resizeRaf)
     this.camera?.stop()
     this.zoomPan?.detach()
     this._resizeObserver?.disconnect()
@@ -2072,6 +2086,25 @@ class ApexMaps extends BaseChart {
 
   static listProjections(): string[] {
     return listProjections()
+  }
+
+  /**
+   * Registered palette names, including any added through `registerPalette()`.
+   *
+   * The counterpart of `listMaps()` and `listProjections()`: without it a palette
+   * picker or a docs table has to hard-code the list and go stale.
+   */
+  static listPalettes(): string[] {
+    return listPalettes()
+  }
+
+  /**
+   * A palette's anchor stops and family. The class colours a map actually draws
+   * are these stops sampled in OkLab to the class count, so a swatch built from
+   * `stops` shows the ramp, not the classes.
+   */
+  static palette(name: string): Palette | undefined {
+    return getPalette(name)
   }
 
   static getInstance(id: string): ApexMaps | undefined {

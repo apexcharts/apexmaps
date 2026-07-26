@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Accessibility · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+    <style>
+      /* Reveal what assistive technology sees. The library keeps the table and the
+         live region visually hidden; this page un-hides them on request so a sighted
+         reviewer can check them. */
+      .reveal .apexmaps-sr-only {
+        position: static;
+        width: auto;
+        height: auto;
+        margin: 8px 0 0;
+        overflow: visible;
+        clip: auto;
+        white-space: normal;
+        border: 1px solid var(--card-border);
+        border-radius: 6px;
+        padding: 8px;
+        font-size: 12px;
+      }
+      .apexmaps-data-table {
+        border-collapse: collapse;
+        max-height: 240px;
+        display: block;
+        overflow: auto;
+      }
+      .apexmaps-data-table th,
+      .apexmaps-data-table td {
+        border: 1px solid var(--card-border);
+        padding: 2px 8px;
+        text-align: left;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Accessibility</nav>
+
+      <div class="card">
+        <h1>Accessibility</h1>
+        <p class="note">
+          Click the map, then use the arrow keys. One tab stop for the whole map, then arrows walk the
+          features in reading order (top to bottom in bands, then left to right, because raw y-sorting
+          zigzags across a wide map and is disorienting). Home and End jump to the ends, Enter selects,
+          Escape leaves. A tab stop per feature would make a 3,000-county map unusable by keyboard, which
+          is the usual mistake. Above <code>keyboardFeatureLimit</code> features, walking is switched off
+          and the description plus the data table remain the accessible path.
+        </p>
+        <div class="row">
+          <button id="focus">Focus the map</button>
+          <button id="reveal">Reveal what AT sees</button>
+          <span class="label" id="status">not focused</span>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">The generated description</h2>
+        <p class="note">
+          <code>a11y: { description: 'auto' }</code> writes this from the spec and the data, because "a map
+          of Europe" tells a screen-reader user nothing they can act on. It names the map type, the number
+          of areas, the range, the class structure, the extremes and how many areas have no data.
+        </p>
+        <pre id="description">…</pre>
+
+        <h2>Live announcements</h2>
+        <p class="note">
+          Every arrow key replaces the text of a polite live region rather than appending to it, so fast
+          travel does not flood the reader. This panel mirrors that region as you navigate.
+        </p>
+        <pre id="live">(navigate with the arrow keys)</pre>
+
+        <h2>The data table</h2>
+        <p class="note">
+          <code>dataTable: true</code> emits a real table alongside the map, visually hidden. For
+          assistive technology that cannot interpret spatial output at all, it is the only reliable
+          fallback. This is free in every licence tier, permanently.
+        </p>
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      const status = document.getElementById('status')
+
+      const map = Demo.watch(
+        'a11y',
+        new ApexMaps(document.getElementById('map'), {
+          chart: { height: 420 },
+          geo: { map: 'eu/nuts0@20m' },
+          series: [
+            {
+              name: 'Adoption',
+              joinBy: ['nuts_id', 'key'],
+              data: Demo.rows(['DE', 'FR', 'IT', 'ES', 'PL', 'NL', 'SE', 'IE', 'PT', 'EL', 'FI']),
+              scale: { palette: 'purples' },
+            },
+          ],
+          a11y: { enabled: true, description: 'auto', dataTable: true },
+        }),
+      )
+
+      Demo.ready(
+        map.render().then(() => {
+          const svg = document.querySelector('#map svg')
+          document.getElementById('description').textContent = [
+            `aria-label: ${svg.getAttribute('aria-label')}`,
+            '',
+            `<desc>: ${svg.querySelector('desc').textContent}`,
+            '',
+            `keyboard order: ${map.a11y.order.length} features reachable`,
+          ].join('\n')
+
+          // Mirror the live region so a sighted reviewer can see the announcements.
+          const live = document.querySelector('[role="status"]')
+          const panel = document.getElementById('live')
+          new MutationObserver(() => {
+            panel.textContent = live.textContent || '(cleared)'
+          }).observe(live, { childList: true, characterData: true, subtree: true })
+
+          svg.addEventListener('focus', () => {
+            status.textContent = 'focused: use the arrow keys'
+          })
+          svg.addEventListener('blur', () => {
+            status.textContent = 'not focused'
+          })
+        }),
+      )
+
+      document.getElementById('focus').addEventListener('click', () => {
+        document.querySelector('#map svg').focus()
+      })
+      document.getElementById('reveal').addEventListener('click', () => {
+        document.body.classList.toggle('reveal')
+      })
+    </script>
+  </body>
+</html>

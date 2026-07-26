@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arcs · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Arcs</nav>
+
+      <div class="card">
+        <h1>Arc series: great-circle routes</h1>
+        <p class="note">
+          Singapore's long-haul network, drawn as great circles. The routes to Los Angeles and Vancouver
+          cross the Pacific, so they are cut at the antimeridian and re-enter on the left edge instead of
+          streaking back across the map. The São Paulo route sweeps south past the Cape, which is
+          genuinely the shortest path. Thin arcs carry an invisible wider hit path so they stay hoverable:
+          a 1px flight line is otherwise unpointable, and widening the visible stroke would misrepresent
+          the value it encodes.
+        </p>
+        <div class="row">
+          <button id="geodesic">Toggle geodesic</button>
+          <button id="curvature">Toggle curvature</button>
+          <select id="projection">
+            <option value="equalEarth">Equal Earth</option>
+            <option value="mercator">Web Mercator</option>
+            <option value="orthographic">Orthographic</option>
+          </select>
+          <span class="label" id="status"></span>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Geodesic, or decorative</h2>
+        <p class="note">
+          <code>geodesic: true</code> (the default) follows the real great circle, resampled densely
+          enough to stay smooth at any zoom and split where it crosses the antimeridian. Turning it off
+          draws the straight line between the two points, which in Mercator is not the route a plane
+          flies. <code>curvature</code> bulges the arc perpendicular to its chord: decorative, so it is
+          off by default and mutually exclusive with geodesic accuracy.
+        </p>
+        <pre>
+{
+  type: 'arc',
+  name: 'Weekly flights',
+  data: [{ from: [103.99, 1.36], to: [-0.45, 51.47], value: 900 }],
+  geodesic: true,
+  width: { range: [0.6, 4] },
+  endpoints: { show: true, radius: 2.5 },
+}</pre
+        >
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      const HUB = [103.99, 1.36] // Singapore Changi
+      const DESTINATIONS = [
+        { name: 'London', to: [-0.45, 51.47], value: 900 },
+        { name: 'New York', to: [-73.78, 40.64], value: 780 },
+        { name: 'Los Angeles', to: [-118.41, 33.94], value: 640 },
+        { name: 'Tokyo', to: [140.39, 35.77], value: 820 },
+        { name: 'Sydney', to: [151.18, -33.95], value: 700 },
+        { name: 'Johannesburg', to: [28.24, -26.13], value: 380 },
+        { name: 'São Paulo', to: [-46.47, -23.43], value: 260 },
+        { name: 'Frankfurt', to: [8.57, 50.04], value: 720 },
+        { name: 'Dubai', to: [55.36, 25.25], value: 860 },
+        { name: 'Mumbai', to: [72.87, 19.09], value: 540 },
+        { name: 'Seoul', to: [126.45, 37.46], value: 610 },
+        { name: 'Auckland', to: [174.79, -37.01], value: 300 },
+        { name: 'Vancouver', to: [-123.18, 49.19], value: 240 },
+        { name: 'Cape Town', to: [18.6, -33.97], value: 190 },
+      ]
+      const ROUTES = DESTINATIONS.map((d) => ({
+        name: `SIN to ${d.name}`,
+        from: HUB,
+        to: d.to,
+        value: d.value,
+      }))
+
+      let geodesic = true
+      let curvature = 0
+      const status = document.getElementById('status')
+
+      const series = () => ({
+        type: 'arc',
+        name: 'Weekly flights',
+        data: ROUTES,
+        color: '#00E396',
+        geodesic,
+        curvature,
+        endpoints: { show: true, radius: 2.5 },
+      })
+
+      const map = Demo.watch(
+        'arcs',
+        new ApexMaps(document.getElementById('map'), {
+          chart: { height: 460 },
+          geo: { map: 'world/countries@110m', sphere: { show: true } },
+          series: [series()],
+        }),
+      )
+
+      const report = () => {
+        const drawn = document.querySelectorAll('#map .apexmaps-arc').length
+        status.textContent = `${ROUTES.length} routes as ${drawn} paths, ${
+          geodesic ? 'great circles' : 'straight lines'
+        }${curvature ? `, curvature ${curvature}` : ''}`
+      }
+
+      Demo.ready(map.render().then(report))
+
+      document.getElementById('geodesic').addEventListener('click', () => {
+        geodesic = !geodesic
+        map.updateSeries([series()])
+        report()
+      })
+      document.getElementById('curvature').addEventListener('click', () => {
+        curvature = curvature > 0 ? 0 : 0.35
+        if (curvature > 0) geodesic = false
+        map.updateSeries([series()])
+        report()
+      })
+      document.getElementById('projection').addEventListener('change', async (event) => {
+        await map.updateOptions({ geo: { projection: event.target.value } })
+        report()
+      })
+    </script>
+  </body>
+</html>

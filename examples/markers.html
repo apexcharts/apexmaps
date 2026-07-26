@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Markers and clustering · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Markers and clustering</nav>
+
+      <div class="card">
+        <h1>Marker series: shapes and clustering</h1>
+        <p class="note">
+          Markers say "something is here", so their size is fixed: the moment size varies a reader
+          starts decoding it as a quantity, and that is the bubble series. Clustering is an option on
+          the same series rather than a separate one, because the data is identical and only the drawing
+          changes. Clusters merge by real distance, not by grid cell, and sit at their members' centre of
+          mass. Click one to fly to what is inside it, or zoom in and watch them dissolve.
+        </p>
+        <div class="row">
+          <button id="toggle-cluster">Toggle clustering</button>
+          <select id="shape">
+            <option value="pin">Pin</option>
+            <option value="circle">Circle</option>
+            <option value="square">Square</option>
+            <option value="diamond">Diamond</option>
+            <option value="triangle">Triangle</option>
+            <option value="star">Star</option>
+            <option value="cross">Cross</option>
+          </select>
+          <span class="label" id="status"></span>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Three decisions you can see</h2>
+        <p class="note">
+          <strong>Distance, not cells.</strong> Bucketing points into grid cells is simpler, but it
+          separates two points a few pixels apart that straddle a boundary while merging two at opposite
+          corners of one cell. The grid here is only a neighbour index; the merge test is real distance.
+          <strong>World space, quantized zoom.</strong> Panning never reclusters, so counts never
+          renumber under the cursor, and a smooth pinch recomputes a handful of times instead of sixty
+          times a second. <strong>Centre of mass, square-root sizing.</strong> A cluster drawn on its
+          first member sits off to one side of the group it stands for.
+        </p>
+        <pre>
+{
+  type: 'marker',
+  name: 'Sites',
+  data: sites,               // { name, lon, lat, kind }
+  shape: 'pin',              // circle square diamond triangle star cross pin
+  size: 13,
+  colorBy: 'kind',           // ordinal scale plus a legend, automatically
+  cluster: { radius: 55, maxZoom: 6 },
+}</pre
+        >
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      // Deterministic scatter of "sites" over the populated world, dense enough in a
+      // few places that clustering has something to do.
+      const HUBS = [
+        [-74, 40.7],
+        [-0.1, 51.5],
+        [2.35, 48.9],
+        [13.4, 52.5],
+        [139.7, 35.7],
+        [103.8, 1.35],
+        [-118.2, 34.1],
+        [151.2, -33.9],
+        [55.3, 25.2],
+        [-46.6, -23.6],
+      ]
+      const KINDS = ['Office', 'Depot', 'Partner']
+      const sites = []
+      for (let i = 0; i < 220; i++) {
+        const [hx, hy] = HUBS[i % HUBS.length]
+        const a = ((i * 2654435761) % 1000) / 1000
+        const b = ((i * 40503) % 997) / 997
+        sites.push({
+          name: `Site ${i + 1}`,
+          lon: hx + (a - 0.5) * 9,
+          lat: hy + (b - 0.5) * 6,
+          kind: KINDS[i % KINDS.length],
+        })
+      }
+
+      let clustering = true
+      let shape = 'pin'
+      const status = document.getElementById('status')
+
+      const series = () => ({
+        type: 'marker',
+        name: 'Sites',
+        data: sites,
+        shape,
+        size: 13,
+        colorBy: 'kind',
+        cluster: clustering ? { radius: 55, maxZoom: 6 } : { enabled: false },
+      })
+
+      const map = Demo.watch(
+        'markers',
+        new ApexMaps(document.getElementById('map'), {
+          chart: { height: 460 },
+          geo: { map: 'world/countries@110m' },
+          series: [series()],
+        }),
+      )
+
+      const report = () => {
+        const drawn = document.querySelectorAll('#map .apexmaps-mark').length
+        const clusters = document.querySelectorAll('#map .apexmaps-cluster').length
+        status.textContent = `${sites.length} sites drawn as ${drawn} marks${clusters ? `, ${clusters} of them clusters` : ''}`
+      }
+
+      Demo.ready(map.render().then(report))
+
+      document.getElementById('toggle-cluster').addEventListener('click', () => {
+        clustering = !clustering
+        map.updateSeries([series()])
+        report()
+      })
+      document.getElementById('shape').addEventListener('change', (event) => {
+        shape = event.target.value
+        map.updateSeries([series()])
+        report()
+      })
+      map.on('clusterClick', ({ value }) => {
+        status.textContent = `cluster of ${value} sites, flying in`
+        setTimeout(report, 900)
+      })
+    </script>
+  </body>
+</html>

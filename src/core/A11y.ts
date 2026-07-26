@@ -256,7 +256,10 @@ export class A11y {
     if (noDataCount > 0) {
       parts.push(`${noDataCount} ${noDataCount === 1 ? 'area has' : 'areas have'} no data`)
     }
-    return `${parts.join('. ')}.`
+    // Each part is a sentence, so each one starts with a capital. Joining raw gave
+    // "map of 37 areas. showing Adoption. values range from…", which reads as
+    // machine output in exactly the place a human voice matters most.
+    return `${parts.map(capitalise).join('. ')}.`
   }
 
   destroy(): void {
@@ -269,6 +272,10 @@ export class A11y {
     this.order = []
     this.cursor = -1
   }
+}
+
+function capitalise(sentence: string): string {
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1)
 }
 
 function formatValue(v: number): string {
