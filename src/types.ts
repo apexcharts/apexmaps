@@ -283,6 +283,81 @@ export interface ArcDatum {
   [key: string]: unknown
 }
 
+/**
+ * Built-in marker shapes. Every one is drawn from a generated path so it scales
+ * cleanly and needs no sprite sheet, no image load and no CORS.
+ *
+ * `pin` is the teardrop everyone expects from a map, and it is the one shape that
+ * is anchored at its point rather than its centre.
+ */
+export type MarkerShape = 'circle' | 'square' | 'diamond' | 'triangle' | 'star' | 'cross' | 'pin'
+
+export interface MarkerDatum {
+  lon?: number
+  lat?: number
+  /** Accepted as a synonym for `lon`, because half the world's data uses it. */
+  lng?: number
+  name?: string
+  value?: number | null
+  /** Groups markers for colouring and the legend. */
+  category?: string
+  /** Per-point overrides. */
+  shape?: MarkerShape
+  color?: string
+  size?: number
+  [key: string]: unknown
+}
+
+/**
+ * Clustering is an option on the marker series, not a series of its own.
+ *
+ * The data is identical either way: clustering is a decision about how to draw
+ * points that would otherwise pile up, in the same way that a choropleth's
+ * classification is a decision about how to colour values. Making it a separate
+ * series type would fork position resolution, hit testing, colouring and the
+ * legend for no gain, and would force callers to swap series types at a zoom
+ * threshold.
+ */
+export interface ClusterOptions {
+  /** Default true when a `cluster` object is present at all. */
+  enabled?: boolean
+  /** Screen-space merge distance in pixels. Default 60. */
+  radius?: number
+  /** Above this zoom, draw individual markers. Default 8. */
+  maxZoom?: number
+  /** Fewer members than this stay as individual markers. Default 2. */
+  minPoints?: number
+  /** Radius range in pixels for the cluster circle, smallest to largest count. */
+  size?: [number, number]
+  color?: string
+  /** Show the member count inside the circle. Default true. */
+  showCount?: boolean
+  /** Zoom to the members' bounds when a cluster is clicked. Default true. */
+  zoomOnClick?: boolean
+}
+
+export interface MarkerSeriesOptions extends SeriesCommon {
+  type: 'marker'
+  data?: readonly MarkerDatum[]
+  /** Join to geometry centroids when the data carries no coordinates. */
+  joinBy?: JoinSpec
+  fuzzyJoin?: boolean
+  /** Shape for every marker, or a function of the datum. */
+  shape?: MarkerShape | ((datum: unknown) => MarkerShape)
+  /**
+   * Pixel size, the width of the shape's bounding box. Default 10.
+   *
+   * Fixed on purpose: a marker says "something is here". When size should encode
+   * a quantity, that is the bubble series, which scales by area.
+   */
+  size?: number
+  color?: string
+  /** Field holding the category, for categorical colour and a legend. */
+  colorBy?: string
+  palette?: string
+  cluster?: ClusterOptions
+}
+
 export interface ArcSeriesOptions extends SeriesCommon {
   type: 'arc'
   data?: readonly ArcDatum[]
@@ -308,7 +383,8 @@ export interface ArcSeriesOptions extends SeriesCommon {
   joinBy?: JoinSpec
 }
 
-export type Series = ChoroplethSeriesOptions | BubbleSeriesOptions | ArcSeriesOptions
+export type Series =
+  ChoroplethSeriesOptions | BubbleSeriesOptions | ArcSeriesOptions | MarkerSeriesOptions
 
 export type SeriesType = NonNullable<Series['type']>
 
@@ -489,6 +565,8 @@ export interface ApexMapsEventMap {
   featureFocus: FeatureEventPayload
   markClick: FeatureEventPayload
   markHover: FeatureEventPayload
+  /** A point cluster was clicked. Fires before the camera moves to its members. */
+  clusterClick: FeatureEventPayload
   selectionChange: { ids: string[]; source: string }
   legendToggle: { classIndex: number; instance: unknown }
   zoom: { k: number }

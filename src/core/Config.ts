@@ -188,16 +188,34 @@ export function seriesDefaults(type: SeriesType): Record<string, unknown> {
     normalizeBy: undefined,
     valueField: 'value',
     labels: { show: false },
-    stroke: { color: '#ffffff', width: 0.5, opacity: 1 },
-    opacity: 1,
     drilldown: undefined,
   }
 
+  // Opacity and stroke are per type, not shared.
+  //
+  // A single default here silently overrides whatever each series class thinks its
+  // default is, because config always wins over `?? fallback` in the class. That
+  // made arcs fully opaque and bubble outlines half as thick as intended, with the
+  // intended values sitting in unreachable code. Whatever a series wants, it has to
+  // be stated here, and `test/config.test.ts` checks the two agree.
   switch (type) {
     case 'choropleth':
-      return { ...base, scale: { type: 'quantile', classes: 5 } }
+      return {
+        ...base,
+        scale: { type: 'quantile', classes: 5 },
+        stroke: { color: '#ffffff', width: 0.5, opacity: 1 },
+        opacity: 1,
+      }
+    case 'bubble':
+      // Slightly transparent so overlapping bubbles stay readable as overlaps.
+      return { ...base, stroke: { color: '#ffffff', width: 1 }, opacity: 0.85 }
+    case 'arc':
+      // Route networks overlap heavily; opaque arcs read as a solid mass.
+      return { ...base, stroke: undefined, opacity: 0.75 }
+    case 'marker':
+      return { ...base, stroke: { color: '#ffffff', width: 1.5 }, opacity: 0.9 }
     default:
-      return base
+      return { ...base, stroke: { color: '#ffffff', width: 0.5, opacity: 1 }, opacity: 1 }
   }
 }
 

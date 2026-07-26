@@ -33,7 +33,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 
 | Area | Detail |
 |---|---|
-| Series | `choropleth`, `bubble` (proportional symbols), `arc` (great-circle connections), plus an automatic basemap whenever no feature series is present |
+| Series | `choropleth`, `bubble` (proportional symbols), `marker` (seven shapes, categorical colour, clustering), `arc` (great-circle connections), plus an automatic basemap whenever no feature series is present |
 | Projections | 13 core projections with aliases (`equalEarth` default, `webMercator`, `epsg:3857`, `albersUsa`, `orthographic`, conics, azimuthals), spec objects with `rotate` / `parallels` / `clipAngle`, and `ApexMaps.registerProjection()` for the rest of `d3-geo-projection` |
 | Geometry | 26 built-in packs: world countries and land, US states and counties, EU NUTS 0-3, and admin-1 for 15 more countries. Lazy, one request per pack, provenance and attribution attached |
 | Data | GeoJSON, TopoJSON, bare geometry, feature arrays; automatic winding repair; join-key auto-detection |
@@ -43,7 +43,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Camera | `flyTo` (Van Wijk zoom-and-pan path), `easeTo`, `jumpTo`, `fitBounds`, `frameFeature`, `resetView`, interruptible and retargeting |
 | Components | Classed, gradient and nested-circle legends, HTML tooltips with edge flipping, collision-avoiding labels with halos |
 | Accessibility | ARIA roles, auto-generated description, roving-tabindex keyboard navigation, live-region announcements, optional data table, `prefers-reduced-motion` |
-| Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 48 kB gzipped core |
+| Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 51 kB gzipped core |
 
 ## Try the examples
 
@@ -198,6 +198,52 @@ Rendering follows from what each mark encodes: arcs live in world space and scal
 while bubbles live in screen space and hold their radius, because that radius carries a value. Thin
 arcs get an invisible wider hit path so a 1px flight line is still hoverable.
 
+## Markers and clustering
+
+A marker says **"something is here"**, so its size is fixed. The moment size varies, a reader starts
+decoding it as a quantity, and that is the bubble series, which scales by area and ships a legend
+that can be decoded.
+
+```js
+series: [
+  {
+    type: 'marker',
+    name: 'Sites',
+    data: sites,              // { name, lon, lat, kind }
+    shape: 'pin',             // circle, square, diamond, triangle, star, cross, pin
+    colorBy: 'kind',          // ordinal scale plus a legend, automatically
+    cluster: { radius: 55, maxZoom: 6 },
+  },
+]
+```
+
+Seven shapes, each generated as a path, so they scale without a sprite sheet, an icon font or an
+image load that can fail CORS. `pin` is the only one anchored at its point rather than its centre,
+because a pin floating above the place it marks is a pin pointing at nothing. Every mark gets an
+invisible hit circle, so a 6px star does not demand pixel-perfect aim.
+
+**Clustering is an option on the marker series, not a series of its own.** The data is identical
+either way: clustering is a decision about how to draw points that would otherwise pile up, in the
+same way classification is a decision about how to colour values. A separate series type would fork
+position resolution, hit testing, colouring and the legend, and would force you to swap series types
+at a zoom threshold.
+
+Three things the clustering does that a quick implementation usually does not:
+
+- **Merges by distance, not by grid cell.** Bucketing points into cells is simpler, but it separates
+  two points a few pixels apart that happen to straddle a boundary while merging two at opposite
+  corners of one cell. Readers notice, because the map contradicts what they can see. A grid is used
+  only as a neighbour index; the merge test is real distance.
+- **Clusters in world space at quantized zoom levels.** Panning never reclusters, so counts never
+  shimmer or renumber under the cursor, and a smooth pinch recomputes a handful of times instead of
+  sixty times a second.
+- **Places each cluster at its members' centre of mass**, sized by the square root of the count, so
+  a cluster of 100 does not read as a hundred times a cluster of 1.
+
+Clicking a cluster flies to the bounds of its members, and emits `clusterClick` first if you would
+rather do something else. Members that share a position would give a zero-size box and ask the camera
+for infinite zoom, so that case steps in by a fixed amount instead.
+
 ## Opinionated defaults, and why
 
 - **Equal Earth, not Web Mercator.** Most developers never choose a projection, so the default has to
@@ -242,6 +288,14 @@ const map = new ApexMaps(element, {
       data: [{ name: 'Tokyo', lon: 139.7, lat: 35.7, value: 37_400_000 }],
       size: { scale: 'sqrt', range: [3, 28] },   // sqrt is the default, and why
       colorScale: { palette: 'reds' },           // optional second encoding
+    },
+    {
+      type: 'marker',
+      name: 'Sites',
+      data: [{ name: 'Depot 4', lon: -0.12, lat: 51.5, kind: 'depot' }],
+      shape: 'pin',                   // 7 shapes, all generated paths
+      colorBy: 'kind',                // ordinal scale plus a legend
+      cluster: { radius: 60 },        // merges by distance, dissolves on zoom
     },
     {
       type: 'arc',
@@ -338,7 +392,7 @@ views, and `mapMeta(id).boundaries` says so.
 ## Development
 
 ```sh
-npm test              # vitest, 207 tests, including the real geometry packs and perf invariants
+npm test              # vitest, 241 tests, including the real geometry packs and perf invariants
 npm run test:coverage
 npm run lint
 npm run typecheck

@@ -21,14 +21,14 @@ Build the former. Integrate the latter. Every feature request gets this test bef
 Audited against the code on 2026-07-26, not from memory. Section numbering below is unchanged, so
 existing references still resolve.
 
-**Shipped and tested** (207 tests, 48 kB gzipped of a 150 kB budget):
+**Shipped and tested** (241 tests, 51 kB gzipped of a 150 kB budget):
 
 | Area | State |
 |---|---|
 | Engine | Three-space transform chain, projection layer over `d3-geo`, camera with van Wijk paths, SVG renderer with world/screen layer split |
 | Data | GeoJSON, TopoJSON, bare geometry; winding repair by spherical area; `joinBy` with diagnostics, alias table, FIPS repair, opt-in fuzzy; keys map to feature lists |
 | Projections | 13 named, composite `albersUsa`, spec objects with rotate/parallels/clipAngle, `registerProjection` |
-| Series | choropleth, bubble (sqrt area, nested-circle legend), arc (geodesic, antimeridian-cut), automatic basemap |
+| Series | choropleth, bubble (sqrt area, nested-circle legend), marker (7 shapes, categorical colour, distance-based clustering), arc (geodesic, antimeridian-cut), automatic basemap |
 | Presentation | quantile/Jenks/equal-interval/threshold/linear/log/sqrt/ordinal, 17 OkLab-sampled palettes, classed + gradient + size legends, tooltips, collision-avoiding labels, dark mode, responsive |
 | Interaction | wheel/pinch/double-click zoom, inertial pan, hover, selection, legend muting, roving-tabindex keyboard navigation |
 | Camera | `flyTo`, `easeTo`, `jumpTo`, `fitBounds`, `frameFeature`, `resetView`, interruptible and retargeting |
@@ -51,8 +51,6 @@ set them and get silence. Either build them or stop advertising them, and warn i
 
 | Item | Notes |
 |---|---|
-| marker / symbol / icon series | The most requested map after choropleth. Largest remaining series gap |
-| cluster series | Needed for any point dataset above a few hundred rows |
 | line / route series | Partly covered by arc; a non-geodesic polyline series is still missing |
 | rectangle selection | Prerequisite for cross-filtering interaction |
 | Voronoi invisible hit layer | Makes small marks clickable |
@@ -131,6 +129,8 @@ Append only. Each entry: date, decision, rationale, and what would reverse it.
 | 2026-07-26 | **Packs carry a recommended join key, projection and view**, and the library uses them as defaults | For several packs the generic default is not suboptimal but wrong: admin-1 geometry also carries `adm0_a3`, so detection would give all 47 Japanese prefectures the key `JPN`; NUTS geometry reaches Réunion, so fitting its extent leaves Europe a few pixels across; Alaska's Aleutians cross the antimeridian, so the US spans the world. These are cartography decisions that belong with the geometry, not with every caller. Explicit options always win | A pack recommendation that turns out to be contested editorially; the field is optional, so it can simply be dropped |
 | 2026-07-26 | **Pack ids are declared in reviewed source (`src/core/GeoCatalogue.ts`), not generated from the pipeline manifest** | Ids are public API: once `map: 'us/counties@10m'` is in someone's dashboard it cannot be renamed. The build and the test suite both fail if the catalogue and the pipeline disagree | None |
 | 2026-07-26 | **The perf budget is guarded by an invariant test, not a millisecond assertion** | A wall-clock budget in CI fails on a loaded runner, gets marked skip, and then nothing is enforced. The property that matters is that a camera frame applies one transform to one group and never touches feature geometry: deterministic, machine-independent, and exactly what a refactor would break. Reprojecting 3,000 features per frame would still pass a generous millisecond budget on a fast laptop | A renderer where the invariant genuinely does not hold, for example a Canvas tier that must redraw per frame; that tier needs its own guard |
+| 2026-07-26 | **Clustering is an option on the marker series, not a separate series type** (a deliberate deviation from the roadmap, which listed `cluster` among the series) | The data is identical; clustering only changes how points that would overlap are drawn. A separate type forks position resolution, hit testing, colouring and the legend, and forces the caller to swap series at a zoom threshold | A clustering mode that genuinely cannot be expressed as a drawing decision, for example server-side aggregation returning pre-clustered rows |
+| 2026-07-26 | **Per-series defaults live in `seriesDefaults`, never in the series classes alone** | Config always beats a `?? fallback` inside a class, so a shared default silently overrode each series' intended opacity and stroke: arcs rendered fully opaque with `?? 0.75` sitting in unreachable code. `test/config.test.ts` now pins every type's resolved values | None |
 | 2026-07-26 | **A join key maps to a list of features, not one** | Published geometry shares keys on purpose (Natural Earth gives Australia's external territories the same `iso_a3`; Lord Howe Island carries `AU-NSW`). Last-one-wins left mainland Australia in no-data grey while colouring an uninhabited island, silently, which is the exact failure the join diagnostic exists to prevent | None |
 
 ---

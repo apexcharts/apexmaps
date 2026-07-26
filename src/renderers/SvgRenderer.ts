@@ -44,6 +44,31 @@ export interface SymbolSpec {
   opacity?: number
 }
 
+/**
+ * A shaped, optionally labelled screen-space mark: a marker or a point cluster.
+ *
+ * Drawn as a `<g transform>` wrapping a path and an optional label, so however
+ * many parts a mark has, moving it stays one attribute write.
+ */
+export interface MarkSpec {
+  key: string
+  /** Index into the series' items, or -1 for a cluster. */
+  item: number
+  /** Index into the series' clusters, or -1 for a single mark. */
+  cluster: number
+  world: WorldPoint
+  /** Path data centred on the origin, or with its tip there when point-anchored. */
+  d: string
+  pointAnchored?: boolean
+  fill: string
+  stroke?: StrokeOptions
+  opacity?: number
+  label?: string
+  labelSize?: number
+  /** Radius of the invisible hit circle, so small shapes stay clickable. */
+  hitRadius?: number
+}
+
 export interface PathSpec {
   key: string
   item: number
@@ -69,8 +94,10 @@ export class SvgRenderer {
 
   private readonly pathsByKey = new Map<string, SVGPathElement>()
   private readonly symbolsByKey = new Map<string, SVGCircleElement>()
+  private readonly marksByKey = new Map<string, SVGGElement>()
   /** World positions of live symbols, so a camera change can reposition them. */
   private readonly symbolWorld = new Map<string, WorldPoint>()
+  private readonly markWorld = new Map<string, WorldPoint>()
 
   constructor({ viewport }: { viewport: Viewport }) {
     this.viewport = viewport
@@ -140,15 +167,27 @@ export class SvgRenderer {
     this.positionSymbols()
   }
 
-  /** Re-place every symbol from its cached world position. */
+  /**
+   * Re-place every screen-space mark from its cached world position.
+   *
+   * This is the per-frame cost of screen-space marks, and it is O(marks) rather
+   * than O(features): the features themselves ride the world transform untouched.
+   */
   positionSymbols(): void {
-    if (!this.symbolWorld.size) return
     for (const [key, world] of this.symbolWorld) {
       const el = this.symbolsByKey.get(key)
       if (!el) continue
       const [sx, sy] = this.viewport.worldToScreen(world)
       el.setAttribute('cx', String(sx))
       el.setAttribute('cy', String(sy))
+    }
+    for (const [key, world] of this.markWorld) {
+      const el = this.marksByKey.get(key)
+      if (!el) continue
+      const [sx, sy] = this.viewport.worldToScreen(world)
+      // One write per mark however many parts it has, which is why marks are
+      // groups rather than loose shapes.
+      el.setAttribute('transform', `translate(${sx},${sy})`)
     }
   }
 
@@ -332,6 +371,98 @@ export class SvgRenderer {
     }
   }
 
+  /**
+   * Draw (or update) shaped screen-space marks: markers and point clusters.
+   *
+   * Each mark is a group holding its shape, an optional label, and an invisible
+   * hit circle. The hit circle exists because a 10px star has perhaps 30 square
+   * pixels of actual ink, and a reader should not have to hit the ink.
+   */
+  drawMarks({ marks, seriesId = 'm0' }: { marks: MarkSpec[]; seriesId?: string }): void {
+    if (!this.symbolLayer) return
+    const group = this.ensureGroup(this.symbolLayer, seriesId, 'apexmaps-marks')
+    const seen = new Set<string>()
+
+    for (const spec of marks) {
+      const key = `${seriesId}:${spec.key}`
+      seen.add(key)
+
+      let mark = this.marksByKey.get(key)
+      if (!mark) {
+        mark = svg('g', { class: 'apexmaps-mark' }) as SVGGElement
+        this.marksByKey.set(key, mark)
+        group.appendChild(mark)
+      }
+
+      // The dataset lives on the group; hit resolution walks up from whichever
+      // child the pointer actually landed on.
+      mark.setAttribute('data-key', String(spec.key))
+      mark.setAttribute('data-item', String(spec.item))
+      mark.setAttribute('data-series', seriesId)
+      if (spec.cluster >= 0) mark.setAttribute('data-cluster', String(spec.cluster))
+      else mark.removeAttribute('data-cluster')
+      mark.classList.toggle('apexmaps-cluster', spec.cluster >= 0)
+
+      const [sx, sy] = this.viewport.worldToScreen(spec.world)
+      this.markWorld.set(key, spec.world)
+      mark.setAttribute('transform', `translate(${sx},${sy})`)
+      mark.setAttribute('opacity', String(spec.opacity ?? 1))
+
+      let shape = mark.querySelector<SVGPathElement>('path.apexmaps-mark-shape')
+      if (!shape) {
+        shape = svg('path', { class: 'apexmaps-mark-shape' }) as SVGPathElement
+        mark.appendChild(shape)
+      }
+      shape.setAttribute('d', spec.d)
+      shape.setAttribute('fill', spec.fill)
+      shape.setAttribute('stroke', spec.stroke?.color ?? 'none')
+      shape.setAttribute('stroke-width', String(spec.stroke?.width ?? 0))
+
+      const hitRadius = spec.hitRadius ?? 0
+      let hit = mark.querySelector<SVGCircleElement>('circle.apexmaps-mark-hit')
+      if (hitRadius > 0) {
+        if (!hit) {
+          hit = svg('circle', { class: 'apexmaps-mark-hit', fill: 'transparent', stroke: 'none' })
+          mark.appendChild(hit)
+        }
+        hit.setAttribute('r', String(hitRadius))
+        // A pin's ink sits above its anchor, so its hit area has to as well.
+        hit.setAttribute('cy', spec.pointAnchored ? String(-hitRadius * 1.6) : '0')
+      } else if (hit) {
+        remove(hit)
+      }
+
+      let text = mark.querySelector<SVGTextElement>('text.apexmaps-mark-label')
+      if (spec.label) {
+        if (!text) {
+          text = svg('text', {
+            class: 'apexmaps-mark-label',
+            'text-anchor': 'middle',
+            'dominant-baseline': 'central',
+            'pointer-events': 'none',
+          }) as SVGTextElement
+          mark.appendChild(text)
+        }
+        text.textContent = spec.label
+        text.setAttribute('font-size', String(spec.labelSize ?? 11))
+      } else if (text) {
+        remove(text)
+      }
+    }
+
+    for (const [key, el] of this.marksByKey) {
+      if (key.startsWith(`${seriesId}:`) && !seen.has(key)) {
+        remove(el)
+        this.marksByKey.delete(key)
+        this.markWorld.delete(key)
+      }
+    }
+  }
+
+  markGroupFor(seriesId: string, key: string | number): SVGGElement | undefined {
+    return this.marksByKey.get(`${seriesId}:${key}`)
+  }
+
   drawBasePath(d: string, attrs: Record<string, string | number>, className: string): void {
     if (!this.baseLayer || !d) return
     let path = this.baseLayer.querySelector(`.${className}`)
@@ -357,7 +488,11 @@ export class SvgRenderer {
   }
 
   markFor(seriesId: string, key: string | number): SVGElement | undefined {
-    return this.pathFor(seriesId, key) ?? this.symbolFor(seriesId, key)
+    return (
+      this.pathFor(seriesId, key) ??
+      this.symbolFor(seriesId, key) ??
+      this.markGroupFor(seriesId, key)
+    )
   }
 
   overlay(): SVGGElement | null {
@@ -381,6 +516,13 @@ export class SvgRenderer {
         remove(el)
         this.symbolsByKey.delete(key)
         this.symbolWorld.delete(key)
+      }
+    }
+    for (const [key, el] of this.marksByKey) {
+      if (key.startsWith(`${seriesId}:`)) {
+        remove(el)
+        this.marksByKey.delete(key)
+        this.markWorld.delete(key)
       }
     }
     remove(this.marksLayer?.querySelector(`g[data-series="${seriesId}"]`) ?? null)

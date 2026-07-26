@@ -150,6 +150,32 @@
       </div>
 
       <div class="card">
+        <h2>Marker series: shapes and clustering</h2>
+        <p class="note">
+          Markers say "something is here", so their size is fixed: the moment size varies a reader
+          starts decoding it as a quantity, and that is the bubble series. Clustering is an option on
+          the same series rather than a separate one, because the data is identical and only the
+          drawing changes. Clusters merge by real distance, not by grid cell, and are placed at their
+          members' centre of mass. Click one to fly to what is inside it, or zoom in and watch them
+          dissolve.
+        </p>
+        <div class="row">
+          <button id="toggle-cluster">Toggle clustering</button>
+          <select id="marker-shape">
+            <option value="pin">Pin</option>
+            <option value="circle">Circle</option>
+            <option value="square">Square</option>
+            <option value="diamond">Diamond</option>
+            <option value="triangle">Triangle</option>
+            <option value="star">Star</option>
+            <option value="cross">Cross</option>
+          </select>
+          <span class="label" id="marker-count"></span>
+        </div>
+        <div id="markers"></div>
+      </div>
+
+      <div class="card">
         <h2>The geometry registry</h2>
         <p class="note">
           Three packs, no geometry handling, no join configuration, no projection and no view. Each
@@ -374,7 +400,69 @@
             arcs.updateOptions({ geo: { projection: e.target.value } })
           })
 
-          // --- 6. the registry ----------------------------------------------
+          // --- 6. markers and clustering -------------------------------------
+          // Deterministic scatter of "sites" over the populated world, dense enough
+          // in a few places that clustering has something to do.
+          const SITE_HUBS = [
+            [-74, 40.7], [-0.1, 51.5], [2.35, 48.9], [13.4, 52.5], [139.7, 35.7],
+            [103.8, 1.35], [-118.2, 34.1], [151.2, -33.9], [55.3, 25.2], [-46.6, -23.6],
+          ]
+          const SITE_KINDS = ['Office', 'Depot', 'Partner']
+          const sites = []
+          for (let i = 0; i < 220; i++) {
+            const [hx, hy] = SITE_HUBS[i % SITE_HUBS.length]
+            // Deterministic jitter, so the demo is identical on every load.
+            const a = ((i * 2654435761) % 1000) / 1000
+            const b = ((i * 40503) % 997) / 997
+            sites.push({
+              name: `Site ${i + 1}`,
+              lon: hx + (a - 0.5) * 9,
+              lat: hy + (b - 0.5) * 6,
+              kind: SITE_KINDS[i % SITE_KINDS.length],
+            })
+          }
+
+          let clustering = true
+          let markerShape = 'pin'
+          const markerSeries = () => ({
+            type: 'marker',
+            name: 'Sites',
+            data: sites,
+            shape: markerShape,
+            size: 13,
+            colorBy: 'kind',
+            cluster: clustering ? { radius: 55, maxZoom: 6 } : { enabled: false },
+          })
+
+          const markers = new ApexMaps(document.getElementById('markers'), {
+            chart: { height: 460 },
+            geo: { map: 'world/countries@110m' },
+            series: [markerSeries()],
+          })
+
+          const markerCount = document.getElementById('marker-count')
+          const showCount = () => {
+            const drawn = document.querySelectorAll('#markers .apexmaps-mark').length
+            markerCount.textContent = `${sites.length} sites drawn as ${drawn} marks`
+          }
+          markers.render().then(showCount)
+
+          document.getElementById('toggle-cluster').addEventListener('click', () => {
+            clustering = !clustering
+            markers.updateSeries([markerSeries()])
+            showCount()
+          })
+          document.getElementById('marker-shape').addEventListener('change', (e) => {
+            markerShape = e.target.value
+            markers.updateSeries([markerSeries()])
+            showCount()
+          })
+          markers.on('clusterClick', ({ value }) => {
+            markerCount.textContent = `cluster of ${value} sites, flying in`
+            setTimeout(showCount, 900)
+          })
+
+          // --- 7. the registry ----------------------------------------------
           // Real data would go here; these are deterministic stand-ins.
           const spread = (keys) =>
             keys.map((key, i) => ({ key, value: ((i * 37) % 90) + 10 }))
@@ -447,7 +535,7 @@
             usStates.resetView()
           })
 
-          // --- 7. the catalogue, straight from the api -----------------------
+          // --- 8. the catalogue, straight from the api -----------------------
           document.getElementById('catalogue').textContent = ApexMaps.catalogue()
             .map(
               (p) =>
@@ -457,7 +545,7 @@
             )
             .join('\n')
 
-          // --- 8. join diagnostics ------------------------------------------
+          // --- 9. join diagnostics ------------------------------------------
           const messyData = [
             { name: 'France', value: 62 },
             { name: 'Brazil', value: 41 },
@@ -499,6 +587,7 @@
             bubbles,
             arcs,
             joins,
+            markers,
             usStates,
             deStates,
             euNuts,

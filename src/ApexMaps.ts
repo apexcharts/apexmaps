@@ -35,6 +35,7 @@ import type { ProjectionFactory } from './geo/Projections'
 import { SvgRenderer } from './renderers/SvgRenderer'
 import { ChoroplethSeries } from './series/Choropleth'
 import { BubbleSeries } from './series/Bubble'
+import { MarkerSeries } from './series/Marker'
 import { ArcSeries } from './series/Arc'
 import { BaseFeatures } from './series/BaseFeatures'
 import { Legend } from './components/Legend'
@@ -48,6 +49,7 @@ import type { Palette } from './scales/Palettes'
 import { html, remove, resolveSize, pointerPosition, hasDom } from './utils/dom'
 import { darken } from './scales/Color'
 import type { JoinResult } from './data/Join'
+import type { Cluster } from './geo/Cluster'
 import type {
   Anchor,
   ApexMapsEventMap,
@@ -84,7 +86,7 @@ const PREMIUM_FEATURES = new Set([
 ])
 
 /** Anything the renderer can draw. */
-type AnySeries = ChoroplethSeries | BubbleSeries | ArcSeries | BaseFeatures
+type AnySeries = ChoroplethSeries | BubbleSeries | ArcSeries | MarkerSeries | BaseFeatures
 
 /** A resolved mark, uniform across series types, for events and tooltips. */
 interface ResolvedMark {
@@ -98,6 +100,8 @@ interface ResolvedMark {
   anchor?: [number, number]
   /** Present only for feature-based series. */
   feature?: NormalizedFeature
+  /** Present only when the mark is a point cluster. */
+  cluster?: Cluster
   /** DOM key used by the renderer for this mark. */
   markKey: string | number
 }
@@ -130,7 +134,7 @@ class ApexMaps extends BaseChart {
   geo: NormalizedGeo | null = null
 
   /** Data series, excluding the basemap pseudo-series. */
-  series: (ChoroplethSeries | BubbleSeries | ArcSeries)[] = []
+  series: (ChoroplethSeries | BubbleSeries | ArcSeries | MarkerSeries)[] = []
   /** What actually gets drawn: the series, or the basemap when there are none. */
   renderTargets: AnySeries[] = []
   /** World-space label anchors per feature index. */
@@ -380,6 +384,16 @@ class ApexMaps extends BaseChart {
             }),
           )
           break
+        case 'marker':
+          this.series.push(
+            new MarkerSeries({
+              config: cfg,
+              geo,
+              index: i,
+              viewport: this.viewport,
+            }),
+          )
+          break
         case 'arc':
           this.series.push(
             new ArcSeries({
@@ -466,6 +480,13 @@ class ApexMaps extends BaseChart {
         case 'symbols':
           this.renderer.drawSymbols({
             symbols: (series as BubbleSeries).symbols(),
+            seriesId: series.id,
+          })
+          break
+
+        case 'marks':
+          this.renderer.drawMarks({
+            marks: (series as MarkerSeries).marks(this.viewport.camera.k),
             seriesId: series.id,
           })
           break
@@ -599,6 +620,18 @@ class ApexMaps extends BaseChart {
         continue
       }
 
+      if (series instanceof MarkerSeries) {
+        if (series.colorScale) {
+          sections.push({
+            title: series.legendTitle(),
+            items: series.colorScale.legendItems(),
+            continuous: false,
+            seriesIndex: series.index,
+          })
+        }
+        continue
+      }
+
       if (series instanceof ArcSeries) {
         if (series.colorScale) {
           sections.push({
@@ -718,8 +751,15 @@ class ApexMaps extends BaseChart {
 
   /** Resolve a DOM event target to a mark, uniformly across series types. */
   private _resolveMark(event: Event): ResolvedMark | null {
-    const target = event.target as Element | null
-    if (!target?.getAttribute) return null
+    const hit = event.target as Element | null
+    if (!hit?.getAttribute) return null
+
+    // A shaped mark is a group holding a path, a label and a hit circle, so the
+    // pointer lands on a child. Walk up to whichever element carries the data.
+    const target = hit.getAttribute('data-series')
+      ? hit
+      : (hit.closest?.('[data-series]') as Element | null)
+    if (!target) return null
 
     const seriesId = target.getAttribute('data-series')
     const itemAttr = target.getAttribute('data-item')
@@ -750,7 +790,25 @@ class ApexMaps extends BaseChart {
       }
     }
 
-    const mark = (series as BubbleSeries | ArcSeries).itemAt(item)
+    // Clusters are not data rows: they stand for a set of them.
+    const clusterAttr = target.getAttribute('data-cluster')
+    if (clusterAttr != null && series instanceof MarkerSeries) {
+      const cluster = series.clusterAt(Number(clusterAttr))
+      if (!cluster) return null
+      return {
+        series,
+        seriesIndex,
+        key: `cluster-${clusterAttr}`,
+        name: series.describeCluster(cluster),
+        value: cluster.count,
+        datum: cluster.members.map((m) => series.itemAt(m)?.datum),
+        anchor: cluster.world,
+        markKey: `cluster-${clusterAttr}`,
+        cluster,
+      }
+    }
+
+    const mark = (series as BubbleSeries | ArcSeries | MarkerSeries).itemAt(item)
     if (!mark) return null
     return {
       series,
@@ -785,8 +843,46 @@ class ApexMaps extends BaseChart {
   private _handleMarkClick(event: Event): void {
     const mark = this._resolveMark(event)
     if (!mark) return
+
+    // Clicking a cluster means "show me what is in there", so fly to its members
+    // rather than selecting an aggregate that is not a data row.
+    if (mark.cluster && mark.series instanceof MarkerSeries) {
+      this.emit('clusterClick', this._eventPayload(mark) as never)
+      if (mark.series.clusterOptions.zoomOnClick !== false) {
+        this._zoomToCluster(mark.cluster)
+        return
+      }
+      return
+    }
+
     if (this.config.interaction.selection?.enabled !== false) this.toggleSelection(mark.key)
     this.emit(mark.feature ? 'featureClick' : 'markClick', this._eventPayload(mark) as never)
+  }
+
+  /**
+   * Frame a cluster's members.
+   *
+   * Members that share a position give a zero-size box, which would ask the camera
+   * for infinite zoom, so that case steps in by a fixed factor instead.
+   */
+  private _zoomToCluster(cluster: Cluster): void {
+    if (!this.camera) return
+    const [[x0, y0], [x1, y1]] = cluster.bounds
+
+    // Members sharing a position give a zero-size box, which would ask the camera
+    // for infinite zoom. Padding it by a fixed number of screen pixels, converted
+    // to world units at the current scale, keeps one code path and lands on a
+    // sensible zoom instead.
+    const spread = Math.max(x1 - x0, y1 - y0)
+    const pad = spread < 1e-6 ? 40 / Math.max(this.viewport.camera.k, 1e-9) : 0
+
+    this.camera.fitBounds(
+      [
+        [x0 - pad, y0 - pad],
+        [x1 + pad, y1 + pad],
+      ],
+      { padding: 60, maxZoom: 64 },
+    )
   }
 
   private _eventPayload(mark: ResolvedMark) {
@@ -921,6 +1017,16 @@ class ApexMaps extends BaseChart {
   private _onCameraChange(): void {
     // Applies the world transform and repositions screen-space symbols.
     this.renderer?.applyCamera()
+
+    // Clustered markers depend on the camera scale, but only in steps: the level
+    // is quantized, so panning never reclusters and a smooth zoom crosses a
+    // boundary a handful of times rather than once a frame.
+    const zoom = this.viewport.camera.k
+    for (const series of this.renderTargets) {
+      if (series instanceof MarkerSeries && series.needsRedraw(zoom)) {
+        this.renderer?.drawMarks({ marks: series.marks(zoom), seriesId: series.id })
+      }
+    }
     // Labels live in screen space, so they must be re-laid-out, but only once per
     // frame no matter how many camera writes happened.
     if (this._renderRaf === null) {
