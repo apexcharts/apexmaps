@@ -1,0 +1,12 @@
+# Build output and data, not source. Without this file, `prettier --check .`
+# (what editors run) sweeps generated bundles and 6.8 MB of geometry and reports
+# dozens of phantom failures the format gate never looks at.
+dist/
+geo/
+coverage/
+package-lock.json
+
+# Prose and demo pages are formatted by hand; the format gate covers
+# src, test and scripts (see package.json "format:check").
+*.md
+examples/

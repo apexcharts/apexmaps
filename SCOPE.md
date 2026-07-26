@@ -2,7 +2,7 @@
 
 Companion to the internal `PRODUCT-RESEARCH.md` (in `plans/`, not committed). This file exists to stop scope creep, which is the number-one risk to the product (maps + GIS + tiles + 3D + story is easily a five-year build).
 
-**Last updated:** 2026-07-26 (P1 status audited against the code, section 0)
+**Last updated:** 2026-07-26 (full audit: gates, options tree, packaging; findings fixed same day)
 
 ---
 
@@ -21,7 +21,7 @@ Build the former. Integrate the latter. Every feature request gets this test bef
 Audited against the code on 2026-07-26, not from memory. Section numbering below is unchanged, so
 existing references still resolve.
 
-**Shipped and tested** (296 tests, 54 kB gzipped of a 150 kB budget, 18 demo pages checked in CI):
+**Shipped and tested** (312 tests, 54 kB gzipped of a 150 kB budget, 18 demo pages checked in CI):
 
 | Area | State |
 |---|---|
@@ -40,11 +40,18 @@ existing references still resolve.
 
 **Declared in the public options tree but not implemented.** These are worse than absent: a caller can
 set them and get silence. Either build them or stop advertising them, and warn in dev meanwhile.
+The 2026-07-26 audit re-swept the whole tree: it found six silent keys beyond the two recorded here,
+and found the promised dev warning had never been built. Five of the eight were implemented that day
+(`states.hover.stroke`/`strokeWidth`, `legend.align`, `legend.showNull`, `a11y.dataTable` on symbol
+series, and interaction options applying after render); the rest now warn in dev when set.
 
 | Option | Current reality |
 |---|---|
-| `chart.renderer: 'auto'` | Config default only. No Canvas tier and no `RendererController` wiring, so it is always SVG |
-| `annotations` | Type plus an empty-array default. Nothing renders |
+| `chart.renderer: 'auto'` | Config default only. No Canvas tier and no `RendererController` wiring, so it is always SVG. Setting `'canvas'`/`'webgl'` warns in dev |
+| `annotations` | Type plus an empty-array default. Nothing renders. Setting any warns in dev |
+| `chart.animations` | Nothing reads it: marks draw immediately and `speed` has no effect. Warns in dev |
+| `chart.context: 'story'` | Only feeds `animations.entrance`, which nothing reads. Warns in dev |
+| `geo.boundaries` | Packs record their boundary policy in `mapMeta()`; no rendering policy is applied. Warns in dev |
 
 **Not started, still in P1 scope:**
 
@@ -82,6 +89,10 @@ Changing anything here requires an explicit, recorded decision in section 4, not
 ---
 
 ## 2. Budgets (enforced in CI, not by intention)
+
+Enforcement lives in `.github/workflows/ci.yml`: every gate the docs claim runs there, and the
+bundle budget is a hard failure in `scripts/check-size.mjs` (`npm run check:size`). Until
+2026-07-26 this heading was aspiration; the audit found no CI existed and no size check ran anywhere.
 
 | Budget | Limit | Owner |
 |---|---|---|
@@ -137,6 +148,10 @@ Append only. Each entry: date, decision, rationale, and what would reverse it.
 | 2026-07-26 | **`link: { group }` is within-map now and stays the premium gate** | Selection propagation between ApexMaps instances is the same machinery cross-product linking will use, and it is the first shipped feature on the licensed list, so the watermark trial path is now exercised by something real rather than only by tests. Cross-*product* linking still waits on the shared `ApexBus` / `ApexSelection` contracts (O1) | O1 resolving against shared contracts, which would make this a local implementation of an external protocol rather than its own thing |
 | 2026-07-26 | **No-data never enters a classification.** `cleanNumbers` skips null, empty string and boolean before coercion | `Number(null)` is 0, so coercing first filed every feature with no data as a zero: a US map with 15 of 51 states carrying data put three of its five quantile breaks at zero and published a legend reading "0 to 0" for classes containing nothing, while `color()` correctly drew those features as no-data. Rendering and classification disagreeing silently is the exact failure mode this product exists to prevent. Found by the drilldown demo, fixed in `scales/Scale`, pinned by two tests | None |
 | 2026-07-26 | **A join key maps to a list of features, not one** | Published geometry shares keys on purpose (Natural Earth gives Australia's external territories the same `iso_a3`; Lord Howe Island carries `AU-NSW`). Last-one-wins left mainland Australia in no-data grey while colouring an uninhabited island, silently, which is the exact failure the join diagnostic exists to prevent | None |
+| 2026-07-26 | **Every declared option works or warns.** A full audit of the options tree found eight silent keys against the two recorded in section 0. The cheap five were built (hover stroke, `legend.align`, `legend.showNull`, symbol-series data table, interaction options applying after `updateOptions`); the expensive three warn in dev when set (`renderer` tiers, `annotations`, `animations`, plus `context: 'story'` and `geo.boundaries`) | An option a caller can set and get silence from is the worst API state: it converts a missing feature into a support ticket about a broken one. The audit also proved silence compounds: the "warn in dev meanwhile" duty recorded on 2026-07-26 was itself never implemented, and nothing failed | A key leaves the warn list only by being built or by being removed from the public types |
+| 2026-07-26 | **Enter drills where click drills.** Keyboard activation goes through the same path as a mouse click: drill when the series has a drilldown, toggle selection otherwise | Escape (the way back out of a drill) worked from the keyboard while the way in was mouse-only. A one-way keyboard path fails the product's own a11y bar (N14) in the feature most likely to be demoed to a public-sector buyer | None |
+| 2026-07-26 | **A claim in the docs must map to a CI job.** Added `.github/workflows/ci.yml` (typecheck, lint, format, tests, build, bundle budget, demo smoke check) and `scripts/check-size.mjs` as the budget's hard failure | The audit found "enforced in CI, not by intention" written above a budgets table while no CI configuration existed and no size check ran anywhere; every green gate was green because someone happened to run it that day | None; a gate can move, but it cannot become prose again |
+| 2026-07-26 | **Object-form `geo.map` passes through config rebuilds by reference** | Deep-merging cloned the caller's topology on every rebuild, so `updateOptions` saw a "changed" map on every call: it re-ingested megabytes of geometry and silently abandoned the drill trail because the legend was restyled. Geometry is data, not configuration | A future option that genuinely needs to merge into geometry, which should instead be a transform hook |
 
 ---
 

@@ -331,7 +331,8 @@ map.on('drillup', ({ depth }) => {})
 Getting back out is deliberately over-provided, because a drilldown with no visible exit is a trap:
 the breadcrumb above the map (real buttons, keyboard reachable), Escape, or `drillUp()` /
 `drillUp(Infinity)`. None of them refetch: each level's geometry is still held, so climbing back is
-synchronous. `drillTo(key)` drills programmatically, and `drillDepth` says where you are.
+synchronous. `drillTo(key)` drills programmatically, and `drillDepth` says where you are. The way in
+works from the keyboard too: Enter on a focused feature drills exactly where a click would.
 
 Two details worth knowing. The camera frames the clicked feature *before* the geometry swaps, so the
 two levels line up and the change reads as a zoom instead of a cut, and the reverse runs on the way
@@ -544,16 +545,20 @@ views, and `mapMeta(id).boundaries` says so.
 ## Development
 
 ```sh
-npm test                # vitest, 296 tests, including the real geometry packs and perf invariants
+npm test                # vitest, 312 tests, including the real geometry packs and perf invariants
 npm run test:coverage
 npm run lint
 npm run typecheck
 npm run format          # prettier, config matches apexcharts-js
-npm run build           # rollup bundles + tsc declarations
+npm run build           # rollup bundles + tsc declarations (cleans dist/ first)
+npm run check:size      # fail if a bundle crosses the 150 kB gzipped budget (SCOPE.md section 2)
 npm run examples        # build, then serve examples/ on :8084
 npm run check:examples  # load every demo in Chromium, fail on an error or an empty map
 npm run data:build      # regenerate geo/ from source (needs network, ~45 MB of downloads)
 ```
+
+All of it runs on every push and pull request (`.github/workflows/ci.yml`), including the bundle
+budget and the demo smoke check, so a claim in this file is a job in that one.
 
 A feature is not finished until it has a demo page that `check:examples` loads: the unit tests prove
 the behaviour, the demo proves someone can use it, and the check stops the demo rotting. Playwright is

@@ -45,6 +45,11 @@ export interface MapEntry {
 
 const registry = new Map<string, MapEntry>()
 const inflight = new Map<string, Promise<GeoInput>>()
+/**
+ * Resolved URL geometry. Registered ids memoize into their registry entry, but a
+ * URL has no entry, so without this every drilldown targeting a URL refetched it.
+ */
+const urlCache = new Map<string, GeoInput>()
 
 /**
  * Register geometry under an id.
@@ -105,7 +110,10 @@ export async function resolveMap(
   }
 
   if (looksLikeUrl(source)) {
+    const cached = urlCache.get(source)
+    if (cached) return { data: cached, id: source }
     const data = await loadOnce(source, () => fetchJson(source))
+    urlCache.set(source, data)
     return { data, id: source }
   }
 
@@ -203,4 +211,5 @@ export function attributionFor(ids: (string | undefined)[]): string {
 export function _resetRegistry(): void {
   registry.clear()
   inflight.clear()
+  urlCache.clear()
 }

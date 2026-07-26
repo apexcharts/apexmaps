@@ -1,0 +1,44 @@
+# The enforcement behind SCOPE.md's budgets and README's claims. Every gate that
+# the docs describe as checked runs here; a claim with no job in this file is a
+# claim by intention only.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run build
+      # The 150 kB gzipped budget from SCOPE.md section 2.
+      - run: npm run check:size
+
+  demos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # Playwright is deliberately not a dependency of the repository (a browser
+      # download has no place in a clone that only runs unit tests), so CI
+      # installs it without saving. check-examples resolves it from node_modules.
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - run: npm run check:examples
