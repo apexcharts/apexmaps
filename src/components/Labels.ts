@@ -2,7 +2,7 @@
  * Feature labels, with collision avoidance.
  *
  * Label placement is where chart-library maps visibly lose to Mapbox and ArcGIS
- * today (PRODUCT-RESEARCH.md section 2.7), so even the phase-1 version does the
+ * today, so even the phase-1 version does the
  * things that matter:
  *
  * - **Priority ordering.** Larger and higher-valued features win, so dropping

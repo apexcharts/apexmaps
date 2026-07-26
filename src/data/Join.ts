@@ -7,7 +7,7 @@
  * unmatched features in no-data grey and says nothing, so the developer spends
  * an hour diffing strings.
  *
- * Design rules (PRODUCT-RESEARCH.md section 6.4 and idea 24):
+ * Design rules:
  *
  * - **Matching is exact by default.** Silent fuzzy matching would trade an
  *   obvious failure for a plausible wrong answer, which is worse.

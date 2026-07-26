@@ -1,4 +1,4 @@
-# The enforcement behind SCOPE.md's budgets and README's claims. Every gate that
+# The enforcement behind the project's budgets and the README's claims. Every gate
 # the docs describe as checked runs here; a claim with no job in this file is a
 # claim by intention only.
 name: CI
@@ -23,7 +23,7 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run build
-      # The 150 kB gzipped budget from SCOPE.md section 2.
+      # The 150 kB gzipped budget.
       - run: npm run check:size
 
   demos:

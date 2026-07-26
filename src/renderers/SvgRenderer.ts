@@ -1,7 +1,7 @@
 /**
  * SVG renderer.
  *
- * The hybrid layering from PRODUCT-RESEARCH.md section 7.2 is set up here even
+ * The hybrid layering is set up here even
  * though only the SVG tier exists, because layer order is the part that is
  * expensive to change later:
  *

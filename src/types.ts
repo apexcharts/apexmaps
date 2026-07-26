@@ -10,8 +10,7 @@
  * Everything here stays JSON-serialisable in its declarative form. Function
  * forms are offered alongside (formatters, accessors) but never required, because
  * serialisability is what later makes saved dashboards, SSR, static story export
- * and agent authoring possible from one source of truth (PRODUCT-RESEARCH.md
- * section 6.3).
+ * and agent authoring possible from one source of truth.
  *
  * @module types
  */
@@ -477,7 +476,7 @@ export interface GeoOptions {
   sphere?: { show?: boolean; fill?: string; stroke?: string; width?: number }
   /** Fill for the no-data basemap drawn when no series is configured. */
   fill?: string
-  /** Disputed-territory policy. See PRODUCT-RESEARCH.md section 5.7. */
+  /** Disputed-territory policy. Declared but not applied yet. */
   boundaries?: 'de-facto' | 'un' | 'neutral-dashed' | 'none'
 }
 

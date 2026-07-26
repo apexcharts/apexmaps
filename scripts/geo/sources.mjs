@@ -5,7 +5,7 @@
  * below. Three rules govern what may appear here:
  *
  *  1. **Permissive licence only.** Public domain or attribution. GADM is
- *     permanently excluded (non-commercial only): see SCOPE.md N11.
+ *     permanently excluded (non-commercial only).
  *  2. **Provenance travels with the file.** Source, licence, attribution,
  *     vintage and boundary policy are written into the manifest, not into a
  *     README that goes stale.

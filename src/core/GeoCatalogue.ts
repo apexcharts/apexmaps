@@ -10,8 +10,7 @@
  *
  * **1. Nothing is fetched until a pack is used.** Registration installs loader
  * closures, not geometry, so importing ApexMaps costs no network and no bytes
- * beyond this table. The default bundle still makes zero mandatory requests
- * (SCOPE.md budget).
+ * beyond this table. The default bundle still makes zero mandatory requests.
  *
  * **2. Ids name the source's level, and aliases name the country's own term.**
  * Natural Earth's "admin-1" tier is not the first-order division everywhere: for
@@ -42,9 +41,9 @@ export const GEO_DATASET_VERSION = '1'
 /**
  * Default location for pack files.
  *
- * The dataset is distributed separately from the library (SCOPE.md O4: npm for
- * offline and air-gapped installs, CDN for zero-install use) because 6.7 MB of
- * geometry has no business in a charting dependency. Override with
+ * The dataset is distributed separately from the library (npm for offline and
+ * air-gapped installs, CDN for zero-install use) because 6.7 MB of geometry has
+ * no business in a charting dependency. Override with
  * `setGeoSource()` for a self-hosted copy, an air-gapped path, or a bundler
  * import.
  */

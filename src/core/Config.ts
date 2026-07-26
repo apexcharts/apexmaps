@@ -4,7 +4,7 @@
  * The whole spec is a plain, JSON-serialisable object tree. That is not an
  * aesthetic preference: serialisability is what later makes saved dashboards,
  * server-side rendering, static story export, a visual editor and LLM authoring
- * all possible from one source of truth (PRODUCT-RESEARCH.md section 6.3).
+ * all possible from one source of truth.
  * Functions are permitted for formatters, but every field that can be expressed
  * declaratively has a declarative form.
  *
@@ -76,7 +76,7 @@ export function defaults(): ResolvedOptions {
         stroke: 'rgba(128,128,128,0.4)',
         width: 0.5,
       },
-      /** Disputed-territory rendering policy. See PRODUCT-RESEARCH.md section 5.7. */
+      /** Disputed-territory rendering policy. Declared but not applied yet. */
       boundaries: 'neutral-dashed',
     },
 

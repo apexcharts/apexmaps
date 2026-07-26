@@ -4,7 +4,7 @@
  * The right mark for **absolute magnitudes**: totals, counts, revenue, population.
  * A choropleth of those quantities mostly redraws the map of where big areas are,
  * whereas a bubble is immune to area bias because its size is independent of the
- * polygon underneath it (PRODUCT-RESEARCH.md section 4.2).
+ * polygon underneath it.
  *
  * Three decisions are made for the developer, each because the alternative is
  * usually a mistake:

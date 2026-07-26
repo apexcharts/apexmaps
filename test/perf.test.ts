@@ -6,7 +6,7 @@
  * generator: it fails on a loaded runner and passes on a fast one, so it gets
  * marked skip and then the budget is unenforced. Real frame times are measured in
  * a real browser by `examples/bench.html`, where paint and rasterisation actually
- * happen, and recorded in SCOPE.md.
+ * happen.
  *
  * What is asserted here is the *invariant that makes those numbers possible*:
  * panning and zooming apply one transform to one group and never touch feature

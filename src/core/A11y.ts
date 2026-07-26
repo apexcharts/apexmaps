@@ -3,8 +3,7 @@
  *
  * Ships in phase 1, not phase 3, and is free in every licence tier. Two reasons:
  * gating accessibility blocks the public-sector buyer, and a map is the chart
- * type screen-reader users are most often locked out of entirely
- * (PRODUCT-RESEARCH.md section 12.2 and the decision log in SCOPE.md).
+ * type screen-reader users are most often locked out of entirely.
  *
  * What this provides:
  *

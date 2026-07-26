@@ -4,7 +4,7 @@
  * `prefers-reduced-motion` is honoured globally and by default, degrading to
  * instant state changes rather than to broken layouts. The sibling Apex products
  * already behave this way, so ApexMaps inherits the rule rather than inventing a
- * different one (PRODUCT-RESEARCH.md section 8.4).
+ * different one.
  *
  * @module utils/motion
  */

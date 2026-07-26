@@ -5,9 +5,7 @@ Interactive geographic data visualization and storytelling for the ApexCharts ec
 > **Status: phase 1, pre-alpha (0.1.0).** Written in TypeScript. The engine, four series
 > (choropleth, bubble, marker, arc), projections, joins, scales, legend, tooltip, labels, camera,
 > geometry registry, drilldown, selection and accessibility layer are working and tested. The story
-> engine and tiles are not built yet. See
-> [SCOPE.md](SCOPE.md) for what is deliberately out of scope, and the internal `PRODUCT-RESEARCH.md`
-> (kept in `plans/`, not published) for the strategy behind it.
+> engine and tiles are not built yet.
 
 ```js
 import ApexMaps from 'apexmaps'
@@ -525,8 +523,6 @@ Two commitments that do not change with tier:
 - **No mandatory network calls.** The default build fetches nothing and phones home to nothing.
   Geometry is fetched only when you name a pack, from wherever you point `setGeoSource()`.
 
-The reasoning behind the tier boundary is in the internal `PRODUCT-RESEARCH.md` section 12.5.
-
 ## Geometry and licences
 
 **The software licence does not cover the geographic data**, which is published by third parties under
@@ -551,7 +547,7 @@ npm run lint
 npm run typecheck
 npm run format          # prettier, config matches apexcharts-js
 npm run build           # rollup bundles + tsc declarations (cleans dist/ first)
-npm run check:size      # fail if a bundle crosses the 150 kB gzipped budget (SCOPE.md section 2)
+npm run check:size      # fail if a bundle crosses the 150 kB gzipped budget
 npm run examples        # build, then serve examples/ on :8084
 npm run check:examples  # load every demo in Chromium, fail on an error or an empty map
 npm run data:build      # regenerate geo/ from source (needs network, ~45 MB of downloads)

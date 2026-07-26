@@ -5,7 +5,7 @@
  * conclusion, so the breaks are always computed explicitly, exposed on the scale
  * object, and rendered in the legend. Quantile is the default because it
  * guarantees every class is populated, which is what a reader assumes when they
- * see five classes (PRODUCT-RESEARCH.md section 4.1).
+ * see five classes.
  *
  * @module scales/Scale
  */

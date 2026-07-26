@@ -8,7 +8,7 @@
  * The projection is fitted to the container **once**, so world coordinates are
  * projected pixels at camera scale 1. Panning and zooming are then a pure affine
  * transform applied to a single SVG group, which is why interaction never
- * triggers reprojection (PRODUCT-RESEARCH.md section 7.3, rule 2). Reprojection
+ * triggers reprojection. Reprojection
  * happens only when the projection itself, the container size, or the fitted
  * extent changes.
  *
@@ -251,7 +251,7 @@ export class Viewport {
 
     // Padding-aware framing matters more than it sounds: in a scrollytelling
     // layout half the viewport is text, so "fit this feature into the visible
-    // area" is the real requirement (PRODUCT-RESEARCH.md section 8.3).
+    // area" is the real requirement.
     const availW = Math.max(1, this.width - p.left - p.right)
     const availH = Math.max(1, this.height - p.top - p.bottom)
 

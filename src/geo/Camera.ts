@@ -5,8 +5,7 @@
  * smooth-and-efficient zoom-and-pan path, which arcs out to a wider zoom during
  * long moves. Linear interpolation of centre and scale feels wrong because
  * perceived motion is logarithmic in scale, and that difference is what
- * separates a camera that reads as cinematic from one that reads as a slideshow
- * (PRODUCT-RESEARCH.md section 8.3).
+ * separates a camera that reads as cinematic from one that reads as a slideshow.
  *
  * Every move is **interruptible and retargeting**: a new move starts from the
  * current interpolated state rather than queueing or snapping, because in a

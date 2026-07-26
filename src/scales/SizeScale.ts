@@ -5,8 +5,7 @@
  * preference. Readers judge a circle by its **area**, so mapping value linearly
  * to radius makes area grow with the square of the value: a country with ten
  * times the population gets a hundred times the ink. Square-root scaling makes
- * area proportional to value, which is the only encoding that reads honestly
- * (PRODUCT-RESEARCH.md section 4.2).
+ * area proportional to value, which is the only encoding that reads honestly.
  *
  * `linear` is available because line widths and some designs genuinely want it,
  * and it warns in dev mode when used for symbol radii.

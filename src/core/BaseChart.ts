@@ -3,7 +3,7 @@
  *
  * Mirrors the `BaseChart` shape already present in apexsankey, apextree and
  * apexgantt (`element`, `destroy()`, `getInstanceId()`), because the cross-product
- * bus described in PRODUCT-RESEARCH.md section 6.6 is meant to be implemented
+ * bus is meant to be implemented
  * **once here** rather than six times. When that lands, registration with the
  * shared instance registry and the `applySelection` / `clearSelection` contract
  * belong on this class.

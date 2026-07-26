@@ -3,7 +3,7 @@
  *
  * Wraps `d3-geo` rather than reimplementing spherical math: clipping,
  * antimeridian cutting and adaptive resampling are correctness traps that took
- * d3-geo years to get right (see PRODUCT-RESEARCH.md section 5.4).
+ * d3-geo years to get right.
  *
  * Core ships the projections d3-geo itself provides. Anything else (Mollweide,
  * Robinson, Winkel Tripel, Eckert, Bonne, ...) lives in `d3-geo-projection` and

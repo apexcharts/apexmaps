@@ -3,7 +3,7 @@
  *
  * The mark for airline routes, submarine cables, trade, migration and remittance
  * flows. Two things make this series either credible or embarrassing, and both are
- * handled here rather than left to the caller (PRODUCT-RESEARCH.md section 4.12):
+ * handled here rather than left to the caller:
  *
  * 1. **Geodesics, on by default.** The shortest path between two places is a great
  *   circle, not a straight line on a projected map. A Tokyo to New York route

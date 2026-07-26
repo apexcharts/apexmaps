@@ -7,10 +7,10 @@
  * the geometry and can be surfaced in the UI, in exports, and in an automatic
  * attribution string.
  *
- * That metadata is the boring half of the moat described in PRODUCT-RESEARCH.md
- * section 5.7: boundaries change, statistical data is tied to a vintage, and
- * "which year's county lines are these?" is a question a research or government
- * user will eventually ask. A registry that cannot answer it is not trustworthy.
+ * That metadata is the boring half of the moat: boundaries change, statistical
+ * data is tied to a vintage, and "which year's county lines are these?" is a
+ * question a research or government user will eventually ask. A registry that
+ * cannot answer it is not trustworthy.
  *
  * @module core/MapRegistry
  */

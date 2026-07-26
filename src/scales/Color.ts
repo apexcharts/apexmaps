@@ -5,7 +5,7 @@
  * is why every ramp here is sampled in OkLab (Ottosson, 2020): a perceptual
  * space where equal numeric steps read as equal visual steps. This is a
  * correctness property of a choropleth, not a nicety, because the reader infers
- * magnitude from perceived lightness (PRODUCT-RESEARCH.md section 8.3).
+ * magnitude from perceived lightness.
  *
  * @module scales/Color
  */

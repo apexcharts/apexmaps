@@ -61,7 +61,7 @@
         <tbody></tbody>
       </table>
       <p class="note">
-        Budget: <strong>p95 pan and zoom frame under 16 ms at 3,000 features</strong> (SCOPE.md).
+        Budget: <strong>p95 pan and zoom frame under 16 ms at 3,000 features</strong>.
         Panning writes one transform on one group, so the per-frame cost in library code is constant
         in the feature count; what scales is the browser rasterising the paths. That is the point of
         keeping features in world space instead of reprojecting them.

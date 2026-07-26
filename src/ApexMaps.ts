@@ -4,9 +4,7 @@
  *
  * The public surface is a single declarative, JSON-serialisable options tree
  * (tier 1), a layer engine underneath (tier 2), and imperative controllers for
- * anything inherently temporal (tier 3, currently `map.camera`). See
- * PRODUCT-RESEARCH.md section 6.3 for why that split, and section 6.6 for the
- * ecosystem primitives this reuses rather than reinvents.
+ * anything inherently temporal (tier 3, currently `map.camera`).
  *
  * @module ApexMaps
  */
@@ -80,7 +78,7 @@ const VERSION = '0.1.0'
 /**
  * Features that require a licence. Basic maps are deliberately absent: the free
  * tier carries no watermark, and the watermark exists only as the trial state for
- * premium capability (see the pricing decision in SCOPE.md). Nothing shipped so
+ * premium capability. Nothing shipped so
  * far is premium, so an unlicensed map renders clean.
  */
 const PREMIUM_FEATURES = new Set([
@@ -1991,10 +1989,10 @@ class ApexMaps extends BaseChart {
   /**
    * Warn about options that are declared in the public tree but not implemented.
    *
-   * SCOPE.md section 0 calls these worse than absent: a caller can set them and
-   * get silence. Until each is built or withdrawn, setting one says so in the
-   * dev diagnostics. Checked against `userOptions`, because the resolved config
-   * always carries the defaults and cannot say what the caller asked for.
+   * These are worse than absent: a caller can set them and get silence. Until
+   * each is built or withdrawn, setting one says so in the dev diagnostics.
+   * Checked against `userOptions`, because the resolved config always carries
+   * the defaults and cannot say what the caller asked for.
    */
   private _warnUnimplemented(): void {
     const o = this.userOptions

@@ -1,11 +1,10 @@
 /**
  * Bundle-size guard.
  *
- * SCOPE.md section 2 sets a 150 kB gzipped budget for the core bundle, excluding
- * geometry, and says it is enforced in CI rather than by intention. This is the
- * enforcement: it fails the build when the browser bundle crosses the budget, and
- * prints the numbers either way so a creeping trend is visible in the logs long
- * before the hard limit is.
+ * The core bundle carries a 150 kB gzipped budget, excluding geometry, and it is
+ * enforced here rather than by intention: this fails the build when a bundle
+ * crosses the budget, and prints the numbers either way so a creeping trend is
+ * visible in the logs long before the hard limit is.
  *
  * Usage: `npm run check:size` (after `npm run build`)
  */
@@ -41,8 +40,6 @@ for (const file of BUNDLES) {
 console.log('')
 
 if (failed) {
-  console.error(
-    '  Bundle budget exceeded. Moving the budget requires a recorded decision (SCOPE.md section 2).\n',
-  )
+  console.error('  Bundle budget exceeded. Moving the budget requires a recorded decision.\n')
   process.exit(1)
 }

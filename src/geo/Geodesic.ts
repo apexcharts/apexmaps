@@ -5,8 +5,7 @@
  * two points on a projected map is not the path anything travels. Tokyo to New
  * York arcs over the Arctic; in Web Mercator the true route looks like a curve
  * bending sharply north, and a straight line between the two is both wrong and
- * misleadingly long. Many libraries draw the straight line and hope
- * (PRODUCT-RESEARCH.md section 4.12).
+ * misleadingly long. Many libraries draw the straight line and hope.
  *
  * The output is a GeoJSON LineString in lon/lat, deliberately, so that d3-geo's
  * own clipping and antimeridian cutting handle the hard cases: a Tokyo to Los

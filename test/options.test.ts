@@ -3,7 +3,7 @@
  * Every declared option either works or says so.
  *
  * These pins come out of the 2026-07-26 audit, which found option keys that
- * could be set and did nothing (worse than absent: SCOPE.md section 0), plus
+ * could be set and did nothing (worse than absent), plus
  * three lifecycle defects: interaction options frozen at first render, inline
  * geometry re-ingested on every options change because merging cloned it, and
  * mark stores surviving destroy.

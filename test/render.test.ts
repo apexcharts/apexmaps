@@ -335,7 +335,7 @@ describe('ApexMaps render', () => {
 
   it('carries no watermark when only free-tier features are used', async () => {
     await render()
-    // The pricing decision in SCOPE.md: the watermark is the premium-feature trial
+    // The pricing decision: the watermark is the premium-feature trial
     // state, never a tax on basic maps.
     expect(el.querySelector('[data-apex-watermark], .apex-watermark')).toBeNull()
     expect(el.textContent).not.toMatch(/unlicensed|watermark/i)

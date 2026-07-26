@@ -9,8 +9,7 @@
  *
  * Bubble series get a **nested-circle** legend instead: three reference circles
  * drawn concentrically at round values. It is the only bubble legend that lets a
- * reader decode areas rather than guess them, and almost nobody ships it
- * (PRODUCT-RESEARCH.md section 4.2).
+ * reader decode areas rather than guess them, and almost nobody ships it.
  *
  * @module components/Legend
  */

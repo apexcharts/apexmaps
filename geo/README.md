@@ -20,4 +20,4 @@ redistribution notice for the copies committed here.
 
 Redistribution of the Eurostat files must keep the EuroGeographics attribution.
 Do not add packs from sources whose licence forbids commercial redistribution
-(GADM is the recorded example; see SCOPE.md N11).
+(GADM is the recorded example).

@@ -2,8 +2,7 @@
  * Easing functions and the motion scale.
  *
  * Durations are tokens rather than magic numbers so motion stays consistent
- * across the ecosystem and can be scaled or disabled wholesale
- * (PRODUCT-RESEARCH.md section 8.4).
+ * across the ecosystem and can be scaled or disabled wholesale.
  *
  * @module utils/easing
  */
