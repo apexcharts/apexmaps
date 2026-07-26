@@ -15,8 +15,9 @@ import {
   readableOn,
   rgbToOklab,
   oklabToRgb,
+  luminance,
 } from '../src/scales/Color'
-import { defaultPaletteFor, getPalette } from '../src/scales/Palettes'
+import { defaultPaletteFor, getPalette, listPalettes } from '../src/scales/Palettes'
 
 describe('Color', () => {
   it('parses hex and rgb forms', () => {
@@ -208,5 +209,118 @@ describe('createScale', () => {
   it('handles a single-value dataset', () => {
     const scale = createScale([7, 7, 7])
     expect(scale.color(7)).not.toBe(scale.nullColor)
+  })
+})
+
+/**
+ * A palette named after a colour has to be that colour.
+ *
+ * `teal` shipped ColorBrewer BuPu's stops, so `palette: 'teal'` rendered maps in
+ * purple, and nothing failed: the ramp was a valid sequential ramp, just not the
+ * one the name promised. Reading a hex list does not catch that, so the name is
+ * checked against the measured hue instead.
+ */
+describe('palette naming and structure', () => {
+  /** Conventional colour-wheel hue in degrees, or null when too grey to have one. */
+  function hueOf(hex: string): number | null {
+    const rgb = parseColor(hex)
+    if (!rgb) return null
+    const [r, g, b] = rgb.map((c) => c / 255)
+    const max = Math.max(r, g, b)
+    const min = Math.min(r, g, b)
+    const d = max - min
+    // Below this chroma a hue angle is numerical noise, not a colour.
+    if (d < 0.03) return null
+    const h =
+      max === r
+        ? (((g - b) / d) % 6) * 60
+        : max === g
+          ? ((b - r) / d + 2) * 60
+          : ((r - g) / d + 4) * 60
+    return (h + 360) % 360
+  }
+
+  /** Shortest angular distance, so a red ramp straddling 0 degrees still works. */
+  function hueDistance(a: number, b: number): number {
+    const d = Math.abs(a - b) % 360
+    return d > 180 ? 360 - d : d
+  }
+
+  const NAMED: { name: string; centre: number; tolerance: number }[] = [
+    { name: 'blues', centre: 208, tolerance: 25 },
+    { name: 'greens', centre: 123, tolerance: 30 },
+    { name: 'oranges', centre: 24, tolerance: 20 },
+    { name: 'reds', centre: 6, tolerance: 25 },
+    { name: 'purples', centre: 254, tolerance: 25 },
+    { name: 'teal', centre: 178, tolerance: 20 },
+  ]
+
+  for (const { name, centre, tolerance } of NAMED) {
+    it(`"${name}" renders in the hue its name claims`, () => {
+      const palette = getPalette(name)!
+      expect(palette).toBeDefined()
+      for (const stop of palette.stops) {
+        const hue = hueOf(stop)
+        if (hue === null) continue
+        expect(
+          hueDistance(hue, centre),
+          `${name} stop ${stop} is at hue ${hue?.toFixed(0)}`,
+        ).toBeLessThanOrEqual(tolerance)
+      }
+    })
+  }
+
+  it('keeps teal clear of purple, which is the bug this suite exists for', () => {
+    const teal = getPalette('teal')!
+    const purpleCentre = 254
+    for (const stop of teal.stops) {
+      const hue = hueOf(stop)
+      if (hue === null) continue
+      expect(hueDistance(hue, purpleCentre)).toBeGreaterThan(45)
+    }
+  })
+
+  it('greys stay achromatic', () => {
+    for (const stop of getPalette('greys')!.stops) {
+      expect(hueOf(stop)).toBeNull()
+    }
+  })
+
+  it('every sequential ramp moves monotonically in lightness', () => {
+    // The defining property of a sequential ramp, and what lets the single-hue
+    // ones claim colourblind safety: order is decodable by lightness alone, so it
+    // survives every colour-vision deficiency. Direction is free (viridis and
+    // magma run dark to light, the ColorBrewer families light to dark).
+    for (const name of listPalettes()) {
+      const palette = getPalette(name)!
+      if (palette.kind !== 'sequential') continue
+      const lums = palette.stops.map((s) => luminance(s))
+      const ascending = lums.every((l, i) => i === 0 || l > lums[i - 1])
+      const descending = lums.every((l, i) => i === 0 || l < lums[i - 1])
+      expect(ascending || descending, `${name} reverses direction in lightness`).toBe(true)
+    }
+  })
+
+  it('spans enough of the lightness range to separate classes', () => {
+    // A ramp crowded into the middle produces five classes a reader cannot tell
+    // apart, which is a legible-looking map that says nothing.
+    for (const name of listPalettes()) {
+      const palette = getPalette(name)!
+      if (palette.kind !== 'sequential') continue
+      const lums = palette.stops.map((s) => luminance(s))
+      expect(Math.max(...lums) - Math.min(...lums), `${name} lightness span`).toBeGreaterThan(0.5)
+    }
+  })
+
+  it('draws a teal choropleth in teal, after OkLab sampling', () => {
+    // The anchors being right is not the claim that matters: the class colours are
+    // resampled in OkLab with a light-end inset, and those are what a reader sees.
+    const scale = createScale([1, 5, 10, 20, 50, 80, 95], { palette: 'teal', classes: 5 })
+    expect(scale.colors).toHaveLength(5)
+    for (const color of scale.colors) {
+      const hue = hueOf(color)
+      expect(hue).not.toBeNull()
+      expect(hueDistance(hue!, 178)).toBeLessThanOrEqual(20)
+    }
   })
 })

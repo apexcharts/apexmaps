@@ -165,10 +165,35 @@ registerPalette('magma', {
     '#fcfdbf',
   ],
 })
+/**
+ * Teal: a single-hue ramp held between 173 and 184 degrees, the green side of
+ * cyan, from the lightest stop through to the darkest.
+ *
+ * Constructed rather than adopted, because ColorBrewer has no teal scheme and its
+ * nearest neighbours all leave the hue before the dark end, which is where a
+ * choropleth puts most of its ink: BuGn finishes in forest green, GnBu in blue.
+ * This palette used to ship BuPu's stops outright, so `palette: 'teal'` drew a map
+ * in purple.
+ *
+ * Two properties make it a legitimate sequential ramp rather than nine pleasant
+ * colours, and `test/scale.test.ts` pins both: the hue holds across every stop, and
+ * lightness falls monotonically, which is what keeps a single-hue ramp decodable
+ * under all three common colour-vision deficiencies.
+ */
 registerPalette('teal', {
   kind: 'sequential',
   colorblindSafe: true,
-  stops: ['#f7fcfd', '#e0ecf4', '#bfd3e6', '#9ebcda', '#8c96c6', '#8c6bb1', '#88419d', '#6e016b'],
+  stops: [
+    '#f2fbfa',
+    '#e0f3f1',
+    '#c3e8e4',
+    '#9bd9d3',
+    '#6ac4bf',
+    '#3ea9a5',
+    '#23888a',
+    '#136a6e',
+    '#06474b',
+  ],
 })
 
 // --- Diverging --------------------------------------------------------------
