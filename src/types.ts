@@ -539,6 +539,24 @@ export interface StatesOptions {
   muted?: { opacity?: number }
 }
 
+export interface SelectionOptions {
+  enabled?: boolean
+  multiple?: boolean
+  /**
+   * Drag a box to select everything inside it. Default true, since it costs
+   * nothing when unused: a plain drag still pans.
+   */
+  rectangle?: boolean
+  /**
+   * Modifier that turns a drag into a selection box. Default `'shift'`, which is
+   * the convention everywhere a drag already means something else.
+   *
+   * `'none'` makes every drag a selection box, and therefore requires
+   * `pan.enabled: false`: one gesture cannot mean both.
+   */
+  modifier?: 'shift' | 'alt' | 'meta' | 'ctrl' | 'none'
+}
+
 export interface InteractionOptions {
   zoom?: {
     enabled?: boolean
@@ -549,7 +567,7 @@ export interface InteractionOptions {
     step?: number
   }
   pan?: { enabled?: boolean; inertia?: boolean }
-  selection?: { enabled?: boolean; multiple?: boolean }
+  selection?: SelectionOptions
 }
 
 export interface A11yOptions {
@@ -579,7 +597,15 @@ export interface ApexMapsOptions {
   interaction?: InteractionOptions
   a11y?: A11yOptions
   annotations?: { points?: unknown[]; features?: unknown[]; areas?: unknown[] }
-  /** Cross-filter group shared with other Apex products. */
+  /**
+   * Cross-filter group. Maps naming the same group share their selection, so
+   * brushing one brushes the others, and non-selected features dim on all of them.
+   * Keys have to mean the same thing across the group, which they do whenever the
+   * maps are of the same geography.
+   *
+   * `filter` controls direction: `'emit'` sends without receiving, `'receive'`
+   * follows without leading.
+   */
   link?: { group?: string; filter?: 'bidirectional' | 'emit' | 'receive' }
   debug?: { enabled?: boolean | 'auto'; joinDiagnostics?: boolean }
   responsive?: ResponsiveRule[]

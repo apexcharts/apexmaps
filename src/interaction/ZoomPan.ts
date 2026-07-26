@@ -1,11 +1,17 @@
 /**
- * Zoom, pan and pinch.
+ * Zoom, pan, pinch and box selection.
  *
- * Two details separate a map that feels right from one that feels cheap, and
- * both are implemented here rather than left to the host app:
+ * Three details separate a map that feels right from one that feels cheap, and
+ * all three are implemented here rather than left to the host app:
  *
  * - **Anchored zoom**: the geography under the pointer stays under the pointer.
  * - **Inertial pan**: releasing a drag decelerates instead of stopping dead.
+ * - **A drag that ends on a feature is not a click on it.** Without that, panning
+ *   the map and releasing over a country selects the country, and box-selecting
+ *   over one drills into it.
+ *
+ * A drag means pan, and a drag with a modifier means "select what is in this box",
+ * because a map has one drag gesture and panning has the stronger claim on it.
  *
  * @module interaction/ZoomPan
  */
@@ -14,6 +20,11 @@ import { pointerPosition } from '../utils/dom'
 import { prefersReducedMotion } from '../utils/motion'
 import type { Camera } from '../geo/Camera'
 import type { InteractionOptions, ScreenPoint } from '../types'
+
+/** A screen-space selection box, `[[x0, y0], [x1, y1]]`, already normalised. */
+export type SelectBox = [ScreenPoint, ScreenPoint]
+
+export type SelectBoxPhase = 'move' | 'end' | 'cancel'
 
 const INERTIA_FRICTION = 0.92
 const INERTIA_MIN_VELOCITY = 0.04
@@ -25,6 +36,7 @@ export class ZoomPan {
   readonly camera: Camera
   readonly options: InteractionOptions
   readonly emit: (event: string, payload?: unknown) => void
+  readonly onSelectBox: (box: SelectBox | null, phase: SelectBoxPhase, additive: boolean) => void
 
   private _dragging = false
   private _moved = 0
@@ -33,6 +45,16 @@ export class ZoomPan {
   private _inertiaRaf: number | null = null
   private readonly _pointers = new Map<number, ScreenPoint>()
   private _pinchDistance = 0
+  private _marquee: { start: ScreenPoint; current: ScreenPoint; additive: boolean } | null = null
+  /**
+   * Set when a gesture travelled far enough to be a drag rather than a click.
+   *
+   * The browser still fires `click` after a drag that begins and ends on the same
+   * element, so without this a pan that finishes over a country selects it. Cleared
+   * by the next pointerdown, so a stale flag can never outlive one gesture, which a
+   * timer-based version could.
+   */
+  private _swallowClick = false
 
   private readonly _onPointerDown: (event: PointerEvent) => void
   private readonly _onPointerMove: (event: PointerEvent) => void
@@ -45,16 +67,20 @@ export class ZoomPan {
     camera,
     options,
     emit,
+    onSelectBox,
   }: {
     container: HTMLElement
     camera: Camera
     options: InteractionOptions
     emit?: (event: string, payload?: unknown) => void
+    /** Called as a selection box is dragged, and once when it is released. */
+    onSelectBox?: (box: SelectBox | null, phase: SelectBoxPhase, additive: boolean) => void
   }) {
     this.container = container
     this.camera = camera
     this.options = options
     this.emit = emit ?? (() => {})
+    this.onSelectBox = onSelectBox ?? (() => {})
 
     this._onPointerDown = this._handlePointerDown.bind(this)
     this._onPointerMove = this._handlePointerMove.bind(this)
@@ -85,19 +111,34 @@ export class ZoomPan {
     this.container.removeEventListener('pointerdown', this._onPointerDown)
     this.container.removeEventListener('wheel', this._onWheel)
     this.container.removeEventListener('dblclick', this._onDblClick)
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('pointermove', this._onPointerMove)
-      window.removeEventListener('pointerup', this._onPointerUp)
-      window.removeEventListener('pointercancel', this._onPointerUp)
-    }
+    this._detachWindowListeners()
   }
 
   private _handlePointerDown(event: PointerEvent): void {
-    if (this.options.pan?.enabled === false && this.options.zoom?.enabled === false) return
+    this._swallowClick = false
+    const marquee = this._marqueeWanted(event)
+    if (!marquee && this.options.pan?.enabled === false && this.options.zoom?.enabled === false) {
+      return
+    }
     if (event.button !== 0 && event.pointerType === 'mouse') return
 
     this._stopInertia()
     this.camera.stop()
+
+    if (marquee) {
+      // A modifier-drag would otherwise start a native text selection across the
+      // page, which outlives the gesture and reads as a bug.
+      event.preventDefault()
+      const start = pointerPosition(this.container, event)
+      this._marquee = { start, current: start, additive: event.altKey }
+      this._dragging = false
+      this._pointers.clear()
+      this.container.style.cursor = 'crosshair'
+      window.addEventListener('pointermove', this._onPointerMove)
+      window.addEventListener('pointerup', this._onPointerUp)
+      window.addEventListener('pointercancel', this._onPointerUp)
+      return
+    }
 
     this._pointers.set(event.pointerId, pointerPosition(this.container, event))
     if (this._pointers.size === 2) {
@@ -117,6 +158,11 @@ export class ZoomPan {
   }
 
   private _handlePointerMove(event: PointerEvent): void {
+    if (this._marquee) {
+      this._marquee.current = pointerPosition(this.container, event)
+      this.onSelectBox(this._marqueeBox(), 'move', this._marquee.additive)
+      return
+    }
     if (!this._pointers.has(event.pointerId)) return
     const point = pointerPosition(this.container, event)
     this._pointers.set(event.pointerId, point)
@@ -142,6 +188,19 @@ export class ZoomPan {
   }
 
   private _handlePointerUp(event: PointerEvent): void {
+    if (this._marquee) {
+      const box = this._marqueeBox()
+      const { additive } = this._marquee
+      const dragged = this._boxSize(box) > CLICK_SLOP
+      this._marquee = null
+      this._detachWindowListeners()
+      this.container.style.cursor = 'grab'
+      // A box of nothing is a click, and a shift-click is not a selection box.
+      this.onSelectBox(dragged ? box : null, dragged ? 'end' : 'cancel', additive)
+      if (dragged) this._swallowClick = true
+      return
+    }
+
     this._pointers.delete(event.pointerId)
 
     if (this._pointers.size < 2) this._pinchDistance = 0
@@ -150,14 +209,81 @@ export class ZoomPan {
     const wasDragging = this._dragging
     this._dragging = false
     this.container.style.cursor = 'grab'
-    window.removeEventListener('pointermove', this._onPointerMove)
-    window.removeEventListener('pointerup', this._onPointerUp)
-    window.removeEventListener('pointercancel', this._onPointerUp)
+    this._detachWindowListeners()
 
     if (wasDragging && this._moved > CLICK_SLOP) {
+      // A pan that ends over a feature must not also count as a click on it.
+      this._swallowClick = true
       if (this.options.pan?.inertia !== false && !prefersReducedMotion()) this._startInertia()
       this.emit('panEnd')
     }
+  }
+
+  /**
+   * Whether the click now arriving is the tail of a drag, consuming the flag.
+   *
+   * Consume-once rather than a time window: the flag is set on pointerup and
+   * cleared either by the click that follows or by the next pointerdown, so it
+   * cannot leak into an unrelated click however long the reader waits.
+   */
+  shouldSwallowClick(): boolean {
+    if (!this._swallowClick) return false
+    this._swallowClick = false
+    return true
+  }
+
+  /** Abandon an in-progress selection box, e.g. on Escape. */
+  cancelSelectBox(): boolean {
+    if (!this._marquee) return false
+    this._marquee = null
+    this._detachWindowListeners()
+    this.container.style.cursor = 'grab'
+    this.onSelectBox(null, 'cancel', false)
+    return true
+  }
+
+  get selecting(): boolean {
+    return this._marquee !== null
+  }
+
+  private _marqueeWanted(event: PointerEvent): boolean {
+    const selection = this.options.selection ?? {}
+    if (selection.enabled === false || selection.rectangle === false) return false
+    // A box that can only ever hold one thing is a click with extra steps.
+    if (selection.multiple === false) return false
+
+    const modifier = selection.modifier ?? 'shift'
+    if (modifier === 'none') {
+      // One gesture cannot mean both. ApexMaps warns about this configuration; here
+      // it simply loses to panning.
+      return this.options.pan?.enabled === false
+    }
+    if (modifier === 'shift') return event.shiftKey
+    if (modifier === 'alt') return event.altKey
+    if (modifier === 'meta') return event.metaKey
+    return event.ctrlKey
+  }
+
+  private _marqueeBox(): SelectBox {
+    const { start, current } = this._marquee as {
+      start: ScreenPoint
+      current: ScreenPoint
+    }
+    return [
+      [Math.min(start[0], current[0]), Math.min(start[1], current[1])],
+      [Math.max(start[0], current[0]), Math.max(start[1], current[1])],
+    ]
+  }
+
+  private _boxSize(box: SelectBox): number {
+    return Math.max(box[1][0] - box[0][0], box[1][1] - box[0][1])
+  }
+
+  private _detachWindowListeners(): void {
+    if (typeof window === 'undefined') return
+    window.removeEventListener('pointermove', this._onPointerMove)
+    window.removeEventListener('pointerup', this._onPointerUp)
+    window.removeEventListener('pointercancel', this._onPointerUp)
   }
 
   private _handleWheel(event: WheelEvent): void {

@@ -225,6 +225,33 @@
       </div>
 
       <div class="card">
+        <h2>Box selection and linked maps</h2>
+        <p class="note">
+          Shift-drag either map to select what the box encloses, Alt to add to the selection, Escape
+          to abandon it, and a box over nothing clears it. A plain drag still pans, and the click that
+          ends a drag is not a click on whatever it landed on. Both maps declare the same
+          <code>link: { group }</code>, so a selection made on one applies to the other and everything
+          unselected steps back on both. Linked selection is a licensed feature, so this pair carries
+          the evaluation watermark.
+        </p>
+        <div class="row">
+          <button id="select-west">setSelection(west coast)</button>
+          <button id="select-clear">clearSelection()</button>
+          <span class="label" id="select-status"></span>
+        </div>
+        <div class="two">
+          <div>
+            <div class="label">Adoption</div>
+            <div id="link-a"></div>
+          </div>
+          <div>
+            <div class="label">Support load, same states</div>
+            <div id="link-b"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
         <h2>What is in the catalogue</h2>
         <p class="note">
           <code>ApexMaps.catalogue()</code>, unmodified. Every pack knows what one of its features
@@ -611,7 +638,58 @@
             drilldown.drillUp()
           })
 
-          // --- 9. the catalogue, straight from the api -----------------------
+          // --- 9. box selection and linked maps ------------------------------
+          const ALL_STATES = [
+            'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN',
+            'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV',
+            'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN',
+            'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC',
+          ]
+          const linkedMap = (id, palette, salt) =>
+            new ApexMaps(document.getElementById(id), {
+              chart: { height: 300 },
+              geo: { map: 'us' },
+              legend: { show: false },
+              // Both maps name the same group, and both are keyed on `abbr`, which
+              // is what makes the selection mean the same thing on each.
+              link: { group: 'us-dashboard' },
+              series: [
+                {
+                  name: 'Value',
+                  joinBy: ['abbr', 'key'],
+                  data: ALL_STATES.map((key, i) => ({
+                    key,
+                    value: ((i * salt) % 80) + 10,
+                  })),
+                  scale: { palette },
+                },
+              ],
+            })
+
+          const linkA = linkedMap('link-a', 'blues', 37)
+          const linkB = linkedMap('link-b', 'oranges', 53)
+
+          const selectStatus = document.getElementById('select-status')
+          const showSelection = ({ ids, source }) => {
+            const from = source === linkA.getInstanceId() ? 'left' : 'right'
+            selectStatus.textContent = ids.length
+              ? `${ids.length} selected from the ${from} map: ${ids.slice(0, 8).join(', ')}${ids.length > 8 ? '…' : ''}`
+              : 'nothing selected'
+          }
+          linkA.on('selectionChange', showSelection)
+
+          Promise.all([linkA.render(), linkB.render()]).then(() => {
+            selectStatus.textContent = 'shift-drag a box'
+          })
+
+          document.getElementById('select-west').addEventListener('click', () => {
+            linkA.setSelection(['CA', 'OR', 'WA', 'NV', 'AZ'])
+          })
+          document.getElementById('select-clear').addEventListener('click', () => {
+            linkA.clearSelection()
+          })
+
+          // --- 10. the catalogue, straight from the api ----------------------
           document.getElementById('catalogue').textContent = ApexMaps.catalogue()
             .map(
               (p) =>
@@ -621,7 +699,7 @@
             )
             .join('\n')
 
-          // --- 10. join diagnostics -----------------------------------------
+          // --- 11. join diagnostics ----------------------------------------
           const messyData = [
             { name: 'France', value: 62 },
             { name: 'Brazil', value: 41 },
@@ -665,6 +743,8 @@
             joins,
             markers,
             drilldown,
+            linkA,
+            linkB,
             usStates,
             deStates,
             euNuts,

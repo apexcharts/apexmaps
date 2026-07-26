@@ -2,10 +2,10 @@
 
 Interactive geographic data visualization and storytelling for the ApexCharts ecosystem.
 
-> **Status: phase 1, pre-alpha (0.1.0).** Written in TypeScript. The engine, three series
-> (choropleth, bubble, arc), projections, joins, scales, legend, tooltip, labels, camera, geometry
-> registry and accessibility layer are working and tested. The story engine and tiles are not built
-> yet. See
+> **Status: phase 1, pre-alpha (0.1.0).** Written in TypeScript. The engine, four series
+> (choropleth, bubble, marker, arc), projections, joins, scales, legend, tooltip, labels, camera,
+> geometry registry, drilldown, selection and accessibility layer are working and tested. The story
+> engine and tiles are not built yet. See
 > [SCOPE.md](SCOPE.md) for what is deliberately out of scope, and the internal `PRODUCT-RESEARCH.md`
 > (kept in `plans/`, not published) for the strategy behind it.
 
@@ -39,11 +39,11 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Data | GeoJSON, TopoJSON, bare geometry, feature arrays; automatic winding repair; join-key auto-detection |
 | Joins | Explicit `joinBy`, mismatch diagnostics with suggestions, FIPS leading-zero repair, opt-in `fuzzyJoin` |
 | Scales | quantile, equal interval, Jenks, threshold, linear, log, sqrt, ordinal; OkLab-sampled ramps; 17 palettes; automatic diverging selection; square-root size scales with nested-circle legends |
-| Interaction | Anchored wheel zoom, inertial pan, pinch, double-click zoom, hover states, selection, legend class muting, drilldown with automatic parent detection and a breadcrumb |
+| Interaction | Anchored wheel zoom, inertial pan, pinch, double-click zoom, hover states, click and box selection with dimming, cross-map linked selection, legend class muting, drilldown with automatic parent detection and a breadcrumb |
 | Camera | `flyTo` (Van Wijk zoom-and-pan path), `easeTo`, `jumpTo`, `fitBounds`, `frameFeature`, `resetView`, interruptible and retargeting |
 | Components | Classed, gradient and nested-circle legends, HTML tooltips with edge flipping, collision-avoiding labels with halos |
 | Accessibility | ARIA roles, auto-generated description, roving-tabindex keyboard navigation, live-region announcements, optional data table, `prefers-reduced-motion` |
-| Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 51 kB gzipped core |
+| Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 54 kB gzipped core |
 
 ## Try the examples
 
@@ -55,9 +55,10 @@ npm run examples       # builds, then serves on http://localhost:8080/examples/
 That is all: the geometry packs are committed under `geo/`, so nothing has to be downloaded or
 generated first. `npm run data:build` only exists to regenerate them from source.
 
-The examples cover default styling, projection switching, a basemap with no data, bubbles, arcs, the
-geometry registry, a printout of the catalogue, and a live join diagnostics panel. `bench.html` on the
-same server measures frame times in your browser.
+The examples cover default styling, projection switching, a basemap with no data, bubbles, arcs,
+markers and clustering, the geometry registry, drilling from states into counties, box selection across
+a linked pair of maps, a printout of the catalogue, and a live join diagnostics panel. `bench.html` on
+the same server measures frame times in your browser.
 
 ## The geometry registry
 
@@ -310,6 +311,52 @@ two levels line up and the change reads as a zoom instead of a cut, and the reve
 back. And the selection does not survive a level change, because those keys belong to the level you
 left.
 
+## Selection, and linked maps
+
+Click a feature to select it. Shift-drag a box to select everything inside it, Alt to add to what is
+already selected, Escape to abandon the box, and a box over nothing clears the selection, which is
+the only obvious way for a reader to undo one.
+
+```js
+interaction: {
+  selection: {
+    enabled: true,
+    multiple: true,
+    rectangle: true,       // default. A plain drag still pans
+    modifier: 'shift',     // 'alt' | 'meta' | 'ctrl' | 'none' ('none' needs pan off)
+  },
+},
+states: { muted: { opacity: 0.25 } },   // 1 turns dimming off
+```
+
+A box tests each candidate's **anchor**, not its bounding box. Bounding-box intersection reads
+plausibly and behaves badly: Alaska's bbox spans the Pacific, so any box touching the Aleutians would
+select it, and a box over the Great Lakes would select half a dozen states it does not visibly cover.
+Points are tested at their own position, and the automatic basemap is left out, since a country drawn
+only so the bubbles have a coastline carries no data and could not filter anything.
+
+While anything is selected, everything else dims to `states.muted.opacity`. That is what makes a
+selection legible on a dense map: an outline on 3 of 3,000 counties is nearly invisible, while 2,997
+dimmed ones read instantly.
+
+**Linked maps** share a selection:
+
+```js
+// on every map that should brush together
+link: { group: 'sales-dashboard', filter: 'bidirectional' }   // or 'emit' / 'receive'
+```
+
+Brushing one map applies the selection to the others in the group and dims them the same way. Keys
+have to mean the same thing across the group, which they do whenever the maps are of the same
+geography; when a received selection matches nothing, dev mode says so rather than leaving one map
+mysteriously blank. A map that receives a selection never rebroadcasts it, so a bidirectional pair
+cannot ring. `link.group` is a licensed feature, and evaluating it watermarks the map.
+
+One detail that is invisible when right and obvious when wrong: **the click that ends a drag is not a
+click on whatever it landed on**. The browser fires `click` after any drag that starts and ends on the
+same element, so without suppressing it, panning the map would select the country under the release,
+and dragging a box across a feature with a drilldown would drill into it.
+
 ## Opinionated defaults, and why
 
 - **Equal Earth, not Web Mercator.** Most developers never choose a projection, so the default has to
@@ -374,6 +421,12 @@ const map = new ApexMaps(element, {
     },
   ],
   dataLabels: { enabled: true, collision: 'hide' },
+  interaction: {
+    zoom: { enabled: true, wheel: true },
+    pan: { enabled: true, inertia: true },
+    selection: { multiple: true, rectangle: true, modifier: 'shift' },
+  },
+  link: { group: 'dashboard' },   // brush this map, brush the others (licensed)
   legend: { position: 'bottom', interactive: true },
   tooltip: { formatter: ({ name, value }) => `${name}: ${value}` },
   a11y: { enabled: true, description: 'auto', dataTable: false },
@@ -419,12 +472,12 @@ There is no metering of map loads.
 | Map to chart morphing | Not built yet (phase 3) |
 | WebGL renderer tier | Not built yet (phase 3) |
 | Time playback | Not built yet (phase 3) |
-| Cross-product linking (`link: { group }`) | Not built yet |
+| Linked selection across maps (`link: { group }`) | **Shipped**. Cross-*product* linking is phase 2 |
 
 Without a valid key those features still work (**trial mode**) but the map shows a watermark. A valid
-key removes it. Everything else, including every series type, every projection, the geometry registry
-and the accessibility layer, is free and never watermarked. Because none of the licensed features
-exists yet, a phase-1 map always renders clean.
+key removes it. Everything else, including every series type, every projection, drilldown, box
+selection, the geometry registry and the accessibility layer, is free and never watermarked. A map
+that declares no `link.group` renders clean.
 
 ```js
 ApexMaps.setLicense('APEX-xxxxxxxx') // set once, before rendering; applies to every map on the page
@@ -460,7 +513,7 @@ views, and `mapMeta(id).boundaries` says so.
 ## Development
 
 ```sh
-npm test              # vitest, 241 tests, including the real geometry packs and perf invariants
+npm test              # vitest, 295 tests, including the real geometry packs and perf invariants
 npm run test:coverage
 npm run lint
 npm run typecheck

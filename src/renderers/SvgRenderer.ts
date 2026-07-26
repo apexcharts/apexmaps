@@ -463,6 +463,31 @@ export class SvgRenderer {
     return this.marksByKey.get(`${seriesId}:${key}`)
   }
 
+  /**
+   * Draw (or clear) the selection box.
+   *
+   * Lives in the overlay layer, in screen space: a box drawn in world space would
+   * follow the map if the camera moved under it, which is not what a reader
+   * dragging a box on their screen means. `null` removes it.
+   */
+  drawSelectBox(box: [[number, number], [number, number]] | null): void {
+    if (!this.overlayLayer) return
+    const existing = this.overlayLayer.querySelector<SVGRectElement>('rect.apexmaps-select-box')
+    if (!box) {
+      remove(existing)
+      return
+    }
+
+    const rect = existing ?? (svg('rect', { class: 'apexmaps-select-box' }) as SVGRectElement)
+    if (!existing) this.overlayLayer.appendChild(rect)
+    setAttrs(rect, {
+      x: box[0][0],
+      y: box[0][1],
+      width: Math.max(0, box[1][0] - box[0][0]),
+      height: Math.max(0, box[1][1] - box[0][1]),
+    })
+  }
+
   drawBasePath(d: string, attrs: Record<string, string | number>, className: string): void {
     if (!this.baseLayer || !d) return
     let path = this.baseLayer.querySelector(`.${className}`)

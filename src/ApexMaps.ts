@@ -47,6 +47,7 @@ import { Breadcrumb } from './components/Breadcrumb'
 import type { Crumb } from './components/Breadcrumb'
 import { scopeToParent } from './data/Hierarchy'
 import { ZoomPan } from './interaction/ZoomPan'
+import type { SelectBox, SelectBoxPhase } from './interaction/ZoomPan'
 import { registerPalette } from './scales/Palettes'
 import type { Palette } from './scales/Palettes'
 import { html, remove, resolveSize, pointerPosition, hasDom } from './utils/dom'
@@ -194,6 +195,7 @@ class ApexMaps extends BaseChart {
   private _renderRaf: number | null = null
   private _attribution: HTMLElement | null = null
   private _a11yMounted = false
+  private _warnedLinkKeys = false
   private readonly _drillStack: DrillFrame[] = []
   /** Guards against a second click landing while a level is still loading. */
   private _drilling = false
@@ -251,6 +253,7 @@ class ApexMaps extends BaseChart {
     this._attachInteraction()
     this._observeResize()
     this._reportDiagnostics()
+    this._checkPremium()
     this._evaluateLicense()
 
     this.rendered = true
@@ -281,6 +284,7 @@ class ApexMaps extends BaseChart {
     const { chart } = this.config
     this.element.classList.add('apexmaps')
     this.element.classList.toggle('apexmaps--dark', this._isDark())
+    this._applyStateVars()
     if (chart.fontFamily && chart.fontFamily !== 'inherit') {
       this.element.style.fontFamily = chart.fontFamily
     }
@@ -785,11 +789,20 @@ class ApexMaps extends BaseChart {
     // breadcrumb or the legend, and in the capture phase so a drilldown can claim
     // it before the a11y handler treats it as "leave the map".
     this.element.addEventListener('keydown', this._onKeyDown, true)
+    const selection = this.config.interaction.selection ?? {}
+    if (selection.modifier === 'none' && this.config.interaction.pan?.enabled !== false) {
+      this.warnings.push(
+        "interaction.selection.modifier 'none' makes every drag a selection box, so it needs " +
+          'pan.enabled: false. Panning keeps the drag, and the selection box is inactive.',
+      )
+    }
+
     this.zoomPan = new ZoomPan({
       container: this.plot,
       camera: this.camera,
       options: this.config.interaction,
       emit: (event, payload) => this.emit(event as ApexMapsEventName, payload as never),
+      onSelectBox: (box, phase, additive) => this._handleSelectBox(box, phase, additive),
     })
     this.zoomPan.attach()
   }
@@ -899,6 +912,11 @@ class ApexMaps extends BaseChart {
   }
 
   private _handleMarkClick(event: Event): void {
+    // The click that ends a drag is not a click on whatever the pointer happened
+    // to be over: panning the map or dragging a selection box across a feature
+    // must not also select or drill into it.
+    if (this.zoomPan?.shouldSwallowClick()) return
+
     const mark = this._resolveMark(event)
     if (!mark) return
 
@@ -929,6 +947,15 @@ class ApexMaps extends BaseChart {
 
   private _handleKeyDown(event: KeyboardEvent): void {
     if (event.key !== 'Escape') return
+
+    // A box being dragged is the most immediate thing Escape can abandon, so it
+    // wins over climbing a level.
+    if (this.zoomPan?.cancelSelectBox()) {
+      event.stopPropagation()
+      event.preventDefault()
+      return
+    }
+
     if (!this._drillStack.length) return
     // Capture phase, so this beats the a11y handler's "leave the map" Escape.
     // With somewhere to go back to, Escape means "up one level"; at the top level
@@ -1523,11 +1550,13 @@ class ApexMaps extends BaseChart {
     }
 
     this.element.classList.toggle('apexmaps--dark', this._isDark())
+    this._applyStateVars()
     this.warnings = []
     this._buildSeries()
     this._draw()
     this.renderer?.applyCamera()
     this._reportDiagnostics()
+    this._checkPremium()
     this._evaluateLicense()
     this.emit('updated', { instance: this })
     return this
@@ -1543,21 +1572,13 @@ class ApexMaps extends BaseChart {
     } else {
       this.selection.add(key)
     }
-    this._applySelectionStyles()
-    this.emit('selectionChange', {
-      ids: [...this.selection],
-      source: this.getInstanceId(),
-    })
+    this._selectionChanged()
     return this
   }
 
   setSelection(keys: readonly string[]): this {
     this.selection = new Set(keys ?? [])
-    this._applySelectionStyles()
-    this.emit('selectionChange', {
-      ids: [...this.selection],
-      source: this.getInstanceId(),
-    })
+    this._selectionChanged()
     return this
   }
 
@@ -1565,9 +1586,27 @@ class ApexMaps extends BaseChart {
     return this.setSelection([])
   }
 
+  /**
+   * Restyle, announce, and propagate to the link group.
+   *
+   * @param source Instance the change originated from. A selection arriving from a
+   *   peer is applied and re-emitted locally but never rebroadcast, which is what
+   *   keeps a bidirectional group from ringing.
+   */
+  private _selectionChanged(source: string = this.getInstanceId()): void {
+    this._applySelectionStyles()
+    this.emit('selectionChange', { ids: [...this.selection], source })
+    if (source === this.getInstanceId()) this._broadcastSelection()
+  }
+
   private _applySelectionStyles(): void {
     if (!this.renderer || !this.geo) return
     const active = this.config.states.active ?? {}
+    // Dimming the rest is what makes a selection legible at all on a dense map: an
+    // outline on 3 of 3,000 counties is nearly invisible, while 2,997 dimmed ones
+    // read instantly. Done with a class so it costs one write per mark and the
+    // original opacity is simply uncovered again when the selection clears.
+    const muting = this.selection.size > 0 && (this.config.states.muted?.opacity ?? 0.25) < 1
 
     for (const series of this.renderTargets) {
       if (series.kind !== 'features') continue
@@ -1576,6 +1615,7 @@ class ApexMaps extends BaseChart {
         if (!path) continue
         const selected = this.selection.has(feature.key)
         path.classList.toggle('is-selected', selected)
+        path.classList.toggle('is-muted', muting && !selected)
         if (selected && active.enabled !== false) {
           path.setAttribute('stroke', active.stroke ?? '#111111')
           path.setAttribute('stroke-width', String(active.strokeWidth ?? 1.5))
@@ -1587,22 +1627,136 @@ class ApexMaps extends BaseChart {
     }
 
     for (const series of this.series) {
-      if (!(series instanceof BubbleSeries)) continue
-      for (const item of series.items) {
-        const el = this.renderer.symbolFor(series.id, item.key)
-        if (!el) continue
-        const selected = this.selection.has(item.key)
-        el.classList.toggle('is-selected', selected)
-        el.setAttribute(
-          'stroke',
-          selected ? (active.stroke ?? '#111111') : (series.config.stroke?.color ?? '#ffffff'),
-        )
-        el.setAttribute(
-          'stroke-width',
-          String(selected ? (active.strokeWidth ?? 2) : (series.config.stroke?.width ?? 1)),
-        )
+      if (series instanceof BubbleSeries) {
+        for (const item of series.items) {
+          const el = this.renderer.symbolFor(series.id, item.key)
+          if (!el) continue
+          const selected = this.selection.has(item.key)
+          el.classList.toggle('is-selected', selected)
+          el.classList.toggle('is-muted', muting && !selected)
+          el.setAttribute(
+            'stroke',
+            selected ? (active.stroke ?? '#111111') : (series.config.stroke?.color ?? '#ffffff'),
+          )
+          el.setAttribute(
+            'stroke-width',
+            String(selected ? (active.strokeWidth ?? 2) : (series.config.stroke?.width ?? 1)),
+          )
+        }
+        continue
+      }
+
+      if (series instanceof MarkerSeries) {
+        for (const item of series.items) {
+          const el = this.renderer.markGroupFor(series.id, item.key)
+          if (!el) continue
+          const selected = this.selection.has(item.key)
+          el.classList.toggle('is-selected', selected)
+          el.classList.toggle('is-muted', muting && !selected)
+        }
       }
     }
+  }
+
+  // --- box selection and linked maps ----------------------------------------
+
+  private _handleSelectBox(box: SelectBox | null, phase: SelectBoxPhase, additive: boolean): void {
+    this.renderer?.drawSelectBox(phase === 'move' ? box : null)
+    if (phase !== 'end' || !box) return
+    this._selectInBox(box, additive)
+  }
+
+  /**
+   * Select everything whose anchor falls inside a screen-space box.
+   *
+   * **Anchors, not bounding boxes.** A feature's bbox is the wrong test: Alaska's
+   * spans the Pacific, so any box touching the Aleutians would select it, and a box
+   * over the Great Lakes would select half a dozen states it does not visibly
+   * cover. Testing the label anchor (the point already computed for labelling, which
+   * sits inside the shape) matches what the reader thinks they are enclosing.
+   *
+   * A box that catches nothing clears the selection, which is the only obvious way
+   * a reader can undo one.
+   */
+  private _selectInBox(box: SelectBox, additive: boolean): void {
+    const a = this.viewport.screenToWorld(box[0])
+    const b = this.viewport.screenToWorld(box[1])
+    const x0 = Math.min(a[0], b[0])
+    const x1 = Math.max(a[0], b[0])
+    const y0 = Math.min(a[1], b[1])
+    const y1 = Math.max(a[1], b[1])
+    const inside = (p: [number, number] | undefined) =>
+      !!p && p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1
+
+    const keys = new Set<string>(additive ? this.selection : [])
+
+    for (const series of this.renderTargets) {
+      // The basemap is substrate, not data: selecting a country drawn only so the
+      // bubbles have a coastline to sit on cannot filter anything, and its keys
+      // would pollute a linked group. Clicking it still selects it.
+      if (series instanceof BaseFeatures) continue
+
+      if (series.kind === 'features') {
+        for (const feature of this.geo?.features ?? []) {
+          if (feature.key && inside(this.anchors.get(feature.index)?.world)) keys.add(feature.key)
+        }
+        continue
+      }
+      for (const item of (series as BubbleSeries | ArcSeries | MarkerSeries).items) {
+        if (item.key && inside(item.anchor)) keys.add(item.key)
+      }
+    }
+
+    this.setSelection([...keys])
+  }
+
+  /**
+   * Push this map's selection to the others in its `link.group`.
+   *
+   * Peers are read from their live config rather than from what they registered
+   * with, so a group changed through `updateOptions` takes effect.
+   */
+  private _broadcastSelection(): void {
+    const group = this.config.link?.group
+    if (!group) return
+    const filter = this.config.link?.filter ?? 'bidirectional'
+    if (filter !== 'bidirectional' && filter !== 'emit') return
+
+    const ids = [...this.selection]
+    for (const entry of GLOBAL.instances) {
+      const peer = entry.instance
+      if (!peer || peer === this || peer.config.link?.group !== group) continue
+      const peerFilter = peer.config.link?.filter ?? 'bidirectional'
+      if (peerFilter !== 'bidirectional' && peerFilter !== 'receive') continue
+      peer._receiveSelection(ids, this.getInstanceId())
+    }
+  }
+
+  private _receiveSelection(ids: readonly string[], source: string): void {
+    this.selection = new Set(ids)
+    this._selectionChanged(source)
+
+    // Cross-filtering only works when keys mean the same thing on both maps, and
+    // the failure is silent: the other map dims everything and highlights nothing.
+    if (ids.length && !this._matchesAnyKey(ids) && this._isDebug() && !this._warnedLinkKeys) {
+      this._warnedLinkKeys = true
+      console.warn(
+        `ApexMaps: received ${ids.length} selected id(s) from link group "${this.config.link?.group}", ` +
+          'none of which match a key on this map. Cross-filtering needs both maps keyed the same way.',
+      )
+    }
+  }
+
+  private _matchesAnyKey(ids: readonly string[]): boolean {
+    const wanted = new Set(ids)
+    for (const feature of this.geo?.features ?? []) if (wanted.has(feature.key)) return true
+    for (const series of this.series) {
+      if (series.kind === 'features') continue
+      for (const item of (series as BubbleSeries | ArcSeries | MarkerSeries).items) {
+        if (wanted.has(item.key)) return true
+      }
+    }
+    return false
   }
 
   /** Frame a feature by key. */
@@ -1758,6 +1912,17 @@ class ApexMaps extends BaseChart {
   }
 
   /**
+   * Declare which premium features this spec actually uses.
+   *
+   * Called on render and on every options change, so a map that gains a link group
+   * later is evaluated then rather than staying on whatever the first render
+   * decided.
+   */
+  private _checkPremium(): void {
+    if (this.config.link?.group) this._requirePremium('linkGroup')
+  }
+
+  /**
    * Mark a premium feature as in use. Basic maps never call this, which is how the
    * free tier stays watermark-free.
    */
@@ -1784,6 +1949,17 @@ class ApexMaps extends BaseChart {
     } else {
       Watermark.add(this.element)
     }
+  }
+
+  /**
+   * Publish state options that CSS applies, rather than writing them per mark.
+   * Muting 3,000 features is then a class toggle each instead of 3,000 style writes.
+   */
+  private _applyStateVars(): void {
+    this.element.style.setProperty(
+      '--apexmaps-muted-opacity',
+      String(this.config.states.muted?.opacity ?? 0.25),
+    )
   }
 
   private _isDark(): boolean {

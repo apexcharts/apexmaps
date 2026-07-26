@@ -38,6 +38,11 @@
 .apexmaps-plot {
   position: relative;
   overflow: hidden;
+  /* A drag on a map is a pan or a selection box, never a text selection. Without
+     this, dragging highlights the surrounding page copy, which looks like a bug and
+     leaves stray highlight behind after the gesture. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .apexmaps-svg {
@@ -57,7 +62,9 @@
   /* Fill transitions make `updateSeries` read as a chart update rather than a
      page reload. Cheap enough to leave on at feature counts where SVG is the
      right renderer anyway. */
-  transition: fill 220ms ease-out;
+  transition:
+    fill 220ms ease-out,
+    opacity 150ms ease-out;
 }
 
 .apexmaps-feature.is-hovered {
@@ -66,6 +73,24 @@
 
 .apexmaps-feature.is-selected {
   transition: none;
+}
+
+/* Everything not selected steps back. A CSS property rather than an attribute, so
+   it wins over the series' own opacity attribute and uncovers it again when the
+   class goes, with no per-mark bookkeeping. */
+.apexmaps-feature.is-muted,
+.apexmaps-bubble.is-muted,
+.apexmaps-mark.is-muted {
+  opacity: var(--apexmaps-muted-opacity, 0.25);
+}
+
+.apexmaps-select-box {
+  fill: var(--apexmaps-focus);
+  fill-opacity: 0.1;
+  stroke: var(--apexmaps-focus);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
