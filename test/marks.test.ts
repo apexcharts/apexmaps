@@ -382,6 +382,19 @@ describe('arc series', () => {
     }
   })
 
+  it('removes the hit path together with its arc', async () => {
+    // A pruned arc whose hit companion survives is an invisible 8px-wide element
+    // that still answers hover, and its stale item index resolves to a different
+    // arc's data. The ghost is worse than the leak.
+    await render({ series: [{ type: 'arc', name: 'Routes', data: ROUTES }] })
+    expect(el.querySelectorAll('path.apexmaps-arc-hit')).toHaveLength(3)
+
+    map.updateSeries([{ type: 'arc', name: 'Routes', data: [ROUTES[0]] }])
+
+    expect(el.querySelectorAll('path.apexmaps-arc')).toHaveLength(1)
+    expect(el.querySelectorAll('path.apexmaps-arc-hit')).toHaveLength(1)
+  })
+
   it('resolves endpoints given as geometry keys', async () => {
     await render({
       series: [

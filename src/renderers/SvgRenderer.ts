@@ -322,7 +322,7 @@ export class SvgRenderer {
       if (spec.dashArray) path.setAttribute('stroke-dasharray', spec.dashArray)
     }
 
-    this.prune(this.pathsByKey, seriesId, seen, ['hit'])
+    this.prune(this.pathsByKey, seriesId, seen)
   }
 
   /**
@@ -566,6 +566,8 @@ export class SvgRenderer {
     this.pathsByKey.clear()
     this.symbolsByKey.clear()
     this.symbolWorld.clear()
+    this.marksByKey.clear()
+    this.markWorld.clear()
   }
 
   private ensureGroup(parent: SVGGElement, seriesId: string, className: string): SVGGElement {
@@ -580,19 +582,16 @@ export class SvgRenderer {
   /**
    * Drop marks whose data disappeared, e.g. after a filter or a reload.
    *
-   * @param skipInfixes Key infixes that belong to this series but are managed
-   *   alongside their primary mark, so they must not be pruned independently.
+   * Companion marks (an arc's invisible hit path) are pruned by the same rule:
+   * their keys enter `seen` alongside their primary mark, so a surviving arc
+   * keeps its hit path and a removed arc loses both. Exempting them instead
+   * leaves a transparent, still-hoverable path whose stale item index resolves
+   * to a different arc's data.
    */
-  private prune(
-    store: Map<string, SVGElement>,
-    seriesId: string,
-    seen: Set<string>,
-    skipInfixes: string[] = [],
-  ): void {
+  private prune(store: Map<string, SVGElement>, seriesId: string, seen: Set<string>): void {
     for (const [key, el] of store) {
       if (!key.startsWith(`${seriesId}:`)) continue
       if (seen.has(key)) continue
-      if (skipInfixes.some((infix) => key.startsWith(`${seriesId}:${infix}:`))) continue
       remove(el)
       store.delete(key)
     }
