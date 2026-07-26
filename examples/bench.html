@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ApexMaps performance</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 28px 24px 64px;
+        font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        color: #111827;
+        background: #f9fafb;
+      }
+      main { max-width: 1000px; margin: 0 auto; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      p.sub { color: #6b7280; margin: 0 0 20px; }
+      table { border-collapse: collapse; width: 100%; font-size: 13px; margin-bottom: 8px; }
+      th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid #e5e7eb; }
+      th:first-child, td:first-child { text-align: left; }
+      th { color: #6b7280; font-weight: 500; }
+      td.pass { color: #047857; font-weight: 600; }
+      td.fail { color: #b91c1c; font-weight: 600; }
+      .stage { height: 460px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+      .note { color: #6b7280; font-size: 12px; margin: 14px 0 20px; }
+      code { background: rgba(127, 127, 127, 0.12); padding: 1px 4px; border-radius: 3px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>ApexMaps performance</h1>
+      <p class="sub">
+        Measured in this browser, on this machine. Frame times are real rAF deltas during a scripted
+        pan and zoom, not a simulation. <em>Parse</em> is <code>JSON.parse</code> of the pack and
+        <em>Render</em> is library work on already-parsed geometry, so neither includes the network.
+        <em>Reproject</em> switches to Plate Carrée, which rebuilds every path, so it isolates path
+        generation from projection maths. Note the asymmetry on US counties: the initial render uses
+        the pack's recommended <code>albersUsa</code>, a composite of three sub-projections with a
+        point-in-region test per coordinate, and it costs roughly three times a simple projection.
+      </p>
+      <table id="results">
+        <thead>
+          <tr>
+            <th>Case</th>
+            <th>Features</th>
+            <th>Parse</th>
+            <th>Render</th>
+            <th>Reproject</th>
+            <th>Labels</th>
+            <th>JS/frame p95</th>
+            <th>Frame p50</th>
+            <th>Frame p95</th>
+            <th>Worst</th>
+            <th>Dropped</th>
+            <th>p95 budget</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p class="note">
+        Budget: <strong>p95 pan and zoom frame under 16 ms at 3,000 features</strong> (SCOPE.md).
+        Panning writes one transform on one group, so the per-frame cost in library code is constant
+        in the feature count; what scales is the browser rasterising the paths. That is the point of
+        keeping features in world space instead of reprojecting them.
+        <br /><br />
+        Read <em>Dropped</em> and <em>JS/frame</em>, not <em>Frame p50</em>. With headroom, rAF
+        intervals are clamped to the display's refresh rate, so a p50 of 8.3 ms means "120 Hz
+        display", not "8.3 ms of work". Dropped counts frames that overran their refresh interval by
+        half again, which is what a user perceives as stutter.
+      </p>
+      <div class="stage" id="stage"></div>
+    </main>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script>
+      ApexMaps.setGeoSource('../geo/')
+
+      const FRAMES = 120
+      const CASES = [
+        { id: 'world/countries@110m', label: 'World countries, 110m', budget: 16 },
+        { id: 'eu/nuts3@20m', label: 'EU NUTS-3', budget: 16 },
+        { id: 'us/counties@10m', label: 'US counties', budget: 16 },
+        { id: 'us/counties@10m', label: 'US counties + labels', budget: 16, labels: true },
+      ]
+
+      const quantile = (sorted, q) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))]
+      const ms = (v) => `${v.toFixed(1)} ms`
+
+      /**
+       * Two different measurements, because they answer different questions.
+       *
+       * `deltas` are rAF intervals: what the user feels. On a display with headroom
+       * they are clamped to the refresh interval, so the meaningful reading is how
+       * many of them exceed it, not their median.
+       *
+       * `js` is the time spent inside library code driving the camera. That is the
+       * part we control and the part that can regress, and it is not clamped by
+       * anything.
+       */
+      function measureFrames(map) {
+        return new Promise((resolve) => {
+          const deltas = []
+          const js = []
+          let last = performance.now()
+          let i = 0
+          const step = () => {
+            const now = performance.now()
+            deltas.push(now - last)
+            last = now
+
+            // A pan for the first half, a zoom sweep for the second: the two
+            // interactions the budget is about.
+            const t = performance.now()
+            if (i < FRAMES / 2) map.camera.panBy(6, 2)
+            else map.camera.zoomAbout(i % 20 < 10 ? 1.03 : 1 / 1.03, [400, 230])
+            js.push(performance.now() - t)
+
+            if (++i < FRAMES) requestAnimationFrame(step)
+            else {
+              resolve({
+                deltas: deltas.slice(1).sort((a, b) => a - b),
+                js: js.sort((a, b) => a - b),
+              })
+            }
+          }
+          requestAnimationFrame(step)
+        })
+      }
+
+      async function run() {
+        const tbody = document.querySelector('#results tbody')
+        const stage = document.getElementById('stage')
+
+        for (const testCase of CASES) {
+          // Parse is measured separately, then the parsed geometry is re-registered
+          // under its own metadata so `render` is library work only (no fetch, no
+          // JSON.parse) while the pack's recommended projection, view and key still
+          // apply. Handing the raw object to geo.map instead would drop them, and a
+          // US map squeezed into a world extent measures the wrong thing.
+          const file = ApexMaps.catalogue().find((p) => p.id === testCase.id).file
+          const text = await (await fetch(`../geo/${file}`)).text()
+          const tp = performance.now()
+          const geometry = JSON.parse(text)
+          const parseMs = performance.now() - tp
+
+          const localId = `bench/${testCase.id}`
+          ApexMaps.registerMap(localId, geometry, ApexMaps.mapMeta(testCase.id))
+
+          stage.innerHTML = ''
+          const map = new ApexMaps(stage, {
+            chart: { height: 460, animations: { enabled: false } },
+            geo: { map: localId },
+            dataLabels: { enabled: Boolean(testCase.labels) },
+            legend: { show: false },
+          })
+
+          const t0 = performance.now()
+          await map.render()
+          const renderMs = performance.now() - t0
+
+          // Awaited: updateOptions is async, and timing its synchronous prefix
+          // measures nothing.
+          // Counted here, before anything moves. After the reproject the US spans the
+          // whole world in Plate Carrée and sub-pixel counties are correctly
+          // suppressed; after 60 frames of panning the map has left the viewport.
+          const labelCount = stage.querySelectorAll('.apexmaps-label').length
+
+          const t1 = performance.now()
+          await map.updateOptions({ geo: { projection: 'equirectangular' } })
+          const redrawMs = performance.now() - t1
+
+          const { deltas: frames, js } = await measureFrames(map)
+          const p50 = quantile(frames, 0.5)
+          const p95 = quantile(frames, 0.95)
+          const worst = frames[frames.length - 1]
+          const jsP95 = quantile(js, 0.95)
+          // Frames that missed a 60 Hz budget. Meaningful in a normal browser, where
+          // rAF is tied to the display; a bench run with vsync disabled will report
+          // zero because every frame runs as fast as the work allows.
+          const janky = frames.filter((f) => f > 16.7).length
+          const pass = p95 <= testCase.budget
+
+          const row = document.createElement('tr')
+          row.innerHTML =
+            `<td>${testCase.label}</td>` +
+            `<td>${map.geo.features.length.toLocaleString()}</td>` +
+            `<td>${ms(parseMs)}</td>` +
+            `<td>${ms(renderMs)}</td>` +
+            `<td>${ms(redrawMs)}</td>` +
+            `<td>${labelCount || '-'}</td>` +
+            `<td>${ms(jsP95)}</td>` +
+            `<td>${ms(p50)}</td>` +
+            `<td>${ms(p95)}</td>` +
+            `<td>${ms(worst)}</td>` +
+            `<td>${janky}/${frames.length}</td>` +
+            `<td class="${pass ? 'pass' : 'fail'}">${pass ? 'pass' : 'FAIL'}</td>`
+          tbody.appendChild(row)
+
+          window.__bench = window.__bench || []
+          window.__bench.push({
+            case: testCase.label,
+            features: map.geo.features.length,
+            parseMs: +parseMs.toFixed(1),
+            renderMs: +renderMs.toFixed(1),
+            redrawMs: +redrawMs.toFixed(1),
+            labels: labelCount,
+            jsP95: +jsP95.toFixed(3),
+            jsWorst: +js[js.length - 1].toFixed(3),
+            p50: +p50.toFixed(2),
+            p95: +p95.toFixed(2),
+            worst: +worst.toFixed(2),
+            janky,
+            pass,
+          })
+
+          map.destroy()
+        }
+        window.__benchDone = true
+      }
+
+      run().catch((error) => {
+        document.body.insertAdjacentHTML(
+          'afterbegin',
+          `<pre style="color:#b91c1c">bench failed: ${error.message}</pre>`,
+        )
+        window.__benchDone = true
+      })
+    </script>
+  </body>
+</html>
