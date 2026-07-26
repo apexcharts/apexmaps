@@ -282,15 +282,43 @@ ApexMaps.listProjections()
 
 ## Licensing
 
-Dual licensed, on the same terms as the rest of the family: a free **Community License** for
+Dual licensed on the same terms as the rest of the family: a free **Community License** for
 individuals, non-profits, educators and organizations under $2M USD annual revenue, and a paid
-Commercial or OEM license above that. One key works across every Apex product. See [LICENSE](LICENSE).
+Commercial or OEM license above that. One key works across every Apex product, so an ApexCharts or
+ApexGrid customer does not buy a second one for maps. See [LICENSE](LICENSE).
 
-What is gated is **features**, not map count, map size or geometry downloads, and there is no metering
-of map loads. Basic maps are free and carry **no watermark**: the watermark is the trial state for
-licensed capability (story mode, presentation mode, morphing, the WebGL tier, cross-product linking),
-none of which exist yet, so a phase-1 map always renders clean. Accessibility is free in every tier,
-permanently. The rationale is in the internal `PRODUCT-RESEARCH.md` section 12.5.
+What is licensed is a **short list of features**, not map count, map size, or geometry downloads.
+There is no metering of map loads.
+
+| Licensed feature | Status |
+|---|---|
+| Story mode and scrollytelling | Not built yet (phase 2) |
+| Presentation mode | Not built yet (phase 2) |
+| Map to chart morphing | Not built yet (phase 3) |
+| WebGL renderer tier | Not built yet (phase 3) |
+| Time playback | Not built yet (phase 3) |
+| Cross-product linking (`link: { group }`) | Not built yet |
+
+Without a valid key those features still work (**trial mode**) but the map shows a watermark. A valid
+key removes it. Everything else, including every series type, every projection, the geometry registry
+and the accessibility layer, is free and never watermarked. Because none of the licensed features
+exists yet, a phase-1 map always renders clean.
+
+```js
+ApexMaps.setLicense('APEX-xxxxxxxx') // set once, before rendering; applies to every map on the page
+```
+
+The watermark is re-evaluated on every render, so a late `setLicense()` followed by `updateOptions()`
+clears it. Get a license at [apexcharts.com/pricing](https://apexcharts.com/pricing).
+
+Two commitments that do not change with tier:
+
+- **Accessibility is never gated.** Free in every tier, permanently. Gating it would block the
+  public-sector buyer we most want to serve, and it is the wrong thing to charge for.
+- **No mandatory network calls.** The default build fetches nothing and phones home to nothing.
+  Geometry is fetched only when you name a pack, from wherever you point `setGeoSource()`.
+
+The reasoning behind the tier boundary is in the internal `PRODUCT-RESEARCH.md` section 12.5.
 
 ## Geometry and licences
 

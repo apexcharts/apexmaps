@@ -84,22 +84,6 @@ interact with them.
 
 ---
 
-### 🗺 What the free tier includes
-
-ApexMaps gates **features**, not map count, map size, or geometry downloads. There is no metering of
-map loads.
-
-A complete, publishable map is free and carries **no watermark**: geometry, projections, joins,
-choropleth, bubble and arc series, scales, legends, tooltips, labels, camera and interaction. The
-watermark is the trial state for licensed capability, so an unlicensed basic map renders clean.
-
-Two commitments that do not change with tier:
-
-- **Accessibility is never gated.** The accessibility module is free in every tier, permanently.
-- **No mandatory network calls.** The default build fetches nothing and phones home to nothing.
-
----
-
 ### ⚠️ License Acceptance
 
 By installing ApexMaps (e.g., via `npm install apexmaps`), you are agreeing to the applicable license
@@ -147,5 +131,4 @@ given pack encodes.
 
 Copyright © 2026 ApexCharts. All rights reserved.
 
-Thank you for supporting ApexMaps! Your licensing helps keep it free and open for individuals and
-small teams.
+Thank you for supporting ApexMaps! Your licensing helps keep it free and open for individuals and small teams.
