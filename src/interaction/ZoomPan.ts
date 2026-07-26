@@ -108,10 +108,14 @@ export class ZoomPan {
 
   detach(): void {
     this._stopInertia()
+    this._marquee = null
     this.container.removeEventListener('pointerdown', this._onPointerDown)
     this.container.removeEventListener('wheel', this._onWheel)
     this.container.removeEventListener('dblclick', this._onDblClick)
     this._detachWindowListeners()
+    // The cursor was set by attach() from options this instance no longer speaks
+    // for; a successor's attach() decides it again.
+    this.container.style.cursor = ''
   }
 
   private _handlePointerDown(event: PointerEvent): void {

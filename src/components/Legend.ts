@@ -66,8 +66,11 @@ export class Legend {
     }
 
     if (!this.el) {
+      const align = this.options.align || 'center'
       this.el = html('div', {
-        class: `apexmaps-legend apexmaps-legend--${this.options.position || 'bottom'}`,
+        class:
+          `apexmaps-legend apexmaps-legend--${this.options.position || 'bottom'}` +
+          ` apexmaps-legend--align-${align}`,
       })
       this.container.appendChild(this.el)
     }
@@ -91,6 +94,13 @@ export class Legend {
       return wrap
     }
 
+    // The no-data swatch is always the last item, so dropping it leaves the
+    // class indices the muting callback reports unchanged.
+    const items =
+      this.options.showNull === false
+        ? (section.items ?? []).filter((i) => !i.isNull)
+        : (section.items ?? [])
+
     const style =
       this.options.style === 'auto' || !this.options.style
         ? section.continuous
@@ -99,9 +109,9 @@ export class Legend {
         : this.options.style
 
     if (style === 'gradient' && section.gradient?.length) {
-      wrap.appendChild(this.gradientBar(section.items ?? [], section.gradient))
+      wrap.appendChild(this.gradientBar(items, section.gradient))
     } else {
-      wrap.appendChild(this.classList(section.items ?? [], section.seriesIndex ?? 0))
+      wrap.appendChild(this.classList(items, section.seriesIndex ?? 0))
     }
     return wrap
   }

@@ -479,6 +479,37 @@ describe('drilldown', () => {
     expect(el.querySelector('[role="status"]').textContent).toContain('California')
   })
 
+  it('drills on Enter from keyboard navigation, exactly like a click', async () => {
+    // Mouse users click to drill; Escape (the way back out) already worked from
+    // the keyboard. A one-way keyboard path is not parity.
+    await render({ a11y: { enabled: true } })
+    const svg = el.querySelector('svg')
+    const drilled = once(map, 'drilldown')
+
+    svg.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+    svg.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+
+    await drilled
+    expect(map.drillDepth).toBe(1)
+    expect(keysOnScreen()).toEqual(['06001', '06037', '06075'])
+    // Drilling is not selecting: the parent key must not linger in the selection.
+    expect(map.selection.size).toBe(0)
+  })
+
+  it('still toggles selection on Enter when the series has no drilldown', async () => {
+    await render({
+      a11y: { enabled: true },
+      series: [{ name: 'Sales', joinBy: { data: 'key' }, data: BOTH_LEVELS }],
+    })
+    const svg = el.querySelector('svg')
+
+    svg.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+    svg.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+
+    expect(map.drillDepth).toBe(0)
+    expect([...map.selection]).toEqual(['CA'])
+  })
+
   it('abandons the trail when the caller changes the map', async () => {
     await render()
     await map.drillTo('CA')

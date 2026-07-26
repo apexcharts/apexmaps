@@ -248,6 +248,23 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* legend.align. The declared default is 'center', matching the rest of the
+   Apex family; 'left' and 'right' are the overrides. */
+.apexmaps-legend--align-center {
+  align-items: center;
+  text-align: center;
+}
+.apexmaps-legend--align-center .apexmaps-legend-items {
+  justify-content: center;
+}
+.apexmaps-legend--align-right {
+  align-items: flex-end;
+  text-align: right;
+}
+.apexmaps-legend--align-right .apexmaps-legend-items {
+  justify-content: flex-end;
+}
+
 /* --- breadcrumb ----------------------------------------------------------- */
 
 .apexmaps-breadcrumb {

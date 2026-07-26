@@ -138,7 +138,7 @@ interface DrillFrame {
 }
 
 interface GlobalScope {
-  instances: { id: string; instance: ApexMaps; group?: string }[]
+  instances: { id: string; instance: ApexMaps }[]
 }
 
 const GLOBAL: GlobalScope = (() => {
@@ -221,11 +221,10 @@ class ApexMaps extends BaseChart {
     this._onMarkClick = this._handleMarkClick.bind(this)
     this._onKeyDown = this._handleKeyDown.bind(this)
 
-    GLOBAL.instances.push({
-      id: this.getInstanceId(),
-      instance: this,
-      group: this.config.link?.group,
-    })
+    // No `group` is recorded here on purpose: link groups are read from each
+    // peer's live config at broadcast time, so one set through `updateOptions`
+    // works, and a snapshot taken now would only ever be stale.
+    GLOBAL.instances.push({ id: this.getInstanceId(), instance: this })
   }
 
   // --- lifecycle ------------------------------------------------------------
@@ -253,6 +252,7 @@ class ApexMaps extends BaseChart {
     this._draw()
     this._attachInteraction()
     this._observeResize()
+    this._warnUnimplemented()
     this._reportDiagnostics()
     this._checkPremium()
     this._evaluateLicense()
@@ -316,7 +316,7 @@ class ApexMaps extends BaseChart {
         features: this.geo?.features ?? [],
         describe: (f) => this._describeFeature(f),
         focus: (f) => this._focusFeature(f),
-        select: (f) => this.toggleSelection(f.key),
+        select: (f) => this._activateFeature(f),
       }),
     })
   }
@@ -779,16 +779,45 @@ class ApexMaps extends BaseChart {
           return [String(f.name ?? f.key), v == null ? primary.scale.nullLabel : v]
         }),
       })
+    } else {
+      // Bubble, marker and arc series get their table from their own rows.
+      // `dataTable: true` that silently renders nothing on a bubble map would be
+      // an accessibility option that only works on one map type. Read off
+      // `this.series` rather than `primary`: on a symbol-only map, `primary` is
+      // the automatic basemap, which is substrate with nothing to tabulate.
+      const dataSeries = this.series.find(
+        (s): s is BubbleSeries | ArcSeries | MarkerSeries => s.kind !== 'features',
+      )
+      if (dataSeries?.items.length) {
+        this.a11y.renderTable({
+          caption: dataSeries.legendTitle() ?? 'Map data',
+          columns: ['Item', dataSeries.legendTitle() ?? 'Value'],
+          rows: dataSeries.items.map((item) => [
+            String(item.name ?? item.key),
+            item.value == null ? 'No data' : item.value,
+          ]),
+        })
+      }
     }
   }
 
   // --- interaction ----------------------------------------------------------
 
+  /**
+   * Create (or recreate) the gesture handling from the current config.
+   *
+   * Idempotent on purpose: `updateOptions` calls it again when the interaction
+   * tree changes, because ZoomPan decides its listener set at attach time and a
+   * gesture handler reading an abandoned config is how "zoom.enabled: false set
+   * later does nothing" happens.
+   */
   private _attachInteraction(): void {
     if (!this.camera || !this.plot) return
+    this.zoomPan?.detach()
     // On the container rather than the plot, so Escape works while focus is on the
     // breadcrumb or the legend, and in the capture phase so a drilldown can claim
-    // it before the a11y handler treats it as "leave the map".
+    // it before the a11y handler treats it as "leave the map". Re-adding the same
+    // bound listener is a no-op, so recreation does not stack handlers.
     this.element.addEventListener('keydown', this._onKeyDown, true)
     const selection = this.config.interaction.selection ?? {}
     if (selection.modifier === 'none' && this.config.interaction.pan?.enabled !== false) {
@@ -1224,8 +1253,10 @@ class ApexMaps extends BaseChart {
     this.mapMeta = meta
     this.geo = geo
     // Selected keys belong to the level being left, so they are dropped rather
-    // than carried into a level where they match nothing.
+    // than carried into a level where they match nothing. The keyboard cursor is
+    // an index into the level being left, so it is dropped for the same reason.
     this.selection.clear()
+    if (this.a11y) this.a11y.cursor = -1
     this.warnings = []
     this.labels?.destroy()
     this._buildViewport()
@@ -1325,6 +1356,10 @@ class ApexMaps extends BaseChart {
       } else {
         const base = el.getAttribute('fill')
         if (base) el.setAttribute('fill', darken(base, states?.brightness ?? 0.08))
+        // An explicit hover outline, for features and bubbles. Restored by
+        // `_clearHover` to whatever selection state says it should be.
+        if (states?.stroke) el.setAttribute('stroke', states.stroke)
+        if (states?.strokeWidth != null) el.setAttribute('stroke-width', String(states.strokeWidth))
       }
       el.classList.add('is-hovered')
     }
@@ -1371,10 +1406,36 @@ class ApexMaps extends BaseChart {
           const item = bubble.items.find((b) => b.key === markKey)
           if (item) el.setAttribute('fill', bubble.fillFor(item))
         }
+        this._restoreStroke(series, el, markKey)
       }
     }
     this.hovered = null
     this.tooltip?.hide()
+  }
+
+  /**
+   * Put a mark's outline back after a hover changed it.
+   *
+   * The right stroke is not the series default: a selected mark keeps its
+   * selection outline, which is the same precedence `_applySelectionStyles`
+   * applies to every mark at once.
+   */
+  private _restoreStroke(series: AnySeries, el: SVGElement, markKey: string | number): void {
+    const hover = this.config.states?.hover
+    if (!hover?.stroke && hover?.strokeWidth == null) return
+    if (series.kind === 'paths') return
+
+    const active = this.config.states.active ?? {}
+    const selected = this.selection.has(String(markKey)) && active.enabled !== false
+    const isFeature = series.kind === 'features'
+    const stroke = selected
+      ? (active.stroke ?? '#111111')
+      : (series.config.stroke?.color ?? (isFeature ? 'none' : '#ffffff'))
+    const width = selected
+      ? (active.strokeWidth ?? (isFeature ? 1.5 : 2))
+      : (series.config.stroke?.width ?? (isFeature ? 0.5 : 1))
+    el.setAttribute('stroke', stroke)
+    el.setAttribute('stroke-width', String(width))
   }
 
   private _focusFeature(feature: NormalizedFeature): void {
@@ -1408,6 +1469,42 @@ class ApexMaps extends BaseChart {
   private _describeFeature(feature: NormalizedFeature): string {
     const series = this.renderTargets.find((s) => s.kind === 'features')
     return series ? series.describe(feature) : String(feature.name ?? feature.key)
+  }
+
+  /**
+   * What Enter on a focused feature does: exactly what a click on it would.
+   *
+   * That means drilling when the series has a drilldown, and toggling selection
+   * otherwise. Keyboard users had only the selection half, which left the way
+   * into a drilldown mouse-only while the way out (Escape) worked, and a11y
+   * parity is not a place this product accepts "mostly".
+   */
+  private _activateFeature(feature: NormalizedFeature): void {
+    const series =
+      this.renderTargets.find((s): s is FeatureSeries => isFeatureSeries(s) && !!drilldownOf(s)) ??
+      this.renderTargets.find((s): s is FeatureSeries => isFeatureSeries(s))
+    if (!series) return
+
+    const payload = {
+      key: feature.key,
+      name: feature.name,
+      value: series.valueFor(feature),
+      datum: series.datumFor(feature),
+      properties: feature.properties,
+      seriesName: series.config.name,
+      seriesIndex: series.index,
+      instance: this,
+    }
+
+    const drilldown = drilldownOf(series)
+    if (drilldown) {
+      this.emit('featureClick', payload as never)
+      void this._drill(feature, series, drilldown)
+      return
+    }
+
+    if (this.config.interaction.selection?.enabled !== false) this.toggleSelection(feature.key)
+    this.emit('featureClick', payload as never)
   }
 
   private _onLegendToggle(classIndex: number, seriesIndex: number): void {
@@ -1568,6 +1665,15 @@ class ApexMaps extends BaseChart {
     this._buildSeries()
     this._draw()
     this.renderer?.applyCamera()
+
+    // The interaction tree is plain data (no formatters), so a JSON comparison is
+    // exact. Recreating drops any gesture mid-flight, which is why it only happens
+    // when these options actually changed.
+    if (JSON.stringify(previous.interaction) !== JSON.stringify(this.config.interaction)) {
+      this._attachInteraction()
+    }
+
+    this._warnUnimplemented()
     this._reportDiagnostics()
     this._checkPremium()
     this._evaluateLicense()
@@ -1880,6 +1986,43 @@ class ApexMaps extends BaseChart {
     return (
       /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) || location.protocol === 'file:'
     )
+  }
+
+  /**
+   * Warn about options that are declared in the public tree but not implemented.
+   *
+   * SCOPE.md section 0 calls these worse than absent: a caller can set them and
+   * get silence. Until each is built or withdrawn, setting one says so in the
+   * dev diagnostics. Checked against `userOptions`, because the resolved config
+   * always carries the defaults and cannot say what the caller asked for.
+   */
+  private _warnUnimplemented(): void {
+    const o = this.userOptions
+    const renderer = o.chart?.renderer
+    if (renderer === 'canvas' || renderer === 'webgl') {
+      this.warnings.push(
+        `chart.renderer '${renderer}' is not implemented yet; this version always renders SVG`,
+      )
+    }
+    const a = o.annotations
+    if (a && (a.points?.length || a.features?.length || a.areas?.length)) {
+      this.warnings.push('annotations are not implemented yet; nothing will be drawn for them')
+    }
+    if (o.chart?.animations !== undefined) {
+      this.warnings.push(
+        'chart.animations is not implemented yet; marks draw immediately and speed has no effect',
+      )
+    }
+    if (o.chart?.context === 'story') {
+      this.warnings.push(
+        "chart.context 'story' has no effect yet; the story engine is a later phase",
+      )
+    }
+    if (o.geo?.boundaries !== undefined) {
+      this.warnings.push(
+        'geo.boundaries is not a rendering policy yet; packs record their boundary policy in mapMeta()',
+      )
+    }
   }
 
   /**
