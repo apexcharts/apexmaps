@@ -2,7 +2,7 @@
 
 Companion to the internal `PRODUCT-RESEARCH.md` (in `plans/`, not committed). This file exists to stop scope creep, which is the number-one risk to the product (maps + GIS + tiles + 3D + story is easily a five-year build).
 
-**Last updated:** 2026-07-26
+**Last updated:** 2026-07-26 (P1 status audited against the code, section 0)
 
 ---
 
@@ -15,6 +15,52 @@ Build the former. Integrate the latter. Every feature request gets this test bef
 **Second test, for pricing:** *Free = one beautiful map. Paid = the narrative, the linkage, and the scale.*
 
 ---
+
+## 0. Where P1 stands
+
+Audited against the code on 2026-07-26, not from memory. Section numbering below is unchanged, so
+existing references still resolve.
+
+**Shipped and tested** (207 tests, 48 kB gzipped of a 150 kB budget):
+
+| Area | State |
+|---|---|
+| Engine | Three-space transform chain, projection layer over `d3-geo`, camera with van Wijk paths, SVG renderer with world/screen layer split |
+| Data | GeoJSON, TopoJSON, bare geometry; winding repair by spherical area; `joinBy` with diagnostics, alias table, FIPS repair, opt-in fuzzy; keys map to feature lists |
+| Projections | 13 named, composite `albersUsa`, spec objects with rotate/parallels/clipAngle, `registerProjection` |
+| Series | choropleth, bubble (sqrt area, nested-circle legend), arc (geodesic, antimeridian-cut), automatic basemap |
+| Presentation | quantile/Jenks/equal-interval/threshold/linear/log/sqrt/ordinal, 17 OkLab-sampled palettes, classed + gradient + size legends, tooltips, collision-avoiding labels, dark mode, responsive |
+| Interaction | wheel/pinch/double-click zoom, inertial pan, hover, selection, legend muting, roving-tabindex keyboard navigation |
+| Camera | `flyTo`, `easeTo`, `jumpTo`, `fitBounds`, `frameFeature`, `resetView`, interruptible and retargeting |
+| Geo registry v1 | 26 packs: world countries and land, US states and counties, EU NUTS 0-3, admin-1 for 15 countries, each with recommended key, projection, view and provenance |
+| Accessibility | ARIA roles, generated description, keyboard navigation, live region, data table, `prefers-reduced-motion` |
+| Platform | TypeScript with a discriminated `Series` union, ESM/UMD/IIFE, declarations, SSR-safe import, zero mandatory network calls |
+| Performance | 2.8 ms p95 frame at 3,231 features against a 16 ms budget, guarded by invariant tests |
+
+**Declared in the public options tree but not implemented.** These are worse than absent: a caller can
+set them and get silence. Either build them or stop advertising them, and warn in dev meanwhile.
+
+| Option | Current reality |
+|---|---|
+| `chart.renderer: 'auto'` | Config default only. No Canvas tier and no `RendererController` wiring, so it is always SVG |
+| `drilldown` | Type plus a `undefined` default. Nothing reads it |
+| `link: { group }` | Only registers the instance in the global list. No selection propagation |
+| `annotations` | Type plus an empty-array default. Nothing renders |
+
+**Not started, still in P1 scope:**
+
+| Item | Notes |
+|---|---|
+| marker / symbol / icon series | The most requested map after choropleth. Largest remaining series gap |
+| cluster series | Needed for any point dataset above a few hundred rows |
+| line / route series | Partly covered by arc; a non-geodesic polyline series is still missing |
+| rectangle selection | Prerequisite for cross-filtering interaction |
+| Voronoi invisible hit layer | Makes small marks clickable |
+| PNG / SVG export | Procurement table stakes |
+| framework wrappers | react, vue, ngx, svelte, Blazor |
+| Canvas renderer tier + R-tree hit index | Not urgent at the measured frame cost, but `renderer: 'auto'` claims it |
+| tweened value transitions on `updateSeries` | Data changes redraw rather than interpolate |
+| `crs` declaration, `proj4` escape hatch, worker projection | Escape hatches for non-WGS84 and heavy ingest |
 
 ## 1. Hard "will not build" list
 
