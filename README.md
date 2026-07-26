@@ -282,12 +282,20 @@ ApexMaps.listProjections()
 
 ## Licensing
 
-Basic maps are free and carry **no watermark**. The watermark is the trial state for licensed
-features (story mode, presentation mode, morphing, the WebGL tier, cross-product linking), none of
-which exist yet, so a phase-1 map always renders clean. The rationale is in the internal
-`PRODUCT-RESEARCH.md` section 12.5.
+Dual licensed, on the same terms as the rest of the family: a free **Community License** for
+individuals, non-profits, educators and organizations under $2M USD annual revenue, and a paid
+Commercial or OEM license above that. One key works across every Apex product. See [LICENSE](LICENSE).
+
+What is gated is **features**, not map count, map size or geometry downloads, and there is no metering
+of map loads. Basic maps are free and carry **no watermark**: the watermark is the trial state for
+licensed capability (story mode, presentation mode, morphing, the WebGL tier, cross-product linking),
+none of which exist yet, so a phase-1 map always renders clean. Accessibility is free in every tier,
+permanently. The rationale is in the internal `PRODUCT-RESEARCH.md` section 12.5.
 
 ## Geometry and licences
+
+**The software licence does not cover the geographic data**, which is published by third parties under
+its own terms. [LICENSE](LICENSE) lists each source and its obligations.
 
 Every pack, and any geometry you register yourself, carries its provenance (source, licence, vintage,
 detail level, boundary policy), and required attribution renders automatically. The three sources
