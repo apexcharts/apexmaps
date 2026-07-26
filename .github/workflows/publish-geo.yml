@@ -4,6 +4,13 @@
 # means there is no long-lived credential in this repository to leak or rotate, and
 # npm attaches a provenance attestation linking the tarball to this workflow run.
 #
+# That attestation is automatic here and must NOT be requested in
+# geo/package.json. `publishConfig.provenance: true` makes provenance mandatory for
+# every publish, including from a laptop, where there is no CI provider to attest
+# anything: npm then fails with "Automatic provenance generation not supported for
+# provider: null". Trusted publishing already attaches provenance, so the flag buys
+# nothing and breaks the manual first publish.
+#
 # Two things must be true before this can work, and it will fail loudly if they
 # are not:
 #

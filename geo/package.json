@@ -36,7 +36,6 @@
     "prepublishOnly": "node ../scripts/check-geo-package.mjs"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   }
 }
