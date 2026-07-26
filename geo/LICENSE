@@ -1,0 +1,90 @@
+# Licences for apexmaps-geo
+
+This package is a **compilation of separately licensed boundary datasets**. There is
+no single licence covering all of it, so the terms below apply per file. The npm
+`license` field reads `(CC0-1.0 AND CC-BY-4.0)` because that is the closest
+machine-readable expression of the whole; this file is the authoritative detail.
+
+Every file has been processed from its source: simplified, quantized to TopoJSON,
+and in some cases given repaired or added identifier properties. The files are
+therefore derivative works, and the terms below apply to them as such. Each pack
+records its own source, licence, vintage and boundary policy in `manifest.json`,
+and the library exposes the same information at runtime through
+`ApexMaps.mapMeta(id)`.
+
+---
+
+## Natural Earth (public domain)
+
+**Files:** `world-countries-*.json`, `world-land-*.json`, `*-admin1-*.json`
+
+Source: Natural Earth 5.1.1, <https://www.naturalearthdata.com/>
+
+Natural Earth places its data in the public domain. No permission, fee or
+attribution is required, though crediting Natural Earth is appreciated. From the
+Natural Earth terms of use:
+
+> All versions of Natural Earth raster and vector map data found on this website
+> are in the public domain. You may use the maps in any manner, including
+> modifying the content and design, electronic dissemination, and offset
+> printing. The primary authors, Tom Patterson and Nathaniel Vaughn Kelso, and
+> all other contributors renounce all financial claim to the maps and invite you
+> to use them for personal, educational, and commercial purposes.
+
+Identifier note: Natural Earth publishes `ISO_A3` as `-99` for several countries
+whose overseas parts are separate features. Those values are repaired at build
+time; `manifest.json` records that this was done.
+
+## US Census Bureau TIGER/Line (public domain)
+
+**Files:** `us-states-*.json`, `us-counties-*.json`
+
+Source: US Census Bureau TIGER/Line, via [us-atlas](https://github.com/topojson/us-atlas) 3.0
+
+Works of the United States federal government are not subject to copyright
+protection in the United States (17 U.S.C. § 105) and are in the public domain.
+No attribution is required.
+
+Identifier note: TIGER geometry carries FIPS codes only. USPS state abbreviations
+are added at build time so the packs can be joined on the keys data actually uses.
+
+## Eurostat GISCO NUTS (CC BY 4.0, with EuroGeographics terms)
+
+**Files:** `eu-nuts0-*.json`, `eu-nuts1-*.json`, `eu-nuts2-*.json`, `eu-nuts3-*.json`
+
+Source: Eurostat GISCO NUTS 2021, 1:20 million,
+<https://ec.europa.eu/eurostat/web/gisco>
+
+Licensed under [Creative Commons Attribution 4.0
+International](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0). **This
+is the one part of this package that carries a mandatory attribution
+requirement.** Redistribution, including redistribution of derivative works, must
+credit:
+
+> © EuroGeographics for the administrative boundaries
+
+ApexMaps renders this string automatically whenever a NUTS pack is displayed, so a
+consumer of the library satisfies the requirement without doing anything. If you
+use these files outside ApexMaps, the attribution is your responsibility.
+
+The EuroGeographics terms for the administrative boundaries apply in addition to
+CC BY 4.0. See
+<https://ec.europa.eu/eurostat/web/gisco/geodata/statistical-units> for Eurostat's
+own statement of the terms.
+
+---
+
+## Boundaries and disputed territories
+
+Boundary depiction follows each source's own editorial view and is not a political
+statement by the ApexCharts project. Natural Earth packs use its de facto
+boundaries; NUTS packs follow the Eurostat 2021 classification; US packs use
+Census legal boundaries. Each pack states its policy in `manifest.json` under
+`boundaries`.
+
+## What is deliberately absent
+
+Datasets whose licences forbid commercial redistribution are not included and will
+not be. GADM is the recurring request and is non-commercial only, so it cannot
+ship here. Bring-your-own geometry is supported instead: pass GeoJSON or TopoJSON
+directly, or register it with `ApexMaps.registerMap()`.

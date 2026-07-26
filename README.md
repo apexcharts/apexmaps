@@ -125,17 +125,30 @@ leaves Europe a few pixels across. An explicit `geo.projection` or `geo.view` al
 `ApexMaps.mapMeta(id)` and `ApexMaps.catalogue()`. Required attribution renders automatically, so a
 NUTS map credits EuroGeographics whether or not anyone remembered to.
 
-The dataset ships separately from the library, because 6.7 MB of geometry has no business inside a
-charting dependency:
+The dataset ships as a separate package, [`apexmaps-geo`](geo/README.md), versioned independently of
+the library. Not for bundle reasons (packs are fetched at runtime and never enter your bundle) but
+because boundaries change on their own schedule: NUTS is revised every three years, US counties
+re-district on the census, and countries rename themselves. A boundary correction should not require
+a library upgrade, and a library patch should not republish 6.7 MB of unchanged JSON.
 
-```js
-ApexMaps.setGeoSource('https://cdn.example.com/apexmaps-geo/')          // self-hosted
-ApexMaps.setGeoSource((file) => import(`apexmaps-geo/${file}`))         // bundled, no network
+By default packs are fetched from jsDelivr, so nothing needs installing. Install the dataset when you
+want the files locally, for offline work, air-gapped deployments, or build-time resolution:
+
+```sh
+npm install apexmaps-geo
 ```
 
-The default source points at an `apexmaps-geo` npm package that is **not published yet**. In this
-repository the packs are committed under `geo/`, which is where the examples read them from, and
-`npm run data:build` regenerates them from Natural Earth, US Census TIGER and Eurostat GISCO.
+```js
+ApexMaps.setGeoSource((file) => import(`apexmaps-geo/${file}`).then((m) => m.default))  // no network
+ApexMaps.setGeoSource('https://cdn.example.com/apexmaps-geo/')                         // self-hosted
+```
+
+> **Status:** `apexmaps-geo` is prepared but awaiting its first publish, so the default source 404s
+> until then. Pass geometry directly or call `setGeoSource()` in the meantime.
+
+In this repository the packs are committed under `geo/`, which is both what the examples read and what
+gets published. `npm run data:build` regenerates them from Natural Earth, US Census TIGER and Eurostat
+GISCO.
 
 ## Performance
 
@@ -548,6 +561,8 @@ npm run typecheck
 npm run format          # prettier, config matches apexcharts-js
 npm run build           # rollup bundles + tsc declarations (cleans dist/ first)
 npm run check:size      # fail if a bundle crosses the 150 kB gzipped budget
+npm run check:geo       # verify the geo/ dataset and the library agree (gates publishing)
+npm run check:geo-source # verify the default CDN geometry source actually serves geometry
 npm run examples        # build, then serve examples/ on :8084
 npm run check:examples  # load every demo in Chromium, fail on an error or an empty map
 npm run data:build      # regenerate geo/ from source (needs network, ~45 MB of downloads)

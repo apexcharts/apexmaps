@@ -1,0 +1,85 @@
+# Publish the apexmaps-geo dataset via npm trusted publishing (OIDC).
+#
+# No NPM_TOKEN. Authentication is an OIDC exchange between GitHub and npm, which
+# means there is no long-lived credential in this repository to leak or rotate, and
+# npm attaches a provenance attestation linking the tarball to this workflow run.
+#
+# Two things must be true before this can work, and it will fail loudly if they
+# are not:
+#
+#   1. `apexmaps-geo` already exists on npm. A trusted publisher is configured on
+#      an existing package, so the very first publish is manual. After that, this
+#      workflow owns every release.
+#   2. The trusted publisher is configured at
+#      npmjs.com -> apexmaps-geo -> Settings -> Trusted publishers, pointing at
+#      this repository and the workflow filename `publish-geo.yml`. The filename is
+#      part of what npm verifies, so renaming this file breaks publishing until the
+#      setting is updated to match.
+#
+# Release by tagging, so the dataset versions independently of the library:
+#
+#   npm version --prefix geo patch        # or minor / major
+#   git commit -am "geo: <what changed>"
+#   git tag geo-v1.0.1 && git push --follow-tags
+name: Publish geometry dataset
+
+on:
+  push:
+    tags: ['geo-v*']
+  # Manual runs are allowed so a failed release can be retried without moving a tag.
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The OIDC token npm exchanges for short-lived publish rights. Without this
+      # the publish fails with an authentication error rather than a clear message.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          # Writes the .npmrc registry entry. Deliberately no NODE_AUTH_TOKEN:
+          # setting one would make npm prefer the token over OIDC and skip
+          # provenance.
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or newer, and the runner images still
+      # ship npm 10.x, so the bundled npm cannot publish this way.
+      - name: Use an npm that supports OIDC
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      # The dataset and the library have to agree, and every way they can disagree
+      # fails in a user's browser rather than here.
+      - name: Check the dataset against the library
+        run: node scripts/check-geo-package.mjs
+
+      # A tag that disagrees with the manifest publishes a version nobody expects,
+      # and the tag is the thing a human typed, so it is the thing to distrust.
+      - name: Check the tag matches geo/package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG="${GITHUB_REF#refs/tags/geo-v}"
+          PKG="$(node -p "require('./geo/package.json').version")"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "tag geo-v$TAG does not match geo/package.json version $PKG"
+            exit 1
+          fi
+          echo "publishing apexmaps-geo@$PKG"
+
+      - name: Publish
+        run: npm publish
+        working-directory: geo
+
+      # The publish has already succeeded by this point, so a slow CDN must not
+      # fail the run. This step reports when the default source the library ships
+      # is actually live, which is the promise the README's first example makes.
+      - name: Verify the default geometry source is served
+        continue-on-error: true
+        run: node scripts/check-geo-source.mjs --retries 8

@@ -1,0 +1,42 @@
+{
+  "name": "apexmaps-geo",
+  "version": "1.0.0",
+  "description": "Boundary geometry packs for ApexMaps: world, US, EU NUTS and admin-1 for 15 countries, as TopoJSON with provenance",
+  "keywords": [
+    "apexmaps",
+    "topojson",
+    "geojson",
+    "boundaries",
+    "geometry",
+    "map-data",
+    "natural-earth",
+    "tiger",
+    "nuts"
+  ],
+  "license": "(CC0-1.0 AND CC-BY-4.0)",
+  "homepage": "https://github.com/apexcharts/apexmaps/tree/main/geo#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apexcharts/apexmaps.git",
+    "directory": "geo"
+  },
+  "bugs": {
+    "url": "https://github.com/apexcharts/apexmaps/issues"
+  },
+  "sideEffects": false,
+  "exports": {
+    "./*": "./*"
+  },
+  "files": [
+    "*.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prepublishOnly": "node ../scripts/check-geo-package.mjs"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
