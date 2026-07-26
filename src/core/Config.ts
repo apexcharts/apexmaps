@@ -257,7 +257,17 @@ export function isPlainObject(v: unknown): v is Record<string, unknown> {
  *
  */
 export function buildConfig(options?: ApexMapsOptions): ResolvedOptions {
-  const cfg = merge(defaults(), options ?? {})
+  // Object-form geometry passes through by reference. It is data, not
+  // configuration: deep-merging it clones a possibly multi-megabyte topology on
+  // every rebuild (and rebuilds happen on every measure), and the clone breaks
+  // the identity check `updateOptions` uses to decide whether the map changed,
+  // which re-ingested the geometry and reset the drill state on every call.
+  const map = options?.geo?.map
+  const opaqueMap = map != null && typeof map === 'object'
+  const source = opaqueMap ? { ...options, geo: { ...options?.geo, map: undefined } } : options
+
+  const cfg = merge(defaults(), source ?? {})
+  if (opaqueMap) cfg.geo.map = map
 
   // `chart.type` seeds series that omit their own type, so the single-series
   // shorthand `{ chart: { type: 'choropleth' }, series: [{ data }] }` works.
