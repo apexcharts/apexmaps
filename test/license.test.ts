@@ -55,10 +55,22 @@ const forgedKey = () =>
 const unsignedKey = () =>
   envelope({ issueDate: '2025-01-01', expiryDate: '2099-12-31', plan: 'premium' })
 
-/** Let importKey/verify settle, then the onChange listener that reconciles. */
-async function settle() {
-  for (let i = 0; i < 20; i++) await Promise.resolve()
-  await new Promise((r) => setTimeout(r, 0))
+/**
+ * Let importKey/verify settle, then the onChange listener that reconciles.
+ *
+ * WebCrypto verification resolves on a thread pool, not the microtask queue,
+ * so a fixed microtask count can lose the race on a loaded machine (observed
+ * once with a browser build running alongside). With a predicate, this polls
+ * until the expected state lands; without one (negative assertions, where
+ * arrival cannot be awaited), it waits out a real-time deadline instead.
+ */
+async function settle(done?: () => boolean) {
+  const deadline = Date.now() + (done ? 500 : 150)
+  do {
+    for (let i = 0; i < 20; i++) await Promise.resolve()
+    await new Promise((r) => setTimeout(r, 5))
+    if (done?.()) return
+  } while (Date.now() < deadline)
 }
 
 function makeMap(el: HTMLElement) {
@@ -93,7 +105,7 @@ describe('licence enforcement', () => {
     const map = makeMap(el)
     await map.render()
 
-    await settle()
+    await settle(() => el.querySelector(WATERMARK) !== null)
     expect(el.querySelector(WATERMARK)).not.toBeNull()
 
     map.destroy()

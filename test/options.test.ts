@@ -214,9 +214,12 @@ describe('unimplemented options say so', () => {
     const all = map.warnings.join('\n')
     expect(all).toContain("chart.renderer 'canvas'")
     expect(all).toContain('annotations are not implemented')
-    expect(all).toContain('chart.animations')
-    expect(all).toContain("chart.context 'story'")
     expect(all).toContain('geo.boundaries')
+    // Implemented since: value transitions read chart.animations, and a story
+    // context turns the entrance fade on. Warning for them again would be a
+    // regression in the other direction.
+    expect(all).not.toContain('chart.animations')
+    expect(all).not.toContain("chart.context 'story'")
   })
 
   it('stays quiet when only implemented options are set', async () => {

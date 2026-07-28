@@ -22,6 +22,28 @@ export function prefersReducedMotion(): boolean {
   }
 }
 
+/**
+ * A `chart.animations.speed` value in milliseconds.
+ *
+ * The keywords exist because "350 or 700?" is a design decision most callers
+ * should not have to make: `'normal'` is the felt-as-instant range for a data
+ * update, `'slow'` is presentation pace, `'fast'` acknowledges the change
+ * without asking the reader to watch it.
+ */
+export function resolveSpeed(speed: 'slow' | 'normal' | 'fast' | 'instant' | number | undefined): number {
+  if (typeof speed === 'number') return Math.max(0, speed)
+  switch (speed) {
+    case 'slow':
+      return 700
+    case 'fast':
+      return 180
+    case 'instant':
+      return 0
+    default:
+      return 350
+  }
+}
+
 export interface MotionBudget {
   animate: boolean
   properties: 'all' | 'cheap'

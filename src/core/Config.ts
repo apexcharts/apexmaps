@@ -33,10 +33,14 @@ export function defaults(): ResolvedOptions {
       context: 'dashboard',
       animations: {
         enabled: true,
-        /** `'slow' | 'normal' | 'fast' | number` */
+        /** `'slow' | 'normal' | 'fast' | 'instant' | number` (ms). */
         speed: 'normal',
-        /** Entrance animation for series marks. */
-        entrance: true,
+        /**
+         * Fade the mark layers in on first paint. Off by default: a dashboard
+         * reader wants the number now, not a performance. `context: 'story'`
+         * turns it on (see `buildConfig`), and an explicit value always wins.
+         */
+        entrance: false,
       },
       events: {},
     },

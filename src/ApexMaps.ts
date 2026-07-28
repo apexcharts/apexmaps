@@ -58,6 +58,7 @@ import type { SelectBox, SelectBoxPhase } from './interaction/ZoomPan'
 import { registerPalette, listPalettes, getPalette } from './scales/Palettes'
 import type { Palette } from './scales/Palettes'
 import { html, remove, resolveSize, pointerPosition, hasDom } from './utils/dom'
+import { motionBudget, resolveSpeed } from './utils/motion'
 import { darken } from './scales/Color'
 import type { JoinResult } from './data/Join'
 import type { Cluster } from './geo/Cluster'
@@ -212,6 +213,7 @@ class ApexMaps extends BaseChart {
   private _resizeObserver: ResizeObserver | null = null
   private _renderRaf: number | null = null
   private _resizeRaf: number | null = null
+  private _enterTimer: ReturnType<typeof setTimeout> | null = null
   private _attribution: HTMLElement | null = null
   private _a11yMounted = false
   private _warnedLinkKeys = false
@@ -290,6 +292,7 @@ class ApexMaps extends BaseChart {
     this._buildViewport()
     this._buildSeries()
     this._draw()
+    this._entrance()
     this._attachInteraction()
     this._observeResize()
     this._warnUnimplemented()
@@ -567,6 +570,7 @@ class ApexMaps extends BaseChart {
   private _draw(): void {
     if (!this.renderer || !this.geo) return
 
+    this._applyMotionVars()
     this._drawBaseLayers()
 
     for (const series of this.renderTargets) {
@@ -2355,16 +2359,6 @@ class ApexMaps extends BaseChart {
     if (a && (a.points?.length || a.features?.length || a.areas?.length)) {
       this.warnings.push('annotations are not implemented yet; nothing will be drawn for them')
     }
-    if (o.chart?.animations !== undefined) {
-      this.warnings.push(
-        'chart.animations is not implemented yet; marks draw immediately and speed has no effect',
-      )
-    }
-    if (o.chart?.context === 'story') {
-      this.warnings.push(
-        "chart.context 'story' has no effect yet; the story engine is a later phase",
-      )
-    }
     if (o.geo?.boundaries !== undefined) {
       this.warnings.push(
         'geo.boundaries is not a rendering policy yet; packs record their boundary policy in mapMeta()',
@@ -2470,6 +2464,64 @@ class ApexMaps extends BaseChart {
     )
   }
 
+  // --- animation --------------------------------------------------------------
+
+  /**
+   * Publish `chart.animations` as the CSS variables the transitions read.
+   *
+   * The transitions themselves live in the stylesheet, permanently armed on the
+   * value-carrying properties (fill, r, stroke-width) and never on the
+   * camera-driven ones, so a data update tweens while a pan stays a single
+   * transform write per frame. What the engine decides per draw is only the
+   * duration: zero when animations are off, when the reader prefers reduced
+   * motion, or (geometry first, then everything) when the mark count outgrows
+   * the motion budget, because dropped frames read as a bug while a simpler
+   * transition just reads as restraint.
+   */
+  private _applyMotionVars(): void {
+    const anim = this.config.chart.animations ?? {}
+    const speed = anim.enabled === false ? 0 : resolveSpeed(anim.speed)
+    const budget = motionBudget(this._markCount())
+    const cheap = budget.animate ? speed : 0
+    const geometry = budget.animate && budget.properties === 'all' ? speed : 0
+    this.element.style.setProperty('--apexmaps-anim', `${cheap}ms`)
+    this.element.style.setProperty('--apexmaps-anim-geom', `${geometry}ms`)
+  }
+
+  /** Marks this draw will produce, for the motion budget. */
+  private _markCount(): number {
+    let count = 0
+    for (const series of this.renderTargets) {
+      count +=
+        series.kind === 'features'
+          ? (this.geo?.features.length ?? 0)
+          : ((series as BubbleSeries | ArcSeries | LineSeries | MarkerSeries).items?.length ?? 0)
+    }
+    return count
+  }
+
+  /**
+   * Fade the mark layers in on first paint, when configured.
+   *
+   * Only ever called from `render()`: a drilldown or an options update is a
+   * continuation of something already on screen, and replaying an entrance
+   * there would present old acquaintances as arrivals.
+   */
+  private _entrance(): void {
+    const anim = this.config.chart.animations ?? {}
+    if (anim.enabled === false || anim.entrance !== true) return
+    const speed = resolveSpeed(anim.speed)
+    if (speed <= 0 || !motionBudget(this._markCount()).animate) return
+
+    this.element.classList.add('apexmaps--enter')
+    this._enterTimer = setTimeout(() => {
+      this._enterTimer = null
+      // Removed once played so the class cannot re-trigger on a later
+      // stylesheet or class-list mutation.
+      this.element.classList.remove('apexmaps--enter')
+    }, speed + 80)
+  }
+
   private _isDark(): boolean {
     const mode = this.config.theme?.mode
     if (mode === 'dark') return true
@@ -2484,6 +2536,7 @@ class ApexMaps extends BaseChart {
     this._destroyed = true
     if (this._renderRaf !== null) cancelAnimationFrame(this._renderRaf)
     if (this._resizeRaf !== null) cancelAnimationFrame(this._resizeRaf)
+    if (this._enterTimer !== null) clearTimeout(this._enterTimer)
     this.camera?.stop()
     this.zoomPan?.detach()
     this._resizeObserver?.disconnect()
@@ -2511,7 +2564,7 @@ class ApexMaps extends BaseChart {
     remove(this._attribution)
     remove(this.plot)
 
-    this.element.classList.remove('apexmaps', 'apexmaps--dark')
+    this.element.classList.remove('apexmaps', 'apexmaps--dark', 'apexmaps--enter')
     // `remove` also TRACKS the container, because signature verification is
     // asynchronous and a container that looked licensed at render time may need
     // correcting a microtask later. That is right while a map is alive and wrong

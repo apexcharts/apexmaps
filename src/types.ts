@@ -484,6 +484,16 @@ export interface ChartOptions {
    * reader wants the number now rather than a performance.
    */
   context?: 'story' | 'dashboard'
+  /**
+   * Value transitions. Data updates (`updateSeries`, palette changes, legend
+   * toggles) tween fills, radii and stroke widths at `speed`; camera-driven
+   * geometry never animates, because it is written per frame while panning.
+   * Past a few thousand marks the engine degrades on its own: geometry stops
+   * animating first, then everything, because dropped frames read as a bug
+   * while a simpler transition reads as restraint. `prefers-reduced-motion`
+   * disables all of it. `entrance` fades the mark layers in on first paint,
+   * and defaults on only under `chart.context: 'story'`.
+   */
   animations?: {
     enabled?: boolean
     speed?: 'slow' | 'normal' | 'fast' | 'instant' | number

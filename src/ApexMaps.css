@@ -58,21 +58,64 @@
 
 /* --- features ------------------------------------------------------------- */
 
+/* Value transitions make `updateSeries` read as a chart update rather than a
+   page reload. Durations come from `chart.animations` via two variables the
+   engine writes before each draw: `--apexmaps-anim` for cheap properties
+   (fill, stroke), `--apexmaps-anim-geom` for geometry (r, stroke-width),
+   which the motion budget zeroes first when the mark count grows. Camera-
+   driven attributes (cx, cy, transform, d) are deliberately absent: they are
+   written per frame while panning, and a transition there would fight every
+   one of those frames. */
+
 .apexmaps-feature {
-  /* Fill transitions make `updateSeries` read as a chart update rather than a
-     page reload. Cheap enough to leave on at feature counts where SVG is the
-     right renderer anyway. */
   transition:
-    fill 220ms ease-out,
+    fill var(--apexmaps-anim, 220ms) ease-out,
     opacity 150ms ease-out;
 }
 
-.apexmaps-feature.is-hovered {
-  transition: fill 90ms ease-out;
+.apexmaps-bubble {
+  transition:
+    fill var(--apexmaps-anim, 220ms) ease-out,
+    r var(--apexmaps-anim-geom, 220ms) ease-out,
+    opacity 150ms ease-out;
+}
+
+.apexmaps-mark-shape {
+  transition: fill var(--apexmaps-anim, 220ms) ease-out;
+}
+
+.apexmaps-arc,
+.apexmaps-line {
+  transition:
+    stroke var(--apexmaps-anim, 220ms) ease-out,
+    stroke-width var(--apexmaps-anim-geom, 220ms) ease-out,
+    opacity 150ms ease-out;
+}
+
+/* Hover feedback has to feel attached to the pointer: the data-update pace
+   would read as lag here. */
+.apexmaps-feature.is-hovered,
+.apexmaps-bubble.is-hovered,
+.apexmaps-mark.is-hovered .apexmaps-mark-shape {
+  transition-duration: 90ms;
 }
 
 .apexmaps-feature.is-selected {
   transition: none;
+}
+
+/* One fade of the mark and symbol layers on first paint, when
+   `chart.animations.entrance` asks for it (`context: 'story'` turns it on).
+   Layer-level, so it costs two animations regardless of mark count. */
+.apexmaps--enter .apexmaps-layer-marks,
+.apexmaps--enter .apexmaps-layer-symbols {
+  animation: apexmaps-enter var(--apexmaps-anim, 350ms) ease-out;
+}
+
+@keyframes apexmaps-enter {
+  from {
+    opacity: 0;
+  }
 }
 
 /* Everything not selected steps back. A CSS property rather than an attribute, so
@@ -93,10 +136,21 @@
   pointer-events: none;
 }
 
+/* The JS motion budget already zeroes the variables under reduced motion; this
+   is the belt-and-braces layer for anything that misses that path. */
 @media (prefers-reduced-motion: reduce) {
   .apexmaps-feature,
-  .apexmaps-feature.is-hovered {
+  .apexmaps-feature.is-hovered,
+  .apexmaps-bubble,
+  .apexmaps-mark-shape,
+  .apexmaps-arc,
+  .apexmaps-line {
     transition: none;
+  }
+
+  .apexmaps--enter .apexmaps-layer-marks,
+  .apexmaps--enter .apexmaps-layer-symbols {
+    animation: none;
   }
 }
 
