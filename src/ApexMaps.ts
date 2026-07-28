@@ -244,11 +244,19 @@ class ApexMaps extends BaseChart {
       // the component hydrates.
       return this
     }
+    if (this._destroyed) return this
 
     this._mountShell()
     this._measure()
 
     const resolved = await resolveMap(this.config.geo.map as MapSource)
+
+    // destroy() may have run while the geometry loaded (a fast unmount, React
+    // StrictMode's mount/unmount/mount). Finishing the tail would rebuild the
+    // DOM, attach interaction and a ResizeObserver into a container that
+    // destroy() has already cleaned, with nothing left to ever clean them again.
+    if (this._destroyed) return this
+
     this.mapId = resolved.id
     this.mapMeta = resolved.meta ?? (resolved.id ? mapMeta(resolved.id) : undefined)
 
@@ -1062,7 +1070,7 @@ class ApexMaps extends BaseChart {
    * level above is still held, so going back never refetches or re-ingests.
    */
   async drillUp(levels = 1): Promise<boolean> {
-    if (this._drilling || !this._drillStack.length) return false
+    if (this._destroyed || this._drilling || !this._drillStack.length) return false
     const steps = Math.min(Math.max(1, Math.floor(levels) || 1), this._drillStack.length)
 
     this._drilling = true
@@ -1104,6 +1112,9 @@ class ApexMaps extends BaseChart {
 
       if (animate && this.camera) {
         await this.camera.easeTo({ ...frame.camera, duration: 320 })
+        // The map can be torn down while the camera eases; announcing or
+        // emitting for it then would hand listeners a destroyed instance.
+        if (this._destroyed) return false
       }
 
       this.a11y?.announce(this._drillAnnouncement())
@@ -1132,7 +1143,7 @@ class ApexMaps extends BaseChart {
     series: FeatureSeries,
     options: DrilldownOptions,
   ): Promise<boolean> {
-    if (this._drilling || !this.geo || !this.renderer) return false
+    if (this._destroyed || this._drilling || !this.geo || !this.renderer) return false
 
     const context: DrilldownContext = {
       key: feature.key,
@@ -1167,6 +1178,11 @@ class ApexMaps extends BaseChart {
         })
       }
 
+      // The camera move and the pack fetch both cross the event loop, and the
+      // reader can navigate away mid-flight. A destroyed map must not swap in
+      // the child level; see the guard in render() for the full failure mode.
+      if (this._destroyed) return false
+
       let resolved: Awaited<ReturnType<typeof resolveMap>>
       try {
         resolved = await loading
@@ -1178,6 +1194,8 @@ class ApexMaps extends BaseChart {
         this._reportDiagnostics()
         return false
       }
+
+      if (this._destroyed) return false
 
       const meta = resolved.meta ?? (resolved.id ? mapMeta(resolved.id) : undefined)
       const ingested = this._ingest(resolved.data, meta)
@@ -1643,6 +1661,7 @@ class ApexMaps extends BaseChart {
     options: ApexMapsOptions,
     { redrawGeometry }: { redrawGeometry?: boolean } = {},
   ): Promise<this> {
+    if (this._destroyed) return this
     const previous = this.config
     this.userOptions = merge(this.userOptions, options ?? {})
     this.config = applyResponsive(buildConfig(this.userOptions), this.viewport.width)
@@ -1659,6 +1678,8 @@ class ApexMaps extends BaseChart {
         // path, so it never reaches here.
         this._resetDrill()
         const resolved = await resolveMap(this.config.geo.map as MapSource)
+        // Same race as render(): see the guard there.
+        if (this._destroyed) return this
         this.mapId = resolved.id
         this.mapMeta = resolved.meta ?? (resolved.id ? mapMeta(resolved.id) : undefined)
         this.geo = this._ingest(resolved.data, this.mapMeta)
