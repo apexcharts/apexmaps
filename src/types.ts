@@ -329,6 +329,19 @@ export interface ArcDatum {
   [key: string]: unknown
 }
 
+export interface LineDatum {
+  /** Vertex sequence the route passes through, in order. */
+  path?: readonly LonLat[]
+  /** Accepted as a synonym for `path`, because the data often arrives as GeoJSON. */
+  coordinates?: readonly LonLat[]
+  id?: string
+  name?: string
+  value?: number | null
+  /** Per-route override of the series colour. */
+  color?: string
+  [key: string]: unknown
+}
+
 /**
  * Built-in marker shapes. Every one is drawn from a generated path so it scales
  * cleanly and needs no sprite sheet, no image load and no CORS.
@@ -429,8 +442,28 @@ export interface ArcSeriesOptions extends SeriesCommon {
   joinBy?: JoinSpec
 }
 
+/**
+ * A route drawn through the vertices it is given, in order. Unlike an arc,
+ * which derives the great circle between two endpoints, the caller supplies
+ * the whole path: a GPS trace, a shipping lane, a transit line.
+ */
+export interface LineSeriesOptions extends SeriesCommon {
+  type: 'line'
+  data?: readonly LineDatum[]
+  /** Line width scale driven by `value`. */
+  width?: SizeOptions
+  color?: string
+  colorScale?: ScaleOptions
+  /** Draw a dot at each route's start and end. */
+  endpoints?: { show?: boolean; radius?: number; color?: string }
+}
+
 export type Series =
-  ChoroplethSeriesOptions | BubbleSeriesOptions | ArcSeriesOptions | MarkerSeriesOptions
+  | ChoroplethSeriesOptions
+  | BubbleSeriesOptions
+  | ArcSeriesOptions
+  | MarkerSeriesOptions
+  | LineSeriesOptions
 
 export type SeriesType = NonNullable<Series['type']>
 

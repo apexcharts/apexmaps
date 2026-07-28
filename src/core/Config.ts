@@ -212,6 +212,10 @@ export function seriesDefaults(type: SeriesType): Record<string, unknown> {
     case 'arc':
       // Route networks overlap heavily; opaque arcs read as a solid mass.
       return { ...base, stroke: undefined, opacity: 0.75 }
+    case 'line':
+      // Routes are fewer and deliberate, so they stay closer to opaque than a
+      // network of arcs. They are strokes themselves; no outline.
+      return { ...base, stroke: undefined, opacity: 0.9 }
     case 'marker':
       return { ...base, stroke: { color: '#ffffff', width: 1.5 }, opacity: 0.9 }
     default:

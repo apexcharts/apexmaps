@@ -20,6 +20,7 @@ describe('per-series defaults', () => {
     expect(resolved('choropleth').opacity).toBe(1)
     expect(resolved('bubble').opacity).toBe(0.85)
     expect(resolved('arc').opacity).toBe(0.75)
+    expect(resolved('line').opacity).toBe(0.9)
     expect(resolved('marker').opacity).toBe(0.9)
   })
 
@@ -27,8 +28,9 @@ describe('per-series defaults', () => {
     expect(resolved('choropleth').stroke?.width).toBe(0.5)
     expect(resolved('bubble').stroke?.width).toBe(1)
     expect(resolved('marker').stroke?.width).toBe(1.5)
-    // Arcs are strokes themselves; a second outline around them is meaningless.
+    // Arcs and lines are strokes themselves; a second outline is meaningless.
     expect(resolved('arc').stroke).toBeUndefined()
+    expect(resolved('line').stroke).toBeUndefined()
   })
 
   it('still applies the shared defaults', () => {

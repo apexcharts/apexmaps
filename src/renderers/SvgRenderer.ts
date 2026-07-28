@@ -259,10 +259,13 @@ export class SvgRenderer {
     paths,
     seriesId = 'p0',
     hitWidth = MIN_HIT_WIDTH,
+    markClass = 'apexmaps-arc',
   }: {
     paths: PathSpec[]
     seriesId?: string
     hitWidth?: number
+    /** CSS class per mark; the hit companion gets `${markClass}-hit`. */
+    markClass?: string
   }): void {
     if (!this.marksLayer) return
     const group = this.ensureGroup(
@@ -283,7 +286,7 @@ export class SvgRenderer {
         let hit = this.pathsByKey.get(hitKey)
         if (!hit) {
           hit = svg('path', {
-            class: 'apexmaps-arc-hit',
+            class: `${markClass}-hit`,
             fill: 'none',
             stroke: 'transparent',
             'stroke-linecap': 'round',
@@ -302,7 +305,7 @@ export class SvgRenderer {
       let path = this.pathsByKey.get(key)
       if (!path) {
         path = svg('path', {
-          class: 'apexmaps-arc',
+          class: markClass,
           fill: 'none',
           'stroke-linecap': 'round',
           // Pointer events live on the hit path when there is one.

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lines and routes · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Lines and routes</nav>
+
+      <div class="card">
+        <h1>Line series: the path itself</h1>
+        <p class="note">
+          An arc derives the great circle between two endpoints. A line series is the opposite
+          contract: you supply the vertex sequence and it is drawn in order, which is what a sea
+          lane, a GPS trace, an expedition or a pipeline actually is. Rendering still runs through
+          the projection, so a route crossing the antimeridian is cut at the map edge rather than
+          streaking backwards, and segments between vertices follow the sphere. Hover a route for
+          its name and value.
+        </p>
+        <div id="map"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">The configuration</h2>
+        <p class="note">
+          <code>value</code> drives width through the same size-scale machinery bubbles use, per-datum
+          <code>color</code> overrides the series colour, and <code>endpoints</code> marks each
+          terminus with a screen-space dot that does not grow when the reader zooms.
+        </p>
+        <pre>
+{
+  type: 'line',
+  name: 'Trade routes',
+  data: [{
+    name: 'Europe – East Asia (sea)',
+    path: [[-0.1, 51.5], [-5.6, 36.0], [32.3, 31.3], ...],
+    value: 100,
+  }],
+  width: { range: [1, 5] },
+  endpoints: { show: true, radius: 2.5 },
+}</pre
+        >
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      // Waypoints, deliberately sparse: enough to hold each route to its real
+      // corridor while staying readable as config.
+      const ROUTES = [
+        {
+          name: 'Europe – East Asia (sea)',
+          value: 100,
+          path: [
+            [-0.1, 51.5], // London
+            [-9.5, 43.5], // off Finisterre
+            [-5.6, 36.0], // Gibraltar
+            [32.3, 31.3], // Port Said
+            [43.5, 12.6], // Bab-el-Mandeb
+            [80.3, 6.0], // south of Sri Lanka
+            [103.8, 1.3], // Singapore
+            [114.2, 22.3], // Hong Kong
+            [121.5, 31.2], // Shanghai
+          ],
+        },
+        {
+          name: 'Transpacific (sea)',
+          value: 78,
+          path: [
+            [139.7, 35.6], // Tokyo Bay
+            [160.0, 43.0],
+            [-170.0, 50.0], // crosses the antimeridian
+            [-140.0, 45.0],
+            [-122.4, 37.8], // San Francisco
+          ],
+        },
+        {
+          name: 'Cape route',
+          value: 45,
+          color: '#FEB019',
+          path: [
+            [-9.2, 38.7], // Lisbon
+            [-17.0, 15.0],
+            [18.4, -34.4], // Cape of Good Hope
+            [40.0, -22.0],
+            [55.3, -20.9], // Réunion
+            [103.8, 1.3], // Singapore
+          ],
+        },
+        {
+          name: 'North Atlantic (sea)',
+          value: 62,
+          path: [
+            [-1.4, 50.9], // Southampton
+            [-30.0, 48.0],
+            [-52.0, 44.0],
+            [-74.0, 40.7], // New York
+          ],
+        },
+      ]
+
+      Demo.ready(
+        (async () => {
+          const map = Demo.watch(
+            'routes',
+            new ApexMaps(document.getElementById('map'), {
+              chart: { height: 480 },
+              geo: { map: 'world/countries@110m' },
+              series: [
+                {
+                  type: 'line',
+                  name: 'Trade routes',
+                  data: ROUTES,
+                  width: { range: [1, 5] },
+                  endpoints: { show: true, radius: 2.5 },
+                },
+              ],
+            }),
+          )
+          return map.render()
+        })(),
+      )
+    </script>
+  </body>
+</html>

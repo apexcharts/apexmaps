@@ -588,3 +588,166 @@ describe('combined series', () => {
     expect(() => JSON.stringify(spec)).not.toThrow()
   })
 })
+
+describe('line series', () => {
+  // London to Singapore by sea, through Gibraltar, Suez and Malacca: a route
+  // that only makes sense as the vertex sequence it is, which is the series'
+  // whole reason to exist.
+  const SEA_ROUTE: [number, number][] = [
+    [-0.1, 51.5], // London
+    [-5.6, 36.0], // Gibraltar
+    [32.3, 31.3], // Port Said
+    [43.5, 12.6], // Bab-el-Mandeb
+    [80.3, 6.0], // south of Sri Lanka
+    [103.8, 1.3], // Singapore
+  ]
+
+  const ROUTES = [
+    { name: 'Sea route', path: SEA_ROUTE, value: 100 },
+    {
+      name: 'Short hop',
+      path: [
+        [-0.1, 51.5],
+        [2.35, 48.85],
+      ],
+      value: 10,
+    },
+  ]
+
+  it('renders one path per route, drawn through every vertex', async () => {
+    await render({ series: [{ type: 'line', name: 'Routes', data: ROUTES }] })
+    const lines = el.querySelectorAll('path.apexmaps-line')
+    expect(lines).toHaveLength(2)
+    for (const line of lines) {
+      const d = line.getAttribute('d')!
+      expect(d.length).toBeGreaterThan(10)
+      expect(d).not.toContain('NaN')
+    }
+    // The six-vertex route is a much longer path than the two-vertex hop.
+    const [a, b] = [...lines].map((l) => l.getAttribute('d')!.length)
+    expect(Math.max(a, b)).toBeGreaterThan(Math.min(a, b) * 2)
+  })
+
+  it('splits an antimeridian crossing instead of streaking across the map', async () => {
+    await render({
+      series: [
+        {
+          type: 'line',
+          name: 'Pacific',
+          data: [
+            {
+              name: 'Tokyo to LA',
+              path: [TOKYO, [170, 40], [-150, 38], LOS_ANGELES],
+            },
+          ],
+        },
+      ],
+    })
+    const d = el.querySelector('path.apexmaps-line')!.getAttribute('d')!
+    expect((d.match(/M/g) ?? []).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('accepts `coordinates` as a synonym for `path`', async () => {
+    await render({
+      series: [{ type: 'line', data: [{ name: 'geojson habit', coordinates: SEA_ROUTE }] }],
+    })
+    expect(el.querySelectorAll('path.apexmaps-line')).toHaveLength(1)
+  })
+
+  it('drops rows without two usable vertices, and says so', async () => {
+    await render({
+      series: [
+        {
+          type: 'line',
+          data: [
+            { name: 'ok', path: SEA_ROUTE },
+            { name: 'one vertex', path: [[0, 0]] },
+            { name: 'no path at all' },
+            { name: 'garbage', path: [[NaN, 1], [1, NaN]] },
+          ],
+        },
+      ],
+    })
+    expect(el.querySelectorAll('path.apexmaps-line')).toHaveLength(1)
+    expect(map.series[0].warnings.join(' ')).toMatch(/3 line datum/)
+  })
+
+  it('scales width by value', async () => {
+    await render({ series: [{ type: 'line', name: 'Routes', data: ROUTES }] })
+    const widths = [...el.querySelectorAll('path.apexmaps-line')].map((l) =>
+      Number(l.getAttribute('stroke-width')),
+    )
+    expect(Math.max(...widths)).toBeGreaterThan(Math.min(...widths))
+  })
+
+  it('adds hit companions under the line class, and prunes them with their route', async () => {
+    await render({ series: [{ type: 'line', name: 'Routes', data: ROUTES }] })
+    expect(el.querySelectorAll('path.apexmaps-line-hit')).toHaveLength(2)
+
+    map.updateSeries([{ type: 'line', name: 'Routes', data: [ROUTES[0]] }])
+
+    expect(el.querySelectorAll('path.apexmaps-line')).toHaveLength(1)
+    expect(el.querySelectorAll('path.apexmaps-line-hit')).toHaveLength(1)
+  })
+
+  it('a per-route color overrides the series color', async () => {
+    await render({
+      series: [
+        {
+          type: 'line',
+          color: '#112233',
+          data: [
+            { name: 'default', path: SEA_ROUTE },
+            { name: 'override', path: ROUTES[1].path, color: '#aabbcc' },
+          ],
+        },
+      ],
+    })
+    const strokes = [...el.querySelectorAll('path.apexmaps-line')].map((l) =>
+      l.getAttribute('stroke'),
+    )
+    expect(strokes).toContain('#112233')
+    expect(strokes).toContain('#aabbcc')
+  })
+
+  it('rebuilds route geometry on a projection change', async () => {
+    await render({ series: [{ type: 'line', name: 'Routes', data: [ROUTES[0]] }] })
+    const before = el.querySelector('path.apexmaps-line')!.getAttribute('d')!
+
+    await map.updateOptions({ geo: { projection: 'orthographic' } }, { redrawGeometry: true })
+
+    const after = el.querySelector('path.apexmaps-line')!.getAttribute('d')!
+    expect(after).not.toBe(before)
+    expect(after).not.toContain('NaN')
+  })
+
+  it('deduplicates endpoint dots at a shared terminus', async () => {
+    await render({
+      series: [
+        {
+          type: 'line',
+          endpoints: { show: true },
+          data: [
+            { name: 'a', path: ROUTES[1].path }, // London -> Paris
+            {
+              name: 'b',
+              path: [
+                [-0.1, 51.5], // London again
+                [4.35, 50.85], // Brussels
+              ],
+            },
+          ],
+        },
+      ],
+    })
+    // Two routes, four termini, one shared: three dots.
+    expect(el.querySelectorAll('.apexmaps-layer-symbols circle')).toHaveLength(3)
+  })
+
+  it('describes a route for the tooltip and the data table', async () => {
+    await render({ series: [{ type: 'line', data: ROUTES }] })
+    const series = map.series[0]
+    const described = series.items.map((item: unknown) => series.describe(item))
+    expect(described).toContain('Sea route, 100')
+  })
+})

@@ -34,6 +34,8 @@ export type {
   InteractionOptions,
   JoinSpec,
   LegendItem,
+  LineDatum,
+  LineSeriesOptions,
   LegendOptions,
   LonLat,
   MapSource,

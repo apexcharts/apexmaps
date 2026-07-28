@@ -43,6 +43,7 @@ import { ChoroplethSeries } from './series/Choropleth'
 import { BubbleSeries } from './series/Bubble'
 import { MarkerSeries } from './series/Marker'
 import { ArcSeries } from './series/Arc'
+import { LineSeries } from './series/Line'
 import { BaseFeatures } from './series/BaseFeatures'
 import { Legend } from './components/Legend'
 import type { LegendSection } from './components/Legend'
@@ -99,7 +100,7 @@ const PREMIUM_FEATURES = new Set([
 ])
 
 /** Anything the renderer can draw. */
-type AnySeries = ChoroplethSeries | BubbleSeries | ArcSeries | MarkerSeries | BaseFeatures
+type AnySeries = ChoroplethSeries | BubbleSeries | ArcSeries | LineSeries | MarkerSeries | BaseFeatures
 
 /** The series kinds bound to geometry, which are the ones a drilldown applies to. */
 type FeatureSeries = ChoroplethSeries | BaseFeatures
@@ -171,7 +172,7 @@ class ApexMaps extends BaseChart {
   geo: NormalizedGeo | null = null
 
   /** Data series, excluding the basemap pseudo-series. */
-  series: (ChoroplethSeries | BubbleSeries | ArcSeries | MarkerSeries)[] = []
+  series: (ChoroplethSeries | BubbleSeries | ArcSeries | LineSeries | MarkerSeries)[] = []
   /** What actually gets drawn: the series, or the basemap when there are none. */
   renderTargets: AnySeries[] = []
   /** World-space label anchors per feature index. */
@@ -482,6 +483,16 @@ class ApexMaps extends BaseChart {
             }),
           )
           break
+        case 'line':
+          this.series.push(
+            new LineSeries({
+              config: cfg,
+              geo,
+              index: i,
+              viewport: this.viewport,
+            }),
+          )
+          break
         case 'choropleth':
         case undefined:
           this.series.push(
@@ -570,13 +581,17 @@ class ApexMaps extends BaseChart {
           break
 
         case 'paths': {
-          const arc = series as ArcSeries
-          this.renderer.drawPaths({ paths: arc.paths(), seriesId: arc.id })
-          const endpoints = arc.endpoints(this.viewport)
+          const pathSeries = series as ArcSeries | LineSeries
+          this.renderer.drawPaths({
+            paths: pathSeries.paths(),
+            seriesId: pathSeries.id,
+            markClass: pathSeries.type === 'line' ? 'apexmaps-line' : undefined,
+          })
+          const endpoints = pathSeries.endpoints(this.viewport)
           if (endpoints.length) {
             this.renderer.drawSymbols({
               symbols: endpoints.map((e) => ({ ...e, stroke: { width: 0 } })),
-              seriesId: `${arc.id}-ends`,
+              seriesId: `${pathSeries.id}-ends`,
             })
           }
           break
@@ -710,7 +725,7 @@ class ApexMaps extends BaseChart {
         continue
       }
 
-      if (series instanceof ArcSeries) {
+      if (series instanceof ArcSeries || series instanceof LineSeries) {
         if (series.colorScale) {
           sections.push({
             title: series.legendTitle(),
@@ -810,7 +825,7 @@ class ApexMaps extends BaseChart {
       // `this.series` rather than `primary`: on a symbol-only map, `primary` is
       // the automatic basemap, which is substrate with nothing to tabulate.
       const dataSeries = this.series.find(
-        (s): s is BubbleSeries | ArcSeries | MarkerSeries => s.kind !== 'features',
+        (s): s is BubbleSeries | ArcSeries | LineSeries | MarkerSeries => s.kind !== 'features',
       )
       if (dataSeries?.items.length) {
         this.a11y.renderTable({
@@ -933,7 +948,7 @@ class ApexMaps extends BaseChart {
       }
     }
 
-    const mark = (series as BubbleSeries | ArcSeries | MarkerSeries).itemAt(item)
+    const mark = (series as BubbleSeries | ArcSeries | LineSeries | MarkerSeries).itemAt(item)
     if (!mark) return null
     return {
       series,
@@ -1639,7 +1654,11 @@ class ApexMaps extends BaseChart {
   /** Rebuild projection-dependent geometry after a projection or size change. */
   private _reprojectSeries(): void {
     for (const series of this.series) {
-      if (series instanceof BubbleSeries || series instanceof ArcSeries) {
+      if (
+        series instanceof BubbleSeries ||
+        series instanceof ArcSeries ||
+        series instanceof LineSeries
+      ) {
         series.reproject(this.viewport)
       }
     }
@@ -1858,7 +1877,7 @@ class ApexMaps extends BaseChart {
         }
         continue
       }
-      for (const item of (series as BubbleSeries | ArcSeries | MarkerSeries).items) {
+      for (const item of (series as BubbleSeries | ArcSeries | LineSeries | MarkerSeries).items) {
         if (item.key && inside(item.anchor)) keys.add(item.key)
       }
     }
@@ -1908,7 +1927,7 @@ class ApexMaps extends BaseChart {
     for (const feature of this.geo?.features ?? []) if (wanted.has(feature.key)) return true
     for (const series of this.series) {
       if (series.kind === 'features') continue
-      for (const item of (series as BubbleSeries | ArcSeries | MarkerSeries).items) {
+      for (const item of (series as BubbleSeries | ArcSeries | LineSeries | MarkerSeries).items) {
         if (wanted.has(item.key)) return true
       }
     }
