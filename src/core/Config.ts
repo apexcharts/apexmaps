@@ -147,6 +147,8 @@ export function defaults(): ResolvedOptions {
       },
       pan: { enabled: true, inertia: true },
       selection: { enabled: true, multiple: true },
+      /** Nearest point mark within this many px catches the pointer. */
+      nearest: { enabled: true, radius: 20 },
     },
 
     a11y: {

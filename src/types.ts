@@ -600,6 +600,15 @@ export interface InteractionOptions {
   }
   pan?: { enabled?: boolean; inertia?: boolean }
   selection?: SelectionOptions
+  /**
+   * Proximity hit assistance for point marks (bubbles, markers, clusters): a
+   * pointer within `radius` screen pixels of a mark hovers and clicks it as if
+   * it were on it, so a 3px bubble does not demand a 3px hit. Nearest mark
+   * wins, the way a Voronoi tessellation would decide it. Direct hits on other
+   * point or path marks still take precedence; area features yield, because on
+   * a choropleth-with-bubbles map everything near a bubble is over a feature.
+   */
+  nearest?: { enabled?: boolean; radius?: number }
 }
 
 export interface A11yOptions {

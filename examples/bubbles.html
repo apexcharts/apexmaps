@@ -16,7 +16,9 @@
           The right mark for absolute magnitudes. Area is proportional to value (square-root radius
           scaling), largest painted first so small circles stay clickable, and the legend nests three
           reference circles so areas can actually be decoded. Zoom in: the circles hold their size,
-          because a radius that grew with the camera would no longer encode the value.
+          because a radius that grew with the camera would no longer encode the value. Hover near a
+          small bubble rather than on it: the nearest mark within 20px catches the pointer, so a 3px
+          circle never demands a 3px hit (<code>interaction.nearest</code> to tune or disable).
         </p>
         <div class="row">
           <select id="scale">

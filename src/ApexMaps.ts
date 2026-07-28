@@ -80,6 +80,7 @@ import type {
   ResolvedOptions,
   ScreenPoint,
   Series,
+  WorldPoint,
 } from './types'
 
 const VERSION = '0.1.0'
@@ -223,6 +224,17 @@ class ApexMaps extends BaseChart {
   private readonly _onMarkPointerOut: (event: Event) => void
   private readonly _onMarkClick: (event: Event) => void
   private readonly _onKeyDown: (event: KeyboardEvent) => void
+  private readonly _onSurfacePointerMove: (event: Event) => void
+  private readonly _onSurfacePointerLeave: () => void
+  private readonly _onSurfaceClick: (event: Event) => void
+
+  /**
+   * The point mark currently hovered by proximity rather than directly. Owning
+   * this separately from `hovered` is what lets the direct handlers know when
+   * to yield: a pointerout from the feature underneath must not clear a hover
+   * that belongs to the bubble beside it.
+   */
+  private _proximity: { seriesId: string; markKey: string | number } | null = null
 
   constructor(element: HTMLElement, options: ApexMapsOptions = {}) {
     super(element)
@@ -237,6 +249,9 @@ class ApexMaps extends BaseChart {
     this._onMarkPointerOut = this._handleMarkPointerOut.bind(this)
     this._onMarkClick = this._handleMarkClick.bind(this)
     this._onKeyDown = this._handleKeyDown.bind(this)
+    this._onSurfacePointerMove = this._handleSurfacePointerMove.bind(this)
+    this._onSurfacePointerLeave = this._handleSurfacePointerLeave.bind(this)
+    this._onSurfaceClick = this._handleSurfaceClick.bind(this)
 
     // No `group` is recorded here on purpose: link groups are read from each
     // peer's live config at broadcast time, so one set through `updateOptions`
@@ -887,6 +902,18 @@ class ApexMaps extends BaseChart {
       layer.addEventListener('click', this._onMarkClick)
       layer.dataset.apexmapsBound = 'true'
     }
+
+    // The proximity pass listens on the whole SVG, because its entire point is
+    // reacting to pointer positions that are NOT on a mark. Click runs in the
+    // capture phase so it can decide before the layer handlers whether this
+    // click belongs to a nearby point mark rather than the feature under it.
+    const root = this.renderer?.root
+    if (root && root.dataset.apexmapsSurfaceBound !== 'true') {
+      root.addEventListener('pointermove', this._onSurfacePointerMove)
+      root.addEventListener('pointerleave', this._onSurfacePointerLeave)
+      root.addEventListener('click', this._onSurfaceClick, true)
+      root.dataset.apexmapsSurfaceBound = 'true'
+    }
   }
 
   /** Resolve a DOM event target to a mark, uniformly across series types. */
@@ -965,6 +992,18 @@ class ApexMaps extends BaseChart {
   private _handleMarkPointerOver(event: Event): void {
     const mark = this._resolveMark(event)
     if (!mark) return
+    // While a proximity hover owns the pointer, crossing into a feature
+    // underneath must not steal it: the reader is still inside the nearby
+    // mark's catchment, and the tooltip they are reading belongs to it. A
+    // direct hit on any other mark takes ownership instead, and has to clear
+    // the proximity hover itself: the usual pointerout cannot do it, because a
+    // proximity-hovered mark is not under the pointer, so there is no element
+    // to leave.
+    if (this._proximity && mark.series.kind === 'features') return
+    if (this._proximity) {
+      this._proximity = null
+      this._clearHover()
+    }
     this._setHover(mark)
     this.emit(mark.feature ? 'featureHover' : 'markHover', this._eventPayload(mark) as never)
   }
@@ -977,6 +1016,7 @@ class ApexMaps extends BaseChart {
 
   private _handleMarkPointerOut(event: Event): void {
     if (!this._resolveMark(event)) return
+    if (this._proximity) return
     this._clearHover()
   }
 
@@ -988,7 +1028,11 @@ class ApexMaps extends BaseChart {
 
     const mark = this._resolveMark(event)
     if (!mark) return
+    this._activateMark(mark)
+  }
 
+  /** Act on a resolved mark, exactly as a direct click on it does. */
+  private _activateMark(mark: ResolvedMark): void {
     // Clicking a cluster means "show me what is in there", so fly to its members
     // rather than selecting an aggregate that is not a data row.
     if (mark.cluster && mark.series instanceof MarkerSeries) {
@@ -1012,6 +1056,185 @@ class ApexMaps extends BaseChart {
 
     if (this.config.interaction.selection?.enabled !== false) this.toggleSelection(mark.key)
     this.emit(mark.feature ? 'featureClick' : 'markClick', this._eventPayload(mark) as never)
+  }
+
+  // --- proximity (the "voronoi" hit layer) -----------------------------------
+
+  /**
+   * The nearest point mark within the proximity radius of a screen position.
+   *
+   * Computed, not rendered: an actual DOM Voronoi layer would swallow pointer
+   * events for the entire plot, taking features and arcs with it, and would
+   * need rebuilding every time clustering or the camera changed. Resolving
+   * nearest-within-a-threshold keeps the property that matters (near a small
+   * mark, the nearest mark wins, exactly where its Voronoi cell would) and
+   * leaves the rest of the map to its own handlers.
+   *
+   * Distances compare in world space, which is safe because the camera scale
+   * is uniform: nearest in world is nearest on screen, and a screen radius
+   * divides by `k` to become a world radius.
+   */
+  private _resolveNearest(point: ScreenPoint): ResolvedMark | null {
+    const cfg = this.config.interaction.nearest ?? {}
+    if (cfg.enabled === false) return null
+
+    const k = this.viewport.camera.k || 1
+    const maxWorld = (cfg.radius ?? 20) / k
+    const pointer = this.viewport.screenToWorld(point)
+
+    let best: {
+      series: BubbleSeries | MarkerSeries
+      item: number
+      cluster: number
+      d2: number
+    } | null = null
+    const consider = (
+      series: BubbleSeries | MarkerSeries,
+      item: number,
+      cluster: number,
+      world: WorldPoint,
+    ) => {
+      const dx = world[0] - pointer[0]
+      const dy = world[1] - pointer[1]
+      const d2 = dx * dx + dy * dy
+      if (!best || d2 < best.d2) best = { series, item, cluster, d2 }
+    }
+
+    for (const series of this.renderTargets) {
+      if (series instanceof BubbleSeries) {
+        series.items.forEach((item, i) => {
+          // The same skip rule as symbols(): what was not drawn cannot be hit.
+          if (item.world && item.radius != null) consider(series, i, -1, item.world)
+        })
+      } else if (series instanceof MarkerSeries) {
+        // The cluster view at the current zoom is what is on screen, so it is
+        // what proximity resolves to: members of a standing cluster are not
+        // individually hittable while it stands in for them.
+        series.clusters(k).forEach((cluster, ci) => {
+          if (cluster.count === 1) consider(series, cluster.members[0], -1, cluster.world)
+          else consider(series, -1, ci, cluster.world)
+        })
+      }
+    }
+
+    if (!best) return null
+    const { series, item, cluster, d2 } = best as {
+      series: BubbleSeries | MarkerSeries
+      item: number
+      cluster: number
+      d2: number
+    }
+    if (d2 > maxWorld * maxWorld) return null
+
+    if (cluster >= 0 && series instanceof MarkerSeries) {
+      const c = series.clusterAt(cluster)
+      if (!c) return null
+      return {
+        series,
+        seriesIndex: series.index,
+        key: `cluster-${cluster}`,
+        name: series.describeCluster(c),
+        value: c.count,
+        datum: c.members.map((m) => series.itemAt(m)?.datum),
+        anchor: c.world,
+        markKey: `cluster-${cluster}`,
+        cluster: c,
+      }
+    }
+
+    const mark = series.itemAt(item)
+    if (!mark) return null
+    return {
+      series,
+      seriesIndex: series.index,
+      key: mark.key,
+      name: mark.name,
+      value: mark.value,
+      datum: mark.datum,
+      anchor: mark.anchor,
+      markKey: mark.key,
+    }
+  }
+
+  /**
+   * The proximity pass, on every pointer move over the plot.
+   *
+   * Direct hits on point and path marks keep precedence, because z-order is
+   * meaningful where marks overlap: the small bubble painted on top of a large
+   * one must win when the pointer is actually on it. Features and empty
+   * basemap yield to a nearby point mark, because on the most common combined
+   * map (bubbles over a choropleth) everything near a bubble is over some
+   * feature, and a proximity assist that only worked over blank ocean would
+   * not be one.
+   */
+  private _handleSurfacePointerMove(event: Event): void {
+    if (!this.plot) return
+    const direct = this._resolveMark(event)
+    if (direct && direct.series.kind !== 'features') {
+      // A real mark is under the pointer; its own handlers own hover.
+      this._proximity = null
+      return
+    }
+
+    const point = pointerPosition(this.plot, event as MouseEvent)
+    const near = this._resolveNearest(point)
+
+    if (near) {
+      const same =
+        this._proximity &&
+        this._proximity.seriesId === near.series.id &&
+        this._proximity.markKey === near.markKey
+      if (!same) {
+        this._clearHover()
+        this._setHover(near)
+        this.emit('markHover', this._eventPayload(near) as never)
+        this._proximity = { seriesId: near.series.id, markKey: near.markKey }
+      } else if (this.tooltip?.visible && this.config.tooltip.followCursor !== false) {
+        this.tooltip.move(point)
+      }
+      return
+    }
+
+    if (this._proximity) {
+      this._proximity = null
+      this._clearHover()
+      // Hand hover back to whatever the pointer is actually over: drifting out
+      // of a bubble's catchment while over a country resumes that country's
+      // tooltip rather than leaving nothing. No pointerover will refire for
+      // it, because the pointer never left the feature's element.
+      if (direct) {
+        this._setHover(direct)
+        this.emit('featureHover', this._eventPayload(direct) as never)
+      }
+    }
+  }
+
+  private _handleSurfacePointerLeave(): void {
+    if (!this._proximity) return
+    this._proximity = null
+    this._clearHover()
+  }
+
+  /**
+   * Capture-phase click companion to the proximity pass, so that what the
+   * tooltip shows is what the click acts on: a click that hover attributed to
+   * a nearby bubble must not select the feature underneath instead.
+   */
+  private _handleSurfaceClick(event: Event): void {
+    if (!this.plot) return
+    // `shouldSwallowClick` is one-shot, so having consumed it this handler
+    // must also stop the event: letting it bubble on would hand the layer
+    // handlers a drag-end click with the swallow flag already spent.
+    if (this.zoomPan?.shouldSwallowClick()) {
+      event.stopPropagation()
+      return
+    }
+    const direct = this._resolveMark(event)
+    if (direct && direct.series.kind !== 'features') return
+    const near = this._resolveNearest(pointerPosition(this.plot, event as MouseEvent))
+    if (!near) return
+    event.stopPropagation()
+    this._activateMark(near)
   }
 
   private _handleKeyDown(event: KeyboardEvent): void {
@@ -2272,6 +2495,11 @@ class ApexMaps extends BaseChart {
       layer.removeEventListener('pointermove', this._onMarkPointerMove)
       layer.removeEventListener('pointerout', this._onMarkPointerOut)
       layer.removeEventListener('click', this._onMarkClick)
+    }
+    if (this.renderer?.root) {
+      this.renderer.root.removeEventListener('pointermove', this._onSurfacePointerMove)
+      this.renderer.root.removeEventListener('pointerleave', this._onSurfacePointerLeave)
+      this.renderer.root.removeEventListener('click', this._onSurfaceClick, true)
     }
 
     this.labels?.destroy()
