@@ -176,6 +176,16 @@ class ApexMaps extends BaseChart {
   mapId?: string
   mapMeta?: MapMeta
 
+  /**
+   * Set by `destroy()` and never cleared: an instance is not reusable.
+   *
+   * `render()` is async (geometry may be a URL or a lazy pack), so a caller that
+   * renders and tears down without awaiting leaves the tail of a render running
+   * against a destroyed map. `rendered` cannot stand in for this, because it is
+   * only set at the end of that same tail.
+   */
+  private _destroyed = false
+
   /** Levels drilled into, outermost first. Empty at the top level. */
   readonly drillPath: { key: string; name?: string; mapId?: string }[] = []
 
@@ -2096,6 +2106,11 @@ class ApexMaps extends BaseChart {
 
   private _evaluateLicense(): void {
     if (!hasDom()) return
+    // A destroyed map is never watermarked. `Watermark.remove` also TRACKS the
+    // container for later reconciliation, so without this a late call would
+    // re-register a container that no longer holds a map, and the next licence
+    // verdict would paint a watermark into it.
+    if (this._destroyed) return
     // The watermark is the trial state for premium capability, not a tax on the
     // free tier: with no premium feature in use it is never added.
     if (this._premiumUsed.size === 0 || LicenseManager.isLicenseValid()) {
@@ -2127,6 +2142,7 @@ class ApexMaps extends BaseChart {
 
   /** Tear down: listeners, observers, animation frames, DOM. */
   override destroy(): void {
+    this._destroyed = true
     if (this._renderRaf !== null) cancelAnimationFrame(this._renderRaf)
     if (this._resizeRaf !== null) cancelAnimationFrame(this._resizeRaf)
     this.camera?.stop()
@@ -2152,7 +2168,14 @@ class ApexMaps extends BaseChart {
     remove(this.plot)
 
     this.element.classList.remove('apexmaps', 'apexmaps--dark')
+    // `remove` also TRACKS the container, because signature verification is
+    // asynchronous and a container that looked licensed at render time may need
+    // correcting a microtask later. That is right while a map is alive and wrong
+    // the moment it is not: without the untrack, a later licence change repaints
+    // a watermark into a container that no longer holds a map, and holds the
+    // element for as long as it stays in the document.
     Watermark.remove(this.element)
+    Watermark.untrack(this.element)
 
     const i = GLOBAL.instances.findIndex((entry) => entry.id === this.getInstanceId())
     if (i !== -1) GLOBAL.instances.splice(i, 1)

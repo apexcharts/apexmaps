@@ -9,22 +9,3 @@ declare module '*.css' {
   const content: string
   export default content
 }
-
-declare module 'apex-commons' {
-  export class LicenseManager {
-    static setLicense(key: string): void
-    static isLicenseValid(): boolean
-    static getLicenseStatus(): {
-      readonly valid: boolean
-      readonly expired: boolean
-      readonly message?: string
-      readonly data?: Record<string, unknown>
-    }
-  }
-
-  export class Watermark {
-    static add(container: HTMLElement): void
-    static remove(container: HTMLElement): void
-    static exists(container: HTMLElement): boolean
-  }
-}
