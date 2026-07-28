@@ -59,6 +59,7 @@ export type {
   TooltipOptions,
 } from './types'
 
+export type { ExportOptions } from './export/Exporter'
 export type { MapMeta } from './core/MapRegistry'
 export type { Palette, PaletteKind } from './scales/Palettes'
 export type { JoinResult, JoinSuggestion } from './data/Join'

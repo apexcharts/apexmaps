@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Export · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+    <style>
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 12px 0 4px;
+      }
+      .toolbar button {
+        font: inherit;
+        padding: 6px 14px;
+        border: 1px solid var(--card-border);
+        border-radius: 6px;
+        background: var(--card-bg);
+        color: var(--page-fg);
+        cursor: pointer;
+      }
+      .toolbar button:hover {
+        border-color: var(--accent);
+      }
+      #preview {
+        margin-top: 8px;
+      }
+      #preview img {
+        max-width: 100%;
+        border: 1px dashed var(--card-border);
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Export</nav>
+
+      <div class="card">
+        <h1>Static export</h1>
+        <p class="note">
+          The current view, exactly as styled, leaves the page as a file. Zoom or pan first: the
+          export is what you see, not a reset view. SVG stays vector and transparent; PNG rasterizes
+          at 2× density against the page background, so a dark theme exports dark. The legend is
+          HTML alongside the plot, so the export is the map itself.
+        </p>
+        <div id="map"></div>
+        <div class="toolbar">
+          <button id="dl-svg">Download SVG</button>
+          <button id="dl-png">Download PNG</button>
+          <button id="show-uri">Preview via dataURI()</button>
+        </div>
+        <div id="preview"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">The whole API</h2>
+        <pre>
+map.exportSVG({ filename: 'sales-by-country' })      // vector, transparent
+await map.exportPNG({ scale: 2 })                    // raster, page background
+const { imgURI } = await map.dataURI()               // embed instead of download
+const markup = map.getSvgString()                    // the raw standalone SVG</pre
+        >
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      Demo.ready(
+        Demo.names('world-countries-110m.json').then((names) => {
+          const map = Demo.watch(
+            'export',
+            new ApexMaps(document.getElementById('map'), {
+              chart: { height: 480 },
+              geo: { map: 'world/countries@110m' },
+              series: [
+                {
+                  name: 'Index score',
+                  joinBy: 'name',
+                  data: names.map((name) => ({ name, value: Demo.value(name) })),
+                },
+              ],
+            }),
+          )
+
+          document.getElementById('dl-svg').addEventListener('click', () => {
+            map.exportSVG({ filename: 'apexmaps-demo' })
+          })
+          document.getElementById('dl-png').addEventListener('click', () => {
+            map.exportPNG({ filename: 'apexmaps-demo' }).catch((error) => alert(error.message))
+          })
+          document.getElementById('show-uri').addEventListener('click', async () => {
+            try {
+              const { imgURI } = await map.dataURI()
+              document.getElementById('preview').innerHTML =
+                '<p class="note">An &lt;img&gt; whose src is the exported data URI:</p>' +
+                `<img alt="PNG export preview" src="${imgURI}" />`
+            } catch (error) {
+              alert(error.message)
+            }
+          })
+
+          return map.render()
+        }),
+      )
+    </script>
+  </body>
+</html>

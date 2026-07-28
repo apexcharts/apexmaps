@@ -31,6 +31,14 @@ import { Camera } from './geo/Camera'
 import { registerProjection, listProjections } from './geo/Projections'
 import type { ProjectionFactory } from './geo/Projections'
 import { SvgRenderer } from './renderers/SvgRenderer'
+import {
+  serializeSvg,
+  rasterize,
+  download,
+  inheritedBackground,
+  blobToDataUrl,
+} from './export/Exporter'
+import type { ExportOptions } from './export/Exporter'
 import { ChoroplethSeries } from './series/Choropleth'
 import { BubbleSeries } from './series/Bubble'
 import { MarkerSeries } from './series/Marker'
@@ -1966,6 +1974,74 @@ class ApexMaps extends BaseChart {
         typeof value === 'function' ? undefined : value,
       ),
     ) as ApexMapsOptions
+  }
+
+  // --- export ---------------------------------------------------------------
+
+  /**
+   * The current view as a standalone SVG document.
+   *
+   * Computed styles are inlined, so dark mode, custom properties and everything
+   * else the stylesheet decides survive leaving the page. The legend and
+   * tooltips are HTML outside the SVG, so the export is the map plot itself.
+   */
+  getSvgString(options: ExportOptions = {}): string {
+    const root = this.renderer?.root
+    if (!root) {
+      throw new Error('Nothing to export yet: render() must complete first.')
+    }
+    return serializeSvg(root, options)
+  }
+
+  /** Download the current view as an `.svg` file. */
+  exportSVG(options: ExportOptions = {}): void {
+    const markup = this.getSvgString(options)
+    const payload =
+      typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
+        ? new Blob([markup], { type: 'image/svg+xml;charset=utf-8' })
+        : `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`
+    download(payload, `${this._exportFilename(options)}.svg`)
+  }
+
+  /**
+   * Download the current view as a `.png`.
+   *
+   * `scale` multiplies pixel density (default 2, which survives print and
+   * retina). The background defaults to the container's own, falling back to
+   * white, so a dark-mode map arrives dark rather than as pale strokes on
+   * transparency.
+   */
+  async exportPNG(options: ExportOptions = {}): Promise<void> {
+    const blob = await this._exportRaster(options)
+    const payload =
+      typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
+        ? blob
+        : await blobToDataUrl(blob)
+    download(payload, `${this._exportFilename(options)}.png`)
+  }
+
+  /**
+   * The current view as a PNG data URI, for embedding rather than downloading.
+   * Mirrors `chart.dataURI()` in core apexcharts.
+   */
+  async dataURI(options: ExportOptions = {}): Promise<{ imgURI: string }> {
+    const blob = await this._exportRaster(options)
+    return { imgURI: await blobToDataUrl(blob) }
+  }
+
+  private async _exportRaster(options: ExportOptions): Promise<Blob> {
+    const background = options.background ?? inheritedBackground(this.element) ?? '#ffffff'
+    const markup = this.getSvgString({ ...options, background })
+    return rasterize(markup, {
+      width: this.viewport.width,
+      height: this.viewport.height,
+      scale: options.scale,
+    })
+  }
+
+  private _exportFilename(options: ExportOptions): string {
+    if (options.filename) return options.filename
+    return this.mapId ? `apexmaps-${this.mapId.replace(/[^\w.-]+/g, '-')}` : 'apexmaps'
   }
 
   // --- events ---------------------------------------------------------------
