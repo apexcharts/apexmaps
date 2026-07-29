@@ -16,7 +16,16 @@ export default [
     },
     rules: {
       'no-unused-vars': 'off',
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          // `const { series: _series, ...rest } = options` names a key in order to
+          // *exclude* it from the rest, which is a use rather than an oversight.
+          ignoreRestSiblings: true,
+        },
+      ],
       // The geo and topojson ecosystems are loosely typed at their boundaries, and
       // forcing them into precise shapes obscures more than it protects.
       '@typescript-eslint/no-explicit-any': 'off',
@@ -25,6 +34,8 @@ export default [
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'examples/data/**'],
+    // `**/dist/**` rather than `dist/**`: the wrappers build into their own dist,
+    // and linting a minified bundle reports a hundred things about terser's output.
+    ignores: ['**/dist/**', '**/node_modules/**', 'coverage/**', 'examples/data/**'],
   },
 ]

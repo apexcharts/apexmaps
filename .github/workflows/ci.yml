@@ -25,6 +25,14 @@ jobs:
       - run: npm run build
       # The 150 kB gzipped budget.
       - run: npm run check:size
+      # Wrappers resolve `apexmaps` the way a consumer does, through the package's
+      # own declarations, so they come after `npm run build` emitted them. This is
+      # the point of keeping them in this repository: a core option shape that no
+      # longer matches a wrapper prop fails here rather than in someone's app.
+      - run: npm run typecheck --workspaces --if-present
+      - run: npm run build:wrappers
+      # 'use client' survives, and react and apexmaps stayed external.
+      - run: npm run check:wrappers
 
   demos:
     runs-on: ubuntu-latest

@@ -76,6 +76,65 @@ async function render(options = {}) {
   return map
 }
 
+describe('chart.width and chart.height after render', () => {
+  /**
+   * Found while building the React wrapper, whose natural way to express a size
+   * is a prop that becomes `updateOptions({ chart: { height } })`.
+   *
+   * A size only takes effect once it is measured: the viewport, the plot box, the
+   * renderer surfaces and every projected coordinate come from that measurement.
+   * `render()` measured, and the ResizeObserver measured, but the observer is only
+   * attached when a size is a *string* (fluid), so an explicit numeric height
+   * changed the config and nothing else, with nothing thrown and no warning. The
+   * fourth instance of the same shape: implemented, declared, and never read.
+   */
+  it('resizes the viewport and the plot when a numeric size changes', async () => {
+    await render()
+    expect(map.viewport.height).toBe(300)
+
+    await map.updateOptions({ chart: { height: 520, width: 640 } })
+
+    expect(map.viewport.height).toBe(520)
+    expect(map.viewport.width).toBe(640)
+    expect(map.plot.style.height).toBe('520px')
+    expect(map.plot.style.width).toBe('640px')
+  })
+
+  it('reprojects, so geometry fills the new box rather than the old one', async () => {
+    await render()
+    const pathOf = () =>
+      (map.renderer.pathFor('s0', 'AAA') || map.renderer.pathFor('base', 'AAA'))?.getAttribute('d')
+    const before = pathOf()
+    expect(before).toBeTruthy()
+
+    await map.updateOptions({ chart: { height: 900 } })
+
+    // The element is reused, which is the point of the mark store, so the geometry
+    // is the thing to compare. Without the reprojection this is byte-identical and
+    // the map is simply drawn small inside a tall box.
+    expect(pathOf()).not.toBe(before)
+  })
+
+  it('emits resized, the same as a container-driven resize', async () => {
+    await render()
+    const seen = []
+    map.on('resized', (payload) => seen.push(payload))
+
+    await map.updateOptions({ chart: { height: 480 } })
+
+    expect(seen).toEqual([{ width: 400, height: 480 }])
+  })
+
+  it('does not relayout when the size did not change', async () => {
+    await render()
+    const spy = vi.spyOn(map.viewport, 'resize')
+
+    await map.updateOptions({ scale: { type: 'quantize' } })
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+})
+
 describe('inline geometry across option updates', () => {
   it('is not re-ingested when unrelated options change', async () => {
     // Merging used to clone object-form geo.map on every rebuild, so the

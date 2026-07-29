@@ -21,6 +21,9 @@
   "files": [
     "dist"
   ],
+  "workspaces": [
+    "wrappers/*"
+  ],
   "dependencies": {
     "apex-commons": "^0.2.0",
     "d3-geo": "^3.1.1",
@@ -29,19 +32,22 @@
   "scripts": {
     "prebuild": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "rollup -c && npm run build:types",
+    "build:wrappers": "npm run build --workspaces --if-present",
     "examples": "npm run build && node scripts/serve.mjs 8084",
     "serve": "node scripts/serve.mjs",
     "check:examples": "node scripts/check-examples.mjs",
     "check:size": "node scripts/check-size.mjs",
     "check:geo": "node scripts/check-geo-package.mjs",
     "check:geo-source": "node scripts/check-geo-source.mjs",
+    "check:wrappers": "node scripts/check-wrappers.mjs",
     "build:types": "tsc -p tsconfig.json",
     "dev": "rollup -c -w --bundleConfigAsCjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:wrappers": "npm run build:types && npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/**/*.mjs\" \"wrappers/*/src/**/*.ts\" \"wrappers/*/test/**/*.ts\" \"wrappers/*/*.js\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/**/*.mjs\" \"wrappers/*/src/**/*.ts\" \"wrappers/*/test/**/*.ts\" \"wrappers/*/*.js\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

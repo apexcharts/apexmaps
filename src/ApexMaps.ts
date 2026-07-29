@@ -2298,6 +2298,9 @@ class ApexMaps extends BaseChart {
     const mapChanged = previous.geo?.map !== this.config.geo?.map
     const projectionChanged =
       JSON.stringify(previous.geo?.projection) !== JSON.stringify(this.config.geo?.projection)
+    const sizeChanged =
+      previous.chart?.width !== this.config.chart?.width ||
+      previous.chart?.height !== this.config.chart?.height
 
     if (redrawGeometry || mapChanged || projectionChanged) {
       if (mapChanged) {
@@ -2322,9 +2325,22 @@ class ApexMaps extends BaseChart {
     this._applyStateVars()
     this.warnings = []
     this._buildSeries()
-    this._draw()
-    this.renderer?.applyCamera()
-    this.canvas?.applyCamera()
+
+    if (sizeChanged) {
+      // A size given as an option has to be measured to take effect: the viewport,
+      // the plot box, the renderer surfaces and every projected coordinate are all
+      // derived from it. Only `render()` and the ResizeObserver did that, and the
+      // observer only watches when a size is a *string*, so
+      // `updateOptions({ chart: { height: 520 } })` changed the config and nothing
+      // else, silently. `_relayout` is the path the observer already uses, so a
+      // size set as an option and a size set by the container now agree, including
+      // on keeping the reader's camera position.
+      this._relayout()
+    } else {
+      this._draw()
+      this.renderer?.applyCamera()
+      this.canvas?.applyCamera()
+    }
 
     // The interaction tree is plain data (no formatters), so a JSON comparison is
     // exact. Recreating drops any gesture mid-flight, which is why it only happens

@@ -42,6 +42,29 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Components | Classed, gradient and nested-circle legends, HTML tooltips with edge flipping, collision-avoiding labels with halos |
 | Accessibility | ARIA roles, auto-generated description, roving-tabindex keyboard navigation, live-region announcements, optional data table, `prefers-reduced-motion` |
 | Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 54 kB gzipped core |
+| Frameworks | [`react-apexmaps`](wrappers/react), typed against this package's own options |
+
+## React
+
+```sh
+npm install apexmaps react-apexmaps
+```
+
+```jsx
+import ApexMaps from 'react-apexmaps'
+
+<ApexMaps
+  options={{ geo: { map: 'world/countries@110m' } }}
+  series={[{ name: 'Unemployment rate', joinBy: ['iso_a3', 'code'], data }]}
+  onFeatureClick={({ key }) => setSelected(key)}
+  height={480}
+/>
+```
+
+Props are compared deeply, so passing a fresh `options` object on every parent render (which is what
+React does) is not a redraw, and a series-only change still tweens rather than rebuilding the DOM. See
+[wrappers/react](wrappers/react) for the props, the events and the sizing rules. Vue, Svelte and
+Angular wrappers live in the same tree and are not built yet.
 
 ## Try the examples
 
@@ -554,7 +577,7 @@ views, and `mapMeta(id).boundaries` says so.
 ## Development
 
 ```sh
-npm test                # vitest, 312 tests, including the real geometry packs and perf invariants
+npm test                # vitest, 474 tests, including the real geometry packs and perf invariants
 npm run test:coverage
 npm run lint
 npm run typecheck
@@ -566,7 +589,16 @@ npm run check:geo-source # verify the default CDN geometry source actually serve
 npm run examples        # build, then serve examples/ on :8084
 npm run check:examples  # load every demo in Chromium, fail on an error or an empty map
 npm run data:build      # regenerate geo/ from source (needs network, ~45 MB of downloads)
+
+npm run build:wrappers     # build every package under wrappers/ (needs npm run build first)
+npm run typecheck:wrappers # check wrapper props against this package's emitted declarations
+npm run check:wrappers     # packaging: 'use client' survives, peers stayed external
 ```
+
+The framework wrappers are npm workspaces, so one `npm install` covers them and `npm test` runs their
+tests alongside the core's. They resolve `apexmaps` through its published `exports`, which is why
+`build:wrappers` and `typecheck:wrappers` want `npm run build` first: they check the type surface a
+consumer actually gets, not the source.
 
 All of it runs on every push and pull request (`.github/workflows/ci.yml`), including the bundle
 budget and the demo smoke check, so a claim in this file is a job in that one.

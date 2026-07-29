@@ -1,0 +1,56 @@
+{
+  "name": "react-apexmaps",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "React component for ApexMaps",
+  "main": "dist/react-apexmaps.cjs",
+  "module": "dist/react-apexmaps.esm.js",
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/react-apexmaps.esm.js",
+      "require": "./dist/react-apexmaps.cjs",
+      "default": "./dist/react-apexmaps.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "apexmaps": "^0.1.0",
+    "react": ">=18.0.0"
+  },
+  "scripts": {
+    "prebuild": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "rollup -c && npm run build:types",
+    "build:types": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "apexmaps",
+    "react",
+    "maps",
+    "choropleth",
+    "geojson",
+    "data-visualization"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apexcharts/apexmaps.git",
+    "directory": "wrappers/react"
+  },
+  "homepage": "https://github.com/apexcharts/apexmaps/tree/main/wrappers/react#readme",
+  "bugs": {
+    "url": "https://github.com/apexcharts/apexmaps/issues"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "devDependencies": {
+    "@types/react": "^19.2.2",
+    "apexmaps": "file:../..",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}
