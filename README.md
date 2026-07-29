@@ -42,7 +42,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Components | Classed, gradient and nested-circle legends, HTML tooltips with edge flipping, collision-avoiding labels with halos |
 | Accessibility | ARIA roles, auto-generated description, roving-tabindex keyboard navigation, live-region announcements, optional data table, `prefers-reduced-motion` |
 | Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 54 kB gzipped core |
-| Frameworks | [`react-apexmaps`](wrappers/react) and [`vue-apexmaps`](wrappers/vue), typed against this package's own options |
+| Frameworks | [`react-apexmaps`](wrappers/react), [`vue-apexmaps`](wrappers/vue) and [`ngx-apexmaps`](wrappers/angular), typed against this package's own options |
 
 ## React
 
@@ -77,7 +77,22 @@ npm install apexmaps vue-apexmaps
 
 Built for the Vue change model rather than adapted from the React one: mutating `options` in place on
 reactive state is seen, and no reactive proxy ever reaches the map. See [wrappers/vue](wrappers/vue).
-Svelte and Angular wrappers will live in the same tree and are not built yet.
+
+## Angular
+
+```sh
+npm install apexmaps ngx-apexmaps
+```
+
+```html
+<apx-map [options]="options" [series]="series()" [height]="480" (featureClick)="onClick($event)" />
+```
+
+A standalone component with signal inputs, zoneless-ready, and peers of `@angular/core` and
+`apexmaps` alone. The map runs outside the Angular zone (pointer traffic never triggers change
+detection) and outputs re-enter it, so handlers that set state repaint in zoned and zoneless apps
+alike. See [wrappers/angular](wrappers/angular). A Svelte wrapper will live in the same tree and is
+not built yet.
 
 ## Try the examples
 
@@ -605,13 +620,19 @@ npm run data:build      # regenerate geo/ from source (needs network, ~45 MB of 
 
 npm run build:wrappers     # build every package under wrappers/ (needs npm run build first)
 npm run typecheck:wrappers # check wrapper props against this package's emitted declarations
-npm run check:wrappers     # packaging: 'use client' survives, peers stayed external
+npm run check:wrappers     # packaging: 'use client' survives, peers external, wrappers subpath imported
 ```
 
 The framework wrappers are npm workspaces, so one `npm install` covers them and `npm test` runs their
 tests alongside the core's. They resolve `apexmaps` through its published `exports`, which is why
 `build:wrappers` and `typecheck:wrappers` want `npm run build` first: they check the type surface a
 consumer actually gets, not the source.
+
+The Angular suite goes one step further and tests the built `ngx-apexmaps` package itself, because
+signal inputs and outputs are initializer APIs that only exist after the Angular compiler has run:
+plain type-stripping never registers them. So `npm test` on a fresh clone wants
+`npm run build && npm run build:wrappers` first; without them the Angular tests fail with exactly
+that instruction rather than a resolution error.
 
 All of it runs on every push and pull request (`.github/workflows/ci.yml`), including the bundle
 budget and the demo smoke check, so a claim in this file is a job in that one.

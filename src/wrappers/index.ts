@@ -1,5 +1,5 @@
 /**
- * Change detection, shared by every framework wrapper.
+ * Change detection for the framework wrappers, published as `apexmaps/wrappers`.
  *
  * A caller writes `options={{ geo: { map: 'world' } }}` inline, so a fresh object
  * arrives on every parent render and reference equality is useless: it would
@@ -7,19 +7,26 @@
  * any hover state with it. So the comparison has to be deep, and three of its
  * rules are deliberate rather than obvious.
  *
- * This package is **never published**. Each wrapper bundles it, so it is a
- * devDependency there and `check-wrappers` asserts it does not survive as an
- * import in the built output. It exists because the rules below are decisions
- * about the *core's* semantics rather than about any one framework: geometry is
- * passed by reference, `updateSeries` tweens where `updateOptions` redraws, and an
- * inline formatter is not a change. Four copies of that reasoning would drift, and
- * a wrapper whose diffing subtly disagreed with another's would be very hard to
- * explain to whoever hit it.
+ * This entry exists for the official wrappers and makes no independent semver
+ * promises; nothing here is part of the map API. It lives in the *core* package,
+ * as a separate export that costs the main bundle nothing, for two reasons:
  *
- * @module apexmaps-wrapper-internals
+ * - The rules below are decisions about the core's semantics rather than about
+ *   any framework: geometry is passed by reference, `updateSeries` tweens where
+ *   `updateOptions` redraws, an inline formatter is not a change. When the core
+ *   changes one of those semantics, the diffing that encodes it changes in the
+ *   same commit and ships in the same version, and every wrapper picks it up
+ *   through the peer dependency it already has. The first design bundled a copy
+ *   into each wrapper, which froze the rules at each wrapper's publish date and
+ *   let them drift from the core they describe.
+ * - The wrappers cannot all bundle it anyway: ng-packagr requires every source
+ *   file under the package's own root, so the Angular wrapper can neither
+ *   compile a shared sibling in nor depend on something unpublished.
+ *
+ * @module wrappers
  */
 
-import type { ApexMapsOptions } from 'apexmaps'
+import type { ApexMapsOptions } from '../types'
 
 /** Already-compared (a, b) pairs, so a cyclic structure terminates. */
 type Pairs = WeakMap<object, WeakSet<object>>

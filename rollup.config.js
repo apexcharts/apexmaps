@@ -107,4 +107,27 @@ export default [
     },
     plugins: plugins(false),
   },
+  {
+    // The `apexmaps/wrappers` subpath: change detection for the framework
+    // wrappers. A separate entry on purpose, so it costs the main bundle nothing
+    // and a map-only consumer never loads it. It imports types alone, so the
+    // output has no runtime imports; both formats exist because the React and
+    // Vue wrappers each ship a CJS build whose `require` must resolve.
+    input: 'src/wrappers/index.ts',
+    output: [
+      {
+        file: 'dist/wrappers.esm.js',
+        format: 'es',
+        exports: 'named',
+        sourcemap: !production,
+      },
+      {
+        file: 'dist/wrappers.cjs',
+        format: 'cjs',
+        exports: 'named',
+        sourcemap: !production,
+      },
+    ],
+    plugins: plugins(false),
+  },
 ]

@@ -13,6 +13,7 @@
  * `apexmaps/apexmaps.css`, which must keep resolving through the package.
  */
 import { defineConfig } from 'vitest/config'
+import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 export default defineConfig({
@@ -21,6 +22,24 @@ export default defineConfig({
       {
         find: /^apexmaps$/,
         replacement: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
+      },
+      {
+        find: /^apexmaps\/wrappers$/,
+        replacement: fileURLToPath(new URL('./src/wrappers/index.ts', import.meta.url)),
+      },
+      {
+        // The Angular wrapper is tested as its BUILT package, because signal
+        // inputs, outputs and signal queries are initializer APIs that exist
+        // only after the Angular compiler has run: pure JIT over type-stripped
+        // source never registers them. The dist FESM carries partial-Ivy
+        // declarations that JIT-link at runtime, and its own `apexmaps` imports
+        // still resolve through the aliases above, so there is exactly one core
+        // class in the process. When the dist is missing the alias points at a
+        // module that throws instructions instead of a resolution error.
+        find: /^ngx-apexmaps$/,
+        replacement: existsSync(new URL('./wrappers/angular/dist/fesm2022/ngx-apexmaps.mjs', import.meta.url))
+          ? fileURLToPath(new URL('./wrappers/angular/dist/fesm2022/ngx-apexmaps.mjs', import.meta.url))
+          : fileURLToPath(new URL('./wrappers/angular/test/not-built.ts', import.meta.url)),
       },
     ],
   },

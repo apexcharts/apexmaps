@@ -29,13 +29,15 @@ const WRAPPERS = join(ROOT, 'wrappers')
  * Specifiers that must stay external, keyed by nothing: whichever of these is a
  * declared peer of the wrapper must appear as an import in its bundle.
  */
-const MUST_BE_EXTERNAL = ['react', 'vue', 'apexmaps']
+const MUST_BE_EXTERNAL = ['react', 'vue', '@angular/core', 'apexmaps']
 
 /**
- * The private workspace the wrappers share. It is never published, so a bundle
- * that still imports it would be installable and broken.
+ * Change detection lives at `apexmaps/wrappers`, a subpath of the peer. Every
+ * wrapper must import it rather than inline a frozen copy, because an inlined
+ * copy stops tracking the core semantics it encodes: the rules ship with the
+ * core precisely so that a semantics change and the diffing that reflects it
+ * arrive in the same package version.
  */
-const MUST_BE_INLINED = ['apexmaps-wrapper-internals']
 
 const rows = []
 const failures = []
@@ -109,10 +111,10 @@ for (const name of packages) {
       }
     }
 
-    for (const bare of MUST_BE_INLINED) {
-      if (imports(source, bare)) {
-        problems.push(`${file} imports '${bare}', which is private and not published`)
-      }
+    if (peers.includes('apexmaps') && !imports(source, 'apexmaps/wrappers')) {
+      problems.push(
+        `${file} does not import 'apexmaps/wrappers': the change detection was inlined or dropped`,
+      )
     }
   }
 

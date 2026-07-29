@@ -17,7 +17,7 @@ import { createElement, useEffect, useRef } from 'react'
 import type { HTMLAttributes } from 'react'
 import ApexMaps from 'apexmaps'
 import type { ApexMapsEventMap, ApexMapsEventName, ApexMapsOptions, Series } from 'apexmaps'
-import { equal, sameOptions } from 'apexmaps-wrapper-internals'
+import { equal, sameOptions } from 'apexmaps/wrappers'
 
 /**
  * Every core event, as a prop.

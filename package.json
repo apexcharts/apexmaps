@@ -14,6 +14,12 @@
       "default": "./dist/apexmaps.cjs"
     },
     "./apexmaps.css": "./dist/apexmaps.css",
+    "./wrappers": {
+      "types": "./dist/types/wrappers/index.d.ts",
+      "import": "./dist/wrappers.esm.js",
+      "require": "./dist/wrappers.cjs",
+      "default": "./dist/wrappers.cjs"
+    },
     "./dist/*": "./dist/*",
     "./package.json": "./package.json"
   },

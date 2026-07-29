@@ -10,9 +10,8 @@ const production = !process.env.ROLLUP_WATCH
  * watchers; two copies of ApexMaps means two registries, so `registerMap`
  * populates one and the map reads the other.
  *
- * `apexmaps-wrapper-internals` is deliberately absent: it is private, never
- * published, and must be inlined here. `npm run check:wrappers` asserts it did not
- * survive as an import.
+ * The shared change detection is `apexmaps/wrappers`, a subpath of the peer, so
+ * the same pattern covers it: external, resolved at the consumer's install.
  */
 const external = [/^vue(\/.*)?$/, /^apexmaps(\/.*)?$/]
 

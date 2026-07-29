@@ -8,7 +8,8 @@ const production = !process.env.ROLLUP_WATCH
  * `react` and `apexmaps` are peers and must stay external: bundling either one
  * gives the consumer a second copy of React (hooks throw across copies) or a
  * second ApexMaps, whose registries live on `globalThis` and would then be
- * populated in one copy and read from the other.
+ * populated in one copy and read from the other. The shared change detection is
+ * `apexmaps/wrappers`, a subpath of the peer, so the same rule covers it.
  */
 const external = [/^react(\/.*)?$/, /^apexmaps(\/.*)?$/]
 

@@ -51,7 +51,6 @@
   "devDependencies": {
     "@vue/test-utils": "^2.4.11",
     "apexmaps": "file:../..",
-    "apexmaps-wrapper-internals": "*",
     "vue": "^3.5.40"
   }
 }

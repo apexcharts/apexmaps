@@ -19,13 +19,7 @@ import { defineComponent, h, onBeforeUnmount, onMounted, ref, shallowRef, toRaw,
 import type { PropType } from 'vue'
 import ApexMaps from 'apexmaps'
 import type { ApexMapsEventName, ApexMapsOptions, Series } from 'apexmaps'
-import {
-  equal,
-  sameOptions,
-  snapshotOptions,
-  snapshotSeries,
-  withoutData,
-} from 'apexmaps-wrapper-internals'
+import { equal, sameOptions, snapshotOptions, snapshotSeries, withoutData } from 'apexmaps/wrappers'
 
 /**
  * Every core event, emitted under its own name.

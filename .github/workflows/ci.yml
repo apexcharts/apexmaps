@@ -21,7 +21,6 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check
-      - run: npm test
       - run: npm run build
       # The 150 kB gzipped budget.
       - run: npm run check:size
@@ -29,9 +28,14 @@ jobs:
       # own declarations, so they come after `npm run build` emitted them. This is
       # the point of keeping them in this repository: a core option shape that no
       # longer matches a wrapper prop fails here rather than in someone's app.
-      - run: npm run typecheck --workspaces --if-present
       - run: npm run build:wrappers
-      # 'use client' survives, and react and apexmaps stayed external.
+      - run: npm run typecheck --workspaces --if-present
+      # Tests run after both builds, because the Angular suite exercises the built
+      # ngx-apexmaps package: signal inputs and outputs are initializer APIs that
+      # only exist after the Angular compiler has run, so its partial-Ivy dist is
+      # the thing under test (and the thing consumers install).
+      - run: npm test
+      # 'use client' survives, peers stayed external, apexmaps/wrappers imported.
       - run: npm run check:wrappers
 
   demos:

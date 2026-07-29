@@ -1,0 +1,54 @@
+{
+  "name": "ngx-apexmaps",
+  "version": "0.1.0",
+  "description": "Angular component for ApexMaps",
+  "module": "dist/fesm2022/ngx-apexmaps.mjs",
+  "types": "dist/types/ngx-apexmaps.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/ngx-apexmaps.d.ts",
+      "default": "./dist/fesm2022/ngx-apexmaps.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@angular/core": ">=20.0.0",
+    "apexmaps": "^0.1.0"
+  },
+  "dependencies": {
+    "tslib": "^2.8.1"
+  },
+  "scripts": {
+    "prebuild": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "ng-packagr -p ng-package.json -c tsconfig.lib.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "apexmaps",
+    "angular",
+    "maps",
+    "choropleth",
+    "geojson",
+    "data-visualization"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apexcharts/apexmaps.git",
+    "directory": "wrappers/angular"
+  },
+  "homepage": "https://github.com/apexcharts/apexmaps/tree/main/wrappers/angular#readme",
+  "bugs": {
+    "url": "https://github.com/apexcharts/apexmaps/issues"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "devDependencies": {
+    "@angular/compiler": "^22.0.8",
+    "@angular/compiler-cli": "^22.0.8",
+    "@angular/core": "^22.0.8",
+    "@angular/platform-browser": "^22.0.8",
+    "apexmaps": "file:../..",
+    "ng-packagr": "^22.1.0",
+    "rxjs": "^7.8.2",
+    "zone.js": "^0.15.1"
+  }
+}
