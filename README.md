@@ -42,7 +42,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Components | Classed, gradient and nested-circle legends, HTML tooltips with edge flipping, collision-avoiding labels with halos |
 | Accessibility | ARIA roles, auto-generated description, roving-tabindex keyboard navigation, live-region announcements, optional data table, `prefers-reduced-motion` |
 | Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 54 kB gzipped core |
-| Frameworks | [`react-apexmaps`](wrappers/react), typed against this package's own options |
+| Frameworks | [`react-apexmaps`](wrappers/react) and [`vue-apexmaps`](wrappers/vue), typed against this package's own options |
 
 ## React
 
@@ -63,8 +63,21 @@ import ApexMaps from 'react-apexmaps'
 
 Props are compared deeply, so passing a fresh `options` object on every parent render (which is what
 React does) is not a redraw, and a series-only change still tweens rather than rebuilding the DOM. See
-[wrappers/react](wrappers/react) for the props, the events and the sizing rules. Vue, Svelte and
-Angular wrappers live in the same tree and are not built yet.
+[wrappers/react](wrappers/react) for the props, the events and the sizing rules.
+
+## Vue 3
+
+```sh
+npm install apexmaps vue-apexmaps
+```
+
+```vue
+<ApexMaps :options="options" :series="series" :height="480" @feature-click="onClick" />
+```
+
+Built for the Vue change model rather than adapted from the React one: mutating `options` in place on
+reactive state is seen, and no reactive proxy ever reaches the map. See [wrappers/vue](wrappers/vue).
+Svelte and Angular wrappers will live in the same tree and are not built yet.
 
 ## Try the examples
 
@@ -577,7 +590,7 @@ views, and `mapMeta(id).boundaries` says so.
 ## Development
 
 ```sh
-npm test                # vitest, 474 tests, including the real geometry packs and perf invariants
+npm test                # vitest, 498 tests, including the real geometry packs and perf invariants
 npm run test:coverage
 npm run lint
 npm run typecheck

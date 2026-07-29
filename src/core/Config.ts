@@ -262,6 +262,35 @@ export function merge<T>(target: T, source: unknown): T {
   return out as unknown as T
 }
 
+/**
+ * `merge`, but object-form geometry is carried by reference rather than cloned.
+ *
+ * The same rule `buildConfig` applies, in the one other place that merges caller
+ * options. It was missing here until 2026-07-29, and the guard in `buildConfig`
+ * only held for callers who left `geo` out of every update: a framework binding
+ * hands over the whole options tree on every change, so it cloned a possibly
+ * multi-megabyte topology each time, and the clone then made the next call's
+ * identity check see a different map, which re-resolved it, re-ingested it, and
+ * abandoned the drilldown trail. For a legend tweak.
+ *
+ * Geometry is data, not configuration. There is nothing to merge inside it.
+ */
+export function mergeOptions<T extends { geo?: { map?: unknown } }>(target: T, source: unknown): T {
+  const map = (source as T | undefined)?.geo?.map
+  if (map == null || typeof map !== 'object') return merge(target, source)
+
+  // `merge` skips undefined values, so blanking the key here leaves whatever the
+  // target held, and the assignment below then sets the caller's own reference.
+  const out = merge(target, {
+    ...(source as Record<string, unknown>),
+    geo: { ...(source as T).geo, map: undefined },
+  })
+  const geo = (out.geo ?? {}) as Record<string, unknown>
+  geo.map = map
+  out.geo = geo as T['geo']
+  return out
+}
+
 export function isPlainObject(v: unknown): v is Record<string, unknown> {
   if (v === null || typeof v !== 'object') return false
   if (Array.isArray(v)) return false

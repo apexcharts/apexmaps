@@ -1,0 +1,20 @@
+{
+  "name": "apexmaps-wrapper-internals",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Change detection shared by the ApexMaps framework wrappers. Never published: each wrapper bundles it.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "apexmaps": "file:../.."
+  },
+  "license": "SEE LICENSE IN LICENSE"
+}

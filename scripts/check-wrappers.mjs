@@ -25,14 +25,29 @@ import { join, resolve } from 'node:path'
 const ROOT = resolve(import.meta.dirname, '..')
 const WRAPPERS = join(ROOT, 'wrappers')
 
-/** Bare specifiers that must stay external in every wrapper build. */
-const MUST_BE_EXTERNAL = ['react', 'apexmaps']
+/**
+ * Specifiers that must stay external, keyed by nothing: whichever of these is a
+ * declared peer of the wrapper must appear as an import in its bundle.
+ */
+const MUST_BE_EXTERNAL = ['react', 'vue', 'apexmaps']
+
+/**
+ * The private workspace the wrappers share. It is never published, so a bundle
+ * that still imports it would be installable and broken.
+ */
+const MUST_BE_INLINED = ['apexmaps-wrapper-internals']
 
 const rows = []
 const failures = []
 
 const packages = existsSync(WRAPPERS)
-  ? readdirSync(WRAPPERS).filter((name) => existsSync(join(WRAPPERS, name, 'package.json')))
+  ? readdirSync(WRAPPERS).filter((name) => {
+      const manifest = join(WRAPPERS, name, 'package.json')
+      if (!existsSync(manifest)) return false
+      // The shared internals workspace is private and has no bundle of its own.
+      // Every assertion below would pass it vacuously, which is worse than silence.
+      return !JSON.parse(readFileSync(manifest, 'utf8')).private
+    })
   : []
 
 if (!packages.length) {
@@ -72,19 +87,31 @@ for (const name of packages) {
     .map((f) => f.replace(/^\.\//, ''))
     .filter((f) => existsSync(join(dir, f)))
 
+  const peers = Object.keys(manifest.peerDependencies || {})
+  const imports = (source, bare) =>
+    new RegExp(`from\\s*['"]${bare}(/[^'"]*)?['"]`).test(source) ||
+    new RegExp(`require\\(\\s*['"]${bare}(/[^'"]*)?['"]\\s*\\)`).test(source)
+
   for (const file of bundles) {
     const source = readFileSync(join(dir, file), 'utf8')
 
-    if (!/^['"]use client['"]/.test(source.trimStart())) {
+    // Only React wrappers. `'use client'` is a React Server Components marker;
+    // Vue decides client-only rendering at the call site (`<ClientOnly>`), so
+    // requiring it of a Vue bundle would be cargo cult.
+    if (peers.includes('react') && !/^['"]use client['"]/.test(source.trimStart())) {
       problems.push(`${file} does not start with a 'use client' directive`)
     }
 
     for (const bare of MUST_BE_EXTERNAL) {
-      const imported =
-        new RegExp(`from\\s*['"]${bare}(/[^'"]*)?['"]`).test(source) ||
-        new RegExp(`require\\(\\s*['"]${bare}(/[^'"]*)?['"]\\s*\\)`).test(source)
-      if (!imported) {
-        problems.push(`${file} does not import '${bare}': it may have been bundled in`)
+      if (!peers.includes(bare)) continue
+      if (!imports(source, bare)) {
+        problems.push(`${file} does not import peer '${bare}': it may have been bundled in`)
+      }
+    }
+
+    for (const bare of MUST_BE_INLINED) {
+      if (imports(source, bare)) {
+        problems.push(`${file} imports '${bare}', which is private and not published`)
       }
     }
   }

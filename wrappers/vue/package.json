@@ -1,17 +1,17 @@
 {
-  "name": "react-apexmaps",
+  "name": "vue-apexmaps",
   "version": "0.1.0",
   "type": "module",
-  "description": "React component for ApexMaps",
-  "main": "dist/react-apexmaps.cjs",
-  "module": "dist/react-apexmaps.esm.js",
+  "description": "Vue 3 component for ApexMaps",
+  "main": "dist/vue-apexmaps.cjs",
+  "module": "dist/vue-apexmaps.esm.js",
   "types": "dist/types/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/types/index.d.ts",
-      "import": "./dist/react-apexmaps.esm.js",
-      "require": "./dist/react-apexmaps.cjs",
-      "default": "./dist/react-apexmaps.cjs"
+      "import": "./dist/vue-apexmaps.esm.js",
+      "require": "./dist/vue-apexmaps.cjs",
+      "default": "./dist/vue-apexmaps.cjs"
     },
     "./package.json": "./package.json"
   },
@@ -21,7 +21,7 @@
   ],
   "peerDependencies": {
     "apexmaps": "^0.1.0",
-    "react": ">=18.0.0"
+    "vue": ">=3.3.0"
   },
   "scripts": {
     "prebuild": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
@@ -31,7 +31,8 @@
   },
   "keywords": [
     "apexmaps",
-    "react",
+    "vue",
+    "vue3",
     "maps",
     "choropleth",
     "geojson",
@@ -40,18 +41,17 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/apexcharts/apexmaps.git",
-    "directory": "wrappers/react"
+    "directory": "wrappers/vue"
   },
-  "homepage": "https://github.com/apexcharts/apexmaps/tree/main/wrappers/react#readme",
+  "homepage": "https://github.com/apexcharts/apexmaps/tree/main/wrappers/vue#readme",
   "bugs": {
     "url": "https://github.com/apexcharts/apexmaps/issues"
   },
   "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
-    "@types/react": "^19.2.2",
+    "@vue/test-utils": "^2.4.11",
     "apexmaps": "file:../..",
     "apexmaps-wrapper-internals": "*",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "vue": "^3.5.40"
   }
 }

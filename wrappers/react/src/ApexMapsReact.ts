@@ -17,7 +17,7 @@ import { createElement, useEffect, useRef } from 'react'
 import type { HTMLAttributes } from 'react'
 import ApexMaps from 'apexmaps'
 import type { ApexMapsEventMap, ApexMapsEventName, ApexMapsOptions, Series } from 'apexmaps'
-import { equal, sameOptions } from './equal'
+import { equal, sameOptions } from 'apexmaps-wrapper-internals'
 
 /**
  * Every core event, as a prop.
@@ -96,8 +96,8 @@ function configOf(props: ApexMapsProps): ApexMapsOptions {
  *
  * ```tsx
  * <ApexMapsReact
- *   options={{ geo: { map: 'world' }, scale: { type: 'quantize' } }}
- *   series={[{ type: 'choropleth', data }]}
+ *   options={{ geo: { map: 'world' } }}
+ *   series={[{ type: 'choropleth', data, scale: { type: 'quantize' } }]}
  *   onFeatureClick={({ key }) => setSelected(key)}
  *   style={{ height: 480 }}
  * />

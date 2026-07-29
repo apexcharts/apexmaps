@@ -1,13 +1,22 @@
 /**
- * Change detection for the React component.
+ * Change detection, shared by every framework wrapper.
  *
- * A React caller writes `options={{ geo: { map: 'world' } }}` inline, so a fresh
- * object arrives on every parent render and reference equality is useless: it
- * would report a change every time, redraw the map, and take the tweened
- * transitions and any hover state with it. So the comparison has to be deep, and
- * three of its rules are deliberate rather than obvious.
+ * A caller writes `options={{ geo: { map: 'world' } }}` inline, so a fresh object
+ * arrives on every parent render and reference equality is useless: it would
+ * report a change every time, redraw the map, and take the tweened transitions and
+ * any hover state with it. So the comparison has to be deep, and three of its
+ * rules are deliberate rather than obvious.
  *
- * @module equal
+ * This package is **never published**. Each wrapper bundles it, so it is a
+ * devDependency there and `check-wrappers` asserts it does not survive as an
+ * import in the built output. It exists because the rules below are decisions
+ * about the *core's* semantics rather than about any one framework: geometry is
+ * passed by reference, `updateSeries` tweens where `updateOptions` redraws, and an
+ * inline formatter is not a change. Four copies of that reasoning would drift, and
+ * a wrapper whose diffing subtly disagreed with another's would be very hard to
+ * explain to whoever hit it.
+ *
+ * @module apexmaps-wrapper-internals
  */
 
 import type { ApexMapsOptions } from 'apexmaps'
@@ -101,10 +110,62 @@ export function sameOptions(a: ApexMapsOptions | undefined, b: ApexMapsOptions |
   return equal(withoutData(a), withoutData(b))
 }
 
-/** A shallow copy without the two things compared separately above. */
-function withoutData(options: ApexMapsOptions): Record<string, unknown> {
+/**
+ * A shallow copy without `series` or `geo.map`, the two things compared separately.
+ *
+ * Exported because Vue needs it as a *watch source* rather than for comparison. A
+ * deep watcher on the options object would traverse whatever `geo.map` holds, and
+ * if the caller put a topology in reactive state that is thousands of proxies
+ * walked on every check. Watching this instead keeps the deep traversal over the
+ * configuration and leaves the geometry to a separate reference watcher, which is
+ * the same division `sameOptions` makes.
+ */
+export function withoutData(options: ApexMapsOptions): Record<string, unknown> {
   const { series: _series, geo, ...rest } = options
   if (!geo) return rest
   const { map: _map, ...restGeo } = geo
   return { ...rest, geo: restGeo }
+}
+
+/**
+ * A structural copy of the options, for frameworks whose callers mutate state in
+ * place rather than replacing it.
+ *
+ * React always hands over a new object, so keeping a reference to the last applied
+ * options is enough to compare against. Vue and Svelte callers write
+ * `options.scale.type = 'quantize'` on reactive state, and then the last applied
+ * options and the current props are *the same object*: every comparison says
+ * nothing changed and the map never updates. So those wrappers keep a snapshot
+ * instead of a reference.
+ *
+ * Two things are kept by reference on purpose. Functions, because cloning one
+ * would break `equal`'s source comparison and could detach a formatter from its
+ * closure. And `geo.map`, because cloning a topology is the cost this whole module
+ * exists to avoid, and because it is compared by identity anyway. Copying it would
+ * make every comparison report new geometry, which is the worst of both.
+ */
+export function snapshotOptions(options: ApexMapsOptions): ApexMapsOptions {
+  const copy = clone(withoutData(options)) as ApexMapsOptions
+  const map = options.geo?.map
+  if (map !== undefined) copy.geo = { ...(copy.geo ?? {}), map }
+  return copy
+}
+
+/** As above, for a series array. */
+export function snapshotSeries<T>(series: T): T {
+  return clone(series) as T
+}
+
+function clone(value: unknown): unknown {
+  if (typeof value === 'function') return value
+  if (Array.isArray(value)) return value.map(clone)
+  if (value === null || typeof value !== 'object') return value
+  // A Date, a RegExp or a class instance is not option data. Copying it key by key
+  // would quietly produce a plain object that no longer behaves like the original,
+  // so it is passed through and compared by reference.
+  const proto = Object.getPrototypeOf(value)
+  if (proto !== Object.prototype && proto !== null) return value
+  const out: Record<string, unknown> = {}
+  for (const [key, entry] of Object.entries(value)) out[key] = clone(entry)
+  return out
 }

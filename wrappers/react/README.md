@@ -22,8 +22,10 @@ const data = [
 export default function Coverage() {
   return (
     <ApexMaps
-      options={{ geo: { map: 'world' }, scale: { palette: 'blues', classes: 5 } }}
-      series={[{ type: 'choropleth', name: 'Coverage', data }]}
+      options={{ geo: { map: 'world' } }}
+      series={[
+        { type: 'choropleth', name: 'Coverage', data, scale: { palette: 'blues', classes: 5 } },
+      ]}
       onFeatureClick={({ key }) => console.log(key)}
       height={480}
     />

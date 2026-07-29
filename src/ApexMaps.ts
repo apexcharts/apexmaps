@@ -14,7 +14,7 @@ import { geoGraticule } from 'd3-geo'
 
 import './ApexMaps.css'
 import { BaseChart } from './core/BaseChart'
-import { buildConfig, applyResponsive, merge } from './core/Config'
+import { buildConfig, applyResponsive, merge, mergeOptions } from './core/Config'
 import { A11y } from './core/A11y'
 import { resolveMap, registerMap, listMaps, mapMeta, attributionFor } from './core/MapRegistry'
 import {
@@ -2292,7 +2292,7 @@ class ApexMaps extends BaseChart {
   ): Promise<this> {
     if (this._destroyed) return this
     const previous = this.config
-    this.userOptions = merge(this.userOptions, options ?? {})
+    this.userOptions = mergeOptions(this.userOptions, options ?? {})
     this.config = applyResponsive(buildConfig(this.userOptions), this.viewport.width)
 
     const mapChanged = previous.geo?.map !== this.config.geo?.map

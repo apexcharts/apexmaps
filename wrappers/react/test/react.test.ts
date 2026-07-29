@@ -334,7 +334,7 @@ describe('change detection', () => {
     const w = await watched({ options: options() })
     live = w.harness
 
-    await w.harness.rerender({ options: options({ scale: { type: 'quantize', steps: 4 } }) })
+    await w.harness.rerender({ options: options({ legend: { position: 'top' } }) })
 
     expect(w.updateOptions).toHaveBeenCalledTimes(1)
     expect(w.updateSeries).not.toHaveBeenCalled()
@@ -366,13 +366,13 @@ describe('change detection', () => {
       root.render(createElement(ApexMapsReact, { options: options(), mapRef }))
       root.render(
         createElement(ApexMapsReact, {
-          options: options({ scale: { type: 'quantize', steps: 4 } }),
+          options: options({ legend: { position: 'top' } }),
           mapRef,
         }),
       )
     })
 
-    expect(mapRef.current?.config.scale?.type).toBe('quantize')
+    expect(mapRef.current?.config.legend?.position).toBe('top')
     expect(updateOptions).not.toHaveBeenCalled()
 
     await act(async () => {
@@ -451,7 +451,7 @@ describe('events', () => {
     expect(onFeatureClick).toHaveBeenCalledTimes(1)
     expect(onFeatureClick.mock.calls[0][0].key).toBe('AAA')
 
-    await mapRef.current?.updateOptions({ scale: { type: 'quantize' } })
+    await mapRef.current?.updateOptions({ legend: { position: 'top' } })
     expect(onUpdated).toHaveBeenCalledTimes(1)
   })
 
@@ -511,7 +511,7 @@ describe('core merge semantics, as seen from React', () => {
     live = await mount({ options: options({ dataLabels: { enabled: true } }), mapRef })
     expect(mapRef.current?.config.dataLabels?.enabled).toBe(true)
 
-    await live.rerender({ options: options({ scale: { type: 'quantize' } }), mapRef })
+    await live.rerender({ options: options({ legend: { position: 'top' } }), mapRef })
 
     expect(mapRef.current?.config.dataLabels?.enabled).toBe(true)
   })

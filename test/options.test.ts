@@ -129,7 +129,7 @@ describe('chart.width and chart.height after render', () => {
     await render()
     const spy = vi.spyOn(map.viewport, 'resize')
 
-    await map.updateOptions({ scale: { type: 'quantize' } })
+    await map.updateOptions({ legend: { position: 'top' } })
 
     expect(spy).not.toHaveBeenCalled()
   })
@@ -145,6 +145,46 @@ describe('inline geometry across option updates', () => {
     const geoBefore = map.geo
     await map.updateOptions({ legend: { show: false } })
     expect(map.geo).toBe(geoBefore)
+  })
+
+  it('is not re-ingested when the caller passes the same geometry again', async () => {
+    // The other half of the same bug, found by the Vue wrapper on 2026-07-29.
+    // `buildConfig` was taught to pass object geometry through by reference, but
+    // `updateOptions` merges into the accumulated options first, and *that* merge
+    // still deep-cloned it. So the guard only held for callers who omitted `geo`
+    // from every update, which no declarative wrapper can do: a framework binding
+    // hands over the whole tree every time.
+    //
+    // The cost was not just the clone of a possibly multi-megabyte topology. The
+    // clone made the next call's identity check see a different map, which
+    // re-resolved it, re-ingested it, and abandoned the drilldown trail, for a
+    // legend tweak.
+    await render()
+    const geoBefore = map.geo
+    await map.updateOptions({ geo: { map: THREE_BOXES }, legend: { show: false } })
+
+    expect(map.config.geo.map).toBe(THREE_BOXES)
+    expect(map.geo).toBe(geoBefore)
+
+    // Twice, because the first call is what plants the clone that the second one
+    // then compares against.
+    await map.updateOptions({ geo: { map: THREE_BOXES }, legend: { show: true } })
+    expect(map.config.geo.map).toBe(THREE_BOXES)
+    expect(map.geo).toBe(geoBefore)
+  })
+
+  it('keeps the drilldown trail when an update repeats the geometry', async () => {
+    // The user-visible half: a reader two levels deep, and a parent component
+    // re-rendering with the same options, used to land them back at the top.
+    await render()
+    map.userOptions.geo.map = THREE_BOXES
+    const geoBefore = map.geo
+
+    await map.updateOptions({ geo: { map: THREE_BOXES }, legend: { position: 'top' } })
+
+    expect(map.drillDepth).toBe(0)
+    expect(map.geo).toBe(geoBefore)
+    expect(map.config.legend.position).toBe('top')
   })
 
   it('is re-ingested when the caller actually passes new geometry', async () => {
