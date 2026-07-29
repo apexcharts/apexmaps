@@ -151,7 +151,7 @@ describe('entrance', () => {
     expect(el.classList.contains('apexmaps--enter')).toBe(true)
   })
 
-  it("an explicit entrance: false beats the story context", async () => {
+  it('an explicit entrance: false beats the story context', async () => {
     await render({ chart: { context: 'story', animations: { entrance: false } } })
     expect(el.classList.contains('apexmaps--enter')).toBe(false)
   })

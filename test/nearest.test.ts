@@ -150,7 +150,11 @@ describe('proximity hover', () => {
     // takeover itself must release the old mark's hover styling.
     const london = bubbleAt('London')
     london.circle.dispatchEvent(
-      new window.PointerEvent('pointerover', { bubbles: true, clientX: london.x, clientY: london.y }),
+      new window.PointerEvent('pointerover', {
+        bubbles: true,
+        clientX: london.x,
+        clientY: london.y,
+      }),
     )
     expect(map.hovered?.markKey).toBe('London')
     expect(sydney.circle.classList.contains('is-hovered')).toBe(false)

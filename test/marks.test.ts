@@ -663,7 +663,13 @@ describe('line series', () => {
             { name: 'ok', path: SEA_ROUTE },
             { name: 'one vertex', path: [[0, 0]] },
             { name: 'no path at all' },
-            { name: 'garbage', path: [[NaN, 1], [1, NaN]] },
+            {
+              name: 'garbage',
+              path: [
+                [NaN, 1],
+                [1, NaN],
+              ],
+            },
           ],
         },
       ],

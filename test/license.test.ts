@@ -39,8 +39,7 @@ const BOX = {
   ],
 }
 
-const envelope = (payload: Record<string, unknown>) =>
-  'APEX-' + btoa(JSON.stringify(payload))
+const envelope = (payload: Record<string, unknown>) => 'APEX-' + btoa(JSON.stringify(payload))
 
 /** Structurally perfect, signature is nonsense: what payload tampering produces. */
 const forgedKey = () =>

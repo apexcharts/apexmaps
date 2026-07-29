@@ -30,7 +30,9 @@ export function prefersReducedMotion(): boolean {
  * update, `'slow'` is presentation pace, `'fast'` acknowledges the change
  * without asking the reader to watch it.
  */
-export function resolveSpeed(speed: 'slow' | 'normal' | 'fast' | 'instant' | number | undefined): number {
+export function resolveSpeed(
+  speed: 'slow' | 'normal' | 'fast' | 'instant' | number | undefined,
+): number {
   if (typeof speed === 'number') return Math.max(0, speed)
   switch (speed) {
     case 'slow':
