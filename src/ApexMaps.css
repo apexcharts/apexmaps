@@ -159,6 +159,21 @@
   user-select: none;
 }
 
+/* --- annotations ---------------------------------------------------------- */
+
+/* Inert to the pointer at the layer level as well as per group: an annotation
+   sits over data by definition, and a chip that swallowed the hover of the
+   country it explains would make the map worse than an unannotated one. */
+.apexmaps-annotations,
+.apexmaps-annotation-regions {
+  pointer-events: none;
+  user-select: none;
+}
+
+.apexmaps-annotation-text {
+  font-variant-numeric: tabular-nums;
+}
+
 .apexmaps-sphere,
 .apexmaps-graticule {
   pointer-events: none;

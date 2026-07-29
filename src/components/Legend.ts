@@ -31,7 +31,8 @@ export interface LegendSection {
 
 export class Legend {
   readonly container: HTMLElement
-  readonly options: LegendOptions
+  /** Re-pointed at the live config on every draw; see `_syncComponentOptions`. */
+  options: LegendOptions
   readonly onToggle: (classIndex: number, muted: boolean, seriesIndex: number) => void
   el: HTMLElement | null = null
   /** Muted class indices, keyed by series index. */
@@ -65,14 +66,18 @@ export class Legend {
     }
 
     if (!this.el) {
-      const align = this.options.align || 'center'
-      this.el = html('div', {
-        class:
-          `apexmaps-legend apexmaps-legend--${this.options.position || 'bottom'}` +
-          ` apexmaps-legend--align-${align}`,
-      })
+      this.el = html('div')
       this.container.appendChild(this.el)
     }
+    // Re-applied on every render, not only at creation: `position` and `align`
+    // are the two legend options a caller is most likely to change through
+    // `updateOptions` or a responsive rule, and setting the class once meant
+    // both changed the config and moved nothing.
+    this.el.setAttribute(
+      'class',
+      `apexmaps-legend apexmaps-legend--${this.options.position || 'bottom'}` +
+        ` apexmaps-legend--align-${this.options.align || 'center'}`,
+    )
     empty(this.el)
 
     for (const section of meaningful) {

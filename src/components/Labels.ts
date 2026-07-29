@@ -38,7 +38,8 @@ export interface LabelCandidate {
 export class Labels {
   readonly renderer: SvgRenderer
   readonly viewport: Viewport
-  readonly options: DataLabelOptions
+  /** Re-pointed at the live config on every draw; see `_syncComponentOptions`. */
+  options: DataLabelOptions
   candidates: LabelCandidate[] = []
   group: SVGGElement | null = null
   placedCount = 0
@@ -66,8 +67,12 @@ export class Labels {
   /**
    * Lay out and draw. Called after every render and camera change.
    *
+   * @param reserved Screen-space boxes already occupied, currently the
+   *   annotation chips. A generated label yields to an annotation rather than
+   *   the other way round: the annotation was placed deliberately and the label
+   *   was produced by a rule, so the rule is the one that should give way.
    */
-  layout(): void {
+  layout(reserved: readonly Box[] = []): void {
     const overlay = this.renderer.overlay()
     if (!overlay) return
 
@@ -93,7 +98,7 @@ export class Labels {
     const minArea = this.options.minFeatureArea ?? 240
     const k = this.viewport.camera.k
 
-    const placed: Box[] = []
+    const placed: Box[] = [...reserved]
     let dropped = 0
 
     for (const candidate of this.candidates) {
@@ -160,7 +165,9 @@ export class Labels {
       this.group.appendChild(text)
     }
 
-    this.placedCount = placed.length
+    // Reserved boxes were never labels, so they must not inflate the count a
+    // diagnostic or a test reads.
+    this.placedCount = placed.length - reserved.length
     this.droppedCount = dropped
   }
 
@@ -171,7 +178,8 @@ export class Labels {
   }
 }
 
-interface Box {
+/** An axis-aligned screen-space box, the unit of label collision. */
+export interface Box {
   x0: number
   y0: number
   x1: number

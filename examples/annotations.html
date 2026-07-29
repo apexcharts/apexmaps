@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Annotations · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb"><a href="index.html">All demos</a> › Annotations</nav>
+
+      <div class="card">
+        <h1>Annotations: what the reader is supposed to notice</h1>
+        <p class="note">
+          Data on a map says what is where. An annotation says why you published it, and that is
+          usually the actual point. Three anchoring modes, because there are three things authors
+          point at: a <strong>coordinate</strong>, a <strong>feature</strong> by key, or an
+          <strong>area</strong>. Pan and zoom: the anchors track the geography while the text keeps
+          its size, and the chips stay out of the way of the pointer, so the countries underneath
+          keep their own tooltips.
+        </p>
+        <div class="row">
+          <button id="toggle-labels">Toggle feature labels</button>
+          <button id="toggle-annotations">Toggle annotations</button>
+          <span class="label" id="status"></span>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Annotations win, labels yield</h2>
+        <p class="note">
+          Turn the feature labels on and watch the count in the status line. The labels that would
+          have collided with an annotation are dropped, never the other way round: you placed the
+          annotation deliberately and the label came from a rule, so the rule gives way. Almost every
+          charting library resolves this backwards, silently losing the annotation that arrived
+          second.
+        </p>
+        <pre>
+{
+  annotations: {
+    points: [{
+      at: [-77.04, -12.05],
+      label: 'Deepest point of the Humboldt current',
+      marker: { shape: 'pin', size: 12 },
+      connector: true,
+    }],
+    features: [{ key: 'IND', label: 'India', outline: true }],
+    areas: [{
+      bounds: [-20, 10, 40, 30],   // [west, south, east, north]
+      label: 'The Sahel',
+      fillOpacity: 0.14,
+    }],
+  },
+}</pre
+        >
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      // The built-in world pack recommends `iso_a3`, so a feature annotation
+      // names the alpha-3 code. Get this wrong and the dev diagnostics say so
+      // by name rather than leaving you with a missing annotation: that is how
+      // the two keys below were caught while writing this page.
+      const INDIA = 'IND'
+      const BRAZIL = 'BRA'
+
+      const ANNOTATIONS = {
+        points: [
+          {
+            at: [-77.04, -12.05],
+            label: { text: 'Humboldt current\nupwelling', position: 'left' },
+            marker: { shape: 'pin', size: 12 },
+            connector: true,
+          },
+          {
+            at: [139.7, 35.7],
+            label: { text: 'Tokyo', background: 'none' },
+            marker: { shape: 'circle', size: 7 },
+          },
+          {
+            at: [31.24, 30.04],
+            label: { text: 'Nile delta', position: 'right' },
+            marker: { shape: 'diamond', size: 9 },
+            connector: { dashArray: '2 2' },
+          },
+        ],
+        features: [
+          {
+            key: INDIA,
+            label: { text: 'Fastest-growing\nof the ten largest', position: 'bottom' },
+            outline: true,
+          },
+          {
+            key: BRAZIL,
+            label: 'Amazon basin',
+            outline: { color: '#00E396', width: 2, dashArray: '5 3' },
+          },
+        ],
+        areas: [
+          {
+            bounds: [-20, 10, 40, 30],
+            label: 'The Sahel',
+            fill: '#FEB019',
+            fillOpacity: 0.16,
+            stroke: { color: '#FEB019', width: 1.5, dashArray: '4 3' },
+          },
+        ],
+      }
+
+      const status = document.getElementById('status')
+      let labelsOn = false
+      let annotationsOn = true
+
+      const map = Demo.watch(
+        'annotations',
+        new ApexMaps(document.getElementById('map'), {
+          chart: { height: 520 },
+          geo: { map: 'world/countries@110m' },
+          dataLabels: { enabled: false, minFeatureArea: 400 },
+          annotations: ANNOTATIONS,
+          series: [
+            {
+              type: 'choropleth',
+              name: 'Illustrative index',
+              data: [],
+              scale: { palette: 'blues', classes: 5 },
+            },
+          ],
+        }),
+      )
+
+      const report = () => {
+        const placed = map.labels ? map.labels.placedCount : 0
+        const dropped = map.labels ? map.labels.droppedCount : 0
+        const count = map.annotations ? map.annotations.count : 0
+        status.textContent =
+          `${count} annotation(s), ` +
+          `${placed} feature label(s) placed, ${dropped} dropped for collision`
+      }
+
+      document.getElementById('toggle-labels').addEventListener('click', async () => {
+        labelsOn = !labelsOn
+        await map.updateOptions({ dataLabels: { enabled: labelsOn } })
+        report()
+      })
+
+      document.getElementById('toggle-annotations').addEventListener('click', async () => {
+        annotationsOn = !annotationsOn
+        await map.updateOptions({
+          annotations: annotationsOn ? ANNOTATIONS : { points: [], features: [], areas: [] },
+        })
+        report()
+      })
+
+      Demo.ready(
+        (async () => {
+          await map.render()
+          // Deterministic values so the page looks identical on every load.
+          const names = map.geo.features.map((f) => f.key)
+          await map.updateOptions({
+            series: [
+              {
+                type: 'choropleth',
+                name: 'Illustrative index',
+                data: Demo.rows(names),
+                scale: { palette: 'blues', classes: 5 },
+              },
+            ],
+          })
+          report()
+        })(),
+      )
+    </script>
+  </body>
+</html>

@@ -13,7 +13,8 @@ import type { ScreenPoint, TooltipOptions } from '../types'
 
 export class Tooltip {
   readonly container: HTMLElement
-  readonly options: TooltipOptions
+  /** Re-pointed at the live config on every draw; see `_syncComponentOptions`. */
+  options: TooltipOptions
   el: HTMLElement | null = null
   visible = false
 

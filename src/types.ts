@@ -636,6 +636,107 @@ export interface ResponsiveRule {
   options: ApexMapsOptions
 }
 
+// --- annotations -------------------------------------------------------------
+
+/**
+ * A text chip on an annotation.
+ *
+ * The chip (background, border, radius) rather than bare text is the default
+ * because an annotation has to stay readable over whatever the map puts
+ * underneath it, and editorial text sitting directly on a choropleth is
+ * legible on some classes and not others. `background: 'none'` gives bare
+ * haloed text for callers who want it.
+ *
+ * Naming follows `pointAnnotation` in apexcharts core, so the shape is
+ * recognisable to anyone who has annotated a chart.
+ */
+export interface AnnotationLabel {
+  text?: string
+  /** Side of the anchor the chip sits on. Default `'top'`. */
+  position?: 'top' | 'bottom' | 'left' | 'right' | 'center'
+  offsetX?: number
+  offsetY?: number
+  color?: string
+  fontSize?: number
+  fontWeight?: number | string
+  /** Chip fill. `'none'` draws haloed text with no chip. */
+  background?: string
+  borderColor?: string
+  borderWidth?: number
+  borderRadius?: number
+  padding?: number
+}
+
+/** A symbol at an annotation's anchor, drawn with the marker shape set. */
+export interface AnnotationMarker {
+  show?: boolean
+  shape?: MarkerShape
+  size?: number
+  fill?: string
+  stroke?: StrokeOptions
+}
+
+/** A leader line from an anchor to its offset label. */
+export type AnnotationConnector = boolean | { color?: string; width?: number; dashArray?: string }
+
+interface AnnotationCommon {
+  /** Stable identity, for `updateOptions` reconciliation and CSS targeting. */
+  id?: string
+  /** `'Some text'` is shorthand for `{ text: 'Some text' }`. */
+  label?: AnnotationLabel | string
+  marker?: AnnotationMarker
+  connector?: AnnotationConnector
+  /** Extra class on the annotation group. */
+  className?: string
+}
+
+/** An annotation pinned to a coordinate. */
+export interface PointAnnotation extends AnnotationCommon {
+  /** `[lon, lat]`. */
+  at: LonLat
+}
+
+/**
+ * An annotation attached to a feature by key, anchored at the same point the
+ * label engine uses, so it tracks the geometry through projection changes and
+ * lands where a reader would put it by hand.
+ */
+export interface FeatureAnnotation extends AnnotationCommon {
+  key: string
+  /** Trace the feature's own outline. `true` uses the theme's focus colour. */
+  outline?: boolean | StrokeOptions
+}
+
+/**
+ * A region highlight: a lon/lat bounding box, or any GeoJSON geometry.
+ *
+ * Drawn in world space through the projection, so it warps with the map rather
+ * than staying a screen-space rectangle over a curved graticule.
+ */
+export interface AreaAnnotation extends AnnotationCommon {
+  /** `[west, south, east, north]`. */
+  bounds?: BBox4
+  /** Any GeoJSON geometry, when a box is the wrong shape. */
+  geometry?: unknown
+  fill?: string
+  fillOpacity?: number
+  stroke?: StrokeOptions
+}
+
+/**
+ * Editorial overlay: the layer that says what the map is about.
+ *
+ * Annotations are deliberate statements, so they are never dropped for
+ * collision the way generated labels are, and generated labels yield to them
+ * instead. They are also inert to the pointer, so an annotation can be placed
+ * over data without stealing its hover or click.
+ */
+export interface AnnotationOptions {
+  points?: PointAnnotation[]
+  features?: FeatureAnnotation[]
+  areas?: AreaAnnotation[]
+}
+
 export interface ApexMapsOptions {
   chart?: ChartOptions
   geo?: GeoOptions
@@ -647,7 +748,7 @@ export interface ApexMapsOptions {
   theme?: { mode?: 'light' | 'dark' | 'auto'; palette?: PaletteName }
   interaction?: InteractionOptions
   a11y?: A11yOptions
-  annotations?: { points?: unknown[]; features?: unknown[]; areas?: unknown[] }
+  annotations?: AnnotationOptions
   /**
    * Cross-filter group. Maps naming the same group share their selection, so
    * brushing one brushes the others, and non-selected features dim on all of them.

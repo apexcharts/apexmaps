@@ -50,6 +50,7 @@ import type { LegendSection } from './components/Legend'
 import { Tooltip } from './components/Tooltip'
 import { Labels, labelAnchor } from './components/Labels'
 import type { LabelCandidate } from './components/Labels'
+import { Annotations } from './components/Annotations'
 import { Breadcrumb } from './components/Breadcrumb'
 import type { Crumb } from './components/Breadcrumb'
 import { scopeToParent } from './data/Hierarchy'
@@ -102,7 +103,8 @@ const PREMIUM_FEATURES = new Set([
 ])
 
 /** Anything the renderer can draw. */
-type AnySeries = ChoroplethSeries | BubbleSeries | ArcSeries | LineSeries | MarkerSeries | BaseFeatures
+type AnySeries =
+  ChoroplethSeries | BubbleSeries | ArcSeries | LineSeries | MarkerSeries | BaseFeatures
 
 /** The series kinds bound to geometry, which are the ones a drilldown applies to. */
 type FeatureSeries = ChoroplethSeries | BaseFeatures
@@ -204,6 +206,7 @@ class ApexMaps extends BaseChart {
   legend: Legend | null = null
   tooltip: Tooltip | null = null
   labels: Labels | null = null
+  annotations: Annotations | null = null
   a11y: A11y | null = null
   zoomPan: ZoomPan | null = null
   breadcrumb: Breadcrumb | null = null
@@ -452,6 +455,23 @@ class ApexMaps extends BaseChart {
       viewport: this.viewport,
       options: this.config.dataLabels,
     })
+
+    // Rebuilt alongside the label engine, because both hold projected anchors
+    // and `_buildViewport` is exactly the point at which those stop being valid.
+    this.annotations = new Annotations({
+      renderer: this.renderer,
+      viewport: this.viewport,
+      options: this.config.annotations,
+      access: {
+        // The same anchors labels use, so an annotation and the label for the
+        // feature it points at agree about where that feature is.
+        anchorFor: (key) => {
+          const feature = this.geo?.features.find((f) => f.key === key)
+          return feature ? this.anchors.get(feature.index)?.world : undefined
+        },
+        featureFor: (key) => this.geo?.features.find((f) => f.key === key),
+      },
+    })
   }
 
   private _buildSeries(): void {
@@ -570,6 +590,7 @@ class ApexMaps extends BaseChart {
   private _draw(): void {
     if (!this.renderer || !this.geo) return
 
+    this._syncComponentOptions()
     this._applyMotionVars()
     this._drawBaseLayers()
 
@@ -619,7 +640,7 @@ class ApexMaps extends BaseChart {
     }
 
     this._bindMarkEvents()
-    this._drawLabels()
+    this._drawOverlay()
     this._drawLegend()
     this._drawAttribution()
     this._setupA11y()
@@ -666,8 +687,48 @@ class ApexMaps extends BaseChart {
     }
   }
 
+  /**
+   * Lay out the screen-space overlay: annotations first, then labels.
+   *
+   * The order is the contract. Annotations publish the boxes they occupy and
+   * labels treat those as already taken, so a generated label gives way to an
+   * editorial one rather than winning by arriving first.
+   */
+  private _drawOverlay(): void {
+    this._drawAnnotations()
+    this._drawLabels()
+  }
+
+  /**
+   * Re-point every component at the live config.
+   *
+   * Components take their options at construction, and construction happens in
+   * `_mountShell` (once) or `_buildViewport` (only for a map or projection
+   * change). `buildConfig` returns a fresh tree each time, so without this an
+   * `updateOptions` that changed nothing else left each component reading a
+   * snapshot from first render. That had silently broken `dataLabels`,
+   * `legend.position`/`align` and `tooltip.offset` for any caller who set them
+   * after render, which is the same "set it and get silence" failure the
+   * options audit exists to prevent; it also covers responsive rules, which
+   * reach these components by exactly the same path.
+   */
+  private _syncComponentOptions(): void {
+    if (this.labels) this.labels.options = this.config.dataLabels
+    if (this.annotations) this.annotations.options = this.config.annotations
+    if (this.legend) this.legend.options = this.config.legend
+    if (this.tooltip) this.tooltip.options = this.config.tooltip
+  }
+
+  private _drawAnnotations(): void {
+    if (!this.annotations) return
+    this.annotations.resolve()
+    this.annotations.layout()
+    this.warnings.push(...this.annotations.warnings)
+  }
+
   private _drawLabels(): void {
     if (!this.labels || !this.geo) return
+    const reserved = this.annotations?.reserved ?? []
     const cfg = this.config.dataLabels
     const featureSeries = this.renderTargets.find((s) => s.kind === 'features')
     const labelledSeries = this.renderTargets.find((s) => s.config.labels?.show)
@@ -675,7 +736,7 @@ class ApexMaps extends BaseChart {
 
     if (!enabled || !featureSeries) {
       this.labels.setCandidates([])
-      this.labels.layout()
+      this.labels.layout(reserved)
       return
     }
 
@@ -707,7 +768,7 @@ class ApexMaps extends BaseChart {
     }
 
     this.labels.setCandidates(candidates)
-    this.labels.layout()
+    this.labels.layout(reserved)
   }
 
   private _drawLegend(): void {
@@ -1535,6 +1596,7 @@ class ApexMaps extends BaseChart {
     if (this.a11y) this.a11y.cursor = -1
     this.warnings = []
     this.labels?.destroy()
+    this.annotations?.destroy()
     this._buildViewport()
   }
 
@@ -1815,12 +1877,16 @@ class ApexMaps extends BaseChart {
         this.renderer?.drawMarks({ marks: series.marks(zoom), seriesId: series.id })
       }
     }
-    // Labels live in screen space, so they must be re-laid-out, but only once per
-    // frame no matter how many camera writes happened.
+    // Labels and annotation chips live in screen space, so they must be
+    // re-laid-out, but only once per frame no matter how many camera writes
+    // happened. Anchors are already projected, so this repositions rather than
+    // reprojects; annotations go first so labels keep yielding to them at every
+    // zoom level rather than only the one the map opened at.
     if (this._renderRaf === null) {
       this._renderRaf = requestAnimationFrame(() => {
         this._renderRaf = null
-        this.labels?.layout()
+        this.annotations?.layout()
+        this.labels?.layout(this.annotations?.reserved ?? [])
       })
     }
   }
@@ -1860,6 +1926,7 @@ class ApexMaps extends BaseChart {
     this._measure()
     this.renderer?.resize(this.viewport.width, this.viewport.height)
     this.labels?.destroy()
+    this.annotations?.destroy()
     this._buildViewport()
     this._reprojectSeries()
 
@@ -1939,6 +2006,7 @@ class ApexMaps extends BaseChart {
         this.geo = this._ingest(resolved.data, this.mapMeta)
       }
       this.labels?.destroy()
+      this.annotations?.destroy()
       this._buildViewport()
     }
 
@@ -2355,10 +2423,6 @@ class ApexMaps extends BaseChart {
         `chart.renderer '${renderer}' is not implemented yet; this version always renders SVG`,
       )
     }
-    const a = o.annotations
-    if (a && (a.points?.length || a.features?.length || a.areas?.length)) {
-      this.warnings.push('annotations are not implemented yet; nothing will be drawn for them')
-    }
     if (o.geo?.boundaries !== undefined) {
       this.warnings.push(
         'geo.boundaries is not a rendering policy yet; packs record their boundary policy in mapMeta()',
@@ -2556,6 +2620,7 @@ class ApexMaps extends BaseChart {
     }
 
     this.labels?.destroy()
+    this.annotations?.destroy()
     this.legend?.destroy()
     this.tooltip?.destroy()
     this.breadcrumb?.destroy()

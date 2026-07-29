@@ -6,11 +6,16 @@
  * expensive to change later:
  *
  * ```
- *   overlay   (screen space)  labels, focus ring          <- crisp text, a11y
+ *   overlay   (screen space)  labels, annotations, focus  <- crisp text, a11y
  *   symbols   (screen space)  bubbles, endpoint dots      <- constant size
+ *   regions   (world space)   annotation areas            <- camera transform
  *   marks     (world space)   feature fills, arcs         <- camera transform
  *   base      (world space)   sphere, graticule           <- camera transform
  * ```
+ *
+ * Annotation areas sit above the fills and below the symbols on purpose: a
+ * translucent "this region" highlight belongs over the choropleth it qualifies,
+ * but drawing it over the bubbles would veil the data it is pointing at.
  *
  * World-space content sits under a single `<g>` carrying the camera transform, so
  * a pan costs one attribute write regardless of feature count, and strokes use
@@ -88,6 +93,8 @@ export class SvgRenderer {
   world: SVGGElement | null = null
   baseLayer: SVGGElement | null = null
   marksLayer: SVGGElement | null = null
+  /** World space, above the marks: annotation area highlights. */
+  regionLayer: SVGGElement | null = null
   symbolLayer: SVGGElement | null = null
   overlayLayer: SVGGElement | null = null
   defs: SVGDefsElement | null = null
@@ -137,11 +144,13 @@ export class SvgRenderer {
     this.world = svg('g', { class: 'apexmaps-world' })
     this.baseLayer = svg('g', { class: 'apexmaps-layer-base' })
     this.marksLayer = svg('g', { class: 'apexmaps-layer-marks' })
+    this.regionLayer = svg('g', { class: 'apexmaps-layer-regions' })
     this.symbolLayer = svg('g', { class: 'apexmaps-layer-symbols' })
     this.overlayLayer = svg('g', { class: 'apexmaps-layer-overlay' })
 
     this.world.appendChild(this.baseLayer)
     this.world.appendChild(this.marksLayer)
+    this.world.appendChild(this.regionLayer)
     root.appendChild(this.defs)
     root.appendChild(this.world)
     root.appendChild(this.symbolLayer)
@@ -527,6 +536,11 @@ export class SvgRenderer {
     return this.overlayLayer
   }
 
+  /** World space, above the marks: where annotation areas are drawn. */
+  regions(): SVGGElement | null {
+    return this.regionLayer
+  }
+
   clearOverlay(): void {
     if (this.overlayLayer) empty(this.overlayLayer)
   }
@@ -563,6 +577,7 @@ export class SvgRenderer {
     this.world = null
     this.baseLayer = null
     this.marksLayer = null
+    this.regionLayer = null
     this.symbolLayer = null
     this.overlayLayer = null
     this.defs = null
