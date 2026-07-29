@@ -212,14 +212,15 @@ describe('unimplemented options say so', () => {
       annotations: { points: [{ at: [0, 0] }] },
     })
     const all = map.warnings.join('\n')
-    expect(all).toContain("chart.renderer 'canvas'")
     expect(all).toContain('geo.boundaries')
     // Implemented since: value transitions read chart.animations, a story
-    // context turns the entrance fade on, and annotations draw. Warning for any
-    // of them again would be a regression in the other direction.
+    // context turns the entrance fade on, annotations draw, and chart.renderer
+    // selects a real tier. Warning for any of them again would be a regression
+    // in the other direction.
     expect(all).not.toContain('chart.animations')
     expect(all).not.toContain("chart.context 'story'")
     expect(all).not.toContain('annotations are not implemented')
+    expect(all).not.toContain('is not implemented yet; this version always renders SVG')
   })
 
   it('stays quiet when only implemented options are set', async () => {

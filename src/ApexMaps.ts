@@ -31,6 +31,9 @@ import { Camera } from './geo/Camera'
 import { registerProjection, listProjections } from './geo/Projections'
 import type { ProjectionFactory } from './geo/Projections'
 import { SvgRenderer } from './renderers/SvgRenderer'
+import { CanvasRenderer } from './renderers/CanvasRenderer'
+import { RendererController } from './renderers/RendererController'
+import type { ActiveRendererKind } from './renderers/Renderer'
 import {
   serializeSvg,
   rasterize,
@@ -166,12 +169,30 @@ const GLOBAL: GlobalScope = (() => {
 // entitled to drop an import whose result nothing references.
 installCatalogue()
 
+// Register the Canvas tier eagerly, which is a deliberate departure from
+// apexcharts-js, where canvas is an opt-in `features/renderer-canvas` import.
+// There, canvas carries a full mark vocabulary and paying for it unasked is
+// wrong. Here the tier is a few kB against a budget with ample headroom, and the
+// alternative is worse than the bytes: `renderer: 'auto'` is the default, so a
+// caller who never read about an extra import would silently never get promoted,
+// and "set it and get silence" is the API state this product treats as its worst.
+// The registry stays because it is how the WebGL tier will arrive, and how tests
+// exercise the not-bundled fallback path.
+RendererController.registerRenderer('canvas', ({ viewport }) => new CanvasRenderer({ viewport }))
+
 class ApexMaps extends BaseChart {
   userOptions: ApexMapsOptions
   config: ResolvedOptions
 
   readonly viewport = new Viewport()
   renderer: SvgRenderer | null = null
+  /**
+   * The Canvas tier, when it is active. Never a replacement for `renderer`: it
+   * rasterises the world-space geometry layers while the SVG keeps the overlay,
+   * the symbol layers and the accessibility tree. See `renderers/Renderer`.
+   */
+  canvas: CanvasRenderer | null = null
+  rendererKind: ActiveRendererKind = 'svg'
   camera: Camera | null = null
   geo: NormalizedGeo | null = null
 
@@ -474,6 +495,70 @@ class ApexMaps extends BaseChart {
     })
   }
 
+  /**
+   * Choose the geometry renderer and mount it.
+   *
+   * Runs at the top of every `_draw`, which is deliberately after
+   * `_buildSeries`: the arc and route counts that feed `'auto'` do not exist
+   * until the series are built, and a map promoted on feature count alone would
+   * leave a heavy flow map in SVG. Idempotent, because a projection change, a
+   * resize and an options update all re-enter here and must not stack canvases.
+   */
+  private _selectRenderer(): void {
+    const chart = this.config.chart
+
+    const selection = RendererController.resolve({
+      mode: chart.renderer,
+      threshold: chart.rendererThreshold,
+      featureCount: this.geo?.features.length ?? 0,
+      // Arcs and routes are the other world-space layer this tier takes over.
+      pathMarkCount: this.series.reduce(
+        (sum, s) => sum + (s.kind === 'paths' ? s.items.length : 0),
+        0,
+      ),
+    })
+
+    if (selection.warning) this.warnings.push(selection.warning)
+    if (selection.note) this.warnings.push(selection.note)
+
+    if (selection.kind === 'canvas') {
+      if (!this.canvas) {
+        // Built through the registry rather than by direct construction, so the
+        // registration is load-bearing and a future tier arrives the same way.
+        const canvas = RendererController.create(selection.kind, { viewport: this.viewport })
+        const mounted = canvas?.mount(this.plot as HTMLElement, {
+          width: this.viewport.width,
+          height: this.viewport.height,
+          background: this.config.chart.background,
+        })
+        if (mounted) {
+          this.canvas = canvas
+        } else {
+          // No 2D context: jsdom, or a browser refusing one. Falling back is the
+          // whole point of the tier being an accelerator rather than a rewrite.
+          this.warnings.push(
+            'the canvas tier could not obtain a 2D context, so the geometry layers render as SVG',
+          )
+        }
+      } else {
+        this.canvas.resize(this.viewport.width, this.viewport.height)
+      }
+    } else if (this.canvas) {
+      // Dropped back to SVG (a projection or option change that made canvas
+      // unwanted): tear the canvas down so its stale raster cannot sit under a
+      // live SVG map.
+      this.canvas.destroy()
+      this.canvas = null
+    }
+
+    this.rendererKind = this.canvas ? 'canvas' : 'svg'
+    this.canvas?.setStateStyles({
+      hover: this.config.states?.hover,
+      active: this.config.states?.active,
+      mutedOpacity: this.config.states?.muted?.opacity,
+    })
+  }
+
   private _buildSeries(): void {
     if (!this.geo) return
     // Series ids are positional, so dropping a series shifts the next one into
@@ -591,22 +676,43 @@ class ApexMaps extends BaseChart {
     if (!this.renderer || !this.geo) return
 
     this._syncComponentOptions()
+    this._selectRenderer()
     this._applyMotionVars()
     this._drawBaseLayers()
+
+    // Whichever tier is active owns the world-space geometry layers, and the
+    // other must be left holding nothing: two live copies of 3,231 counties
+    // would double the cost the tier exists to remove, and the SVG copy would
+    // still catch pointer events the canvas hit test is meant to answer.
+    const canvas = this.canvas
 
     for (const series of this.renderTargets) {
       switch (series.kind) {
         case 'features':
-          this.renderer.drawFeatures({
-            features: this.geo.features,
-            fill: (f) => series.fillFor(f),
-            stroke: series.config.stroke,
-            opacity: series.config.opacity ?? 1,
-            seriesId: series.id,
-          })
+          if (canvas) {
+            canvas.drawFeatures({
+              features: this.geo.features,
+              fill: (f) => series.fillFor(f),
+              stroke: series.config.stroke,
+              opacity: series.config.opacity ?? 1,
+              seriesId: series.id,
+            })
+            this.renderer.clearSeries(series.id)
+          } else {
+            this.renderer.drawFeatures({
+              features: this.geo.features,
+              fill: (f) => series.fillFor(f),
+              stroke: series.config.stroke,
+              opacity: series.config.opacity ?? 1,
+              seriesId: series.id,
+            })
+          }
           break
 
         case 'symbols':
+          // Screen-space marks stay SVG in both tiers: bounded by clustering,
+          // already O(marks) per frame, and already hit-tested by computation
+          // through the proximity layer. See `renderers/Renderer`.
           this.renderer.drawSymbols({
             symbols: (series as BubbleSeries).symbols(),
             seriesId: series.id,
@@ -622,11 +728,16 @@ class ApexMaps extends BaseChart {
 
         case 'paths': {
           const pathSeries = series as ArcSeries | LineSeries
-          this.renderer.drawPaths({
-            paths: pathSeries.paths(),
-            seriesId: pathSeries.id,
-            markClass: pathSeries.type === 'line' ? 'apexmaps-line' : undefined,
-          })
+          if (canvas) {
+            canvas.drawPaths({ paths: pathSeries.paths(), seriesId: pathSeries.id })
+            this.renderer.clearSeries(pathSeries.id)
+          } else {
+            this.renderer.drawPaths({
+              paths: pathSeries.paths(),
+              seriesId: pathSeries.id,
+              markClass: pathSeries.type === 'line' ? 'apexmaps-line' : undefined,
+            })
+          }
           const endpoints = pathSeries.endpoints(this.viewport)
           if (endpoints.length) {
             this.renderer.drawSymbols({
@@ -639,6 +750,10 @@ class ApexMaps extends BaseChart {
       }
     }
 
+    // Nothing is on screen until the first paint: unlike SVG, appending to the
+    // canvas layer list draws nothing by itself.
+    canvas?.repaint()
+
     this._bindMarkEvents()
     this._drawOverlay()
     this._drawLegend()
@@ -650,21 +765,45 @@ class ApexMaps extends BaseChart {
     if (!this.renderer || !this.viewport.path) return
     const { sphere, graticule } = this.config.geo
 
+    // Base paths follow the active tier for the same reason the feature layer
+    // does: one owner, so the inactive one is explicitly cleared rather than
+    // left holding a stale sphere under a live map.
+    const draw = (
+      d: string,
+      className: string,
+      style: { fill?: string; stroke?: string; width?: number },
+    ) => {
+      if (this.canvas) {
+        this.canvas.drawBasePath(d, style, className)
+        this.renderer?.clearBasePath(className)
+      } else {
+        this.renderer?.drawBasePath(
+          d,
+          {
+            fill: style.fill || 'none',
+            stroke: style.stroke ?? 'none',
+            'stroke-width': style.width ?? 0.5,
+          },
+          className,
+        )
+      }
+    }
+    const clear = (className: string) => {
+      this.canvas?.clearBasePath(className)
+      this.renderer?.clearBasePath(className)
+    }
+
     if (sphere?.show) {
       const d = this.viewport.path({ type: 'Sphere' })
       if (d) {
-        this.renderer.drawBasePath(
-          d,
-          {
-            fill: sphere.fill || 'none',
-            stroke: sphere.stroke ?? 'rgba(128,128,128,0.4)',
-            'stroke-width': sphere.width ?? 0.5,
-          },
-          'apexmaps-sphere',
-        )
+        draw(d, 'apexmaps-sphere', {
+          fill: sphere.fill || 'none',
+          stroke: sphere.stroke ?? 'rgba(128,128,128,0.4)',
+          width: sphere.width ?? 0.5,
+        })
       }
     } else {
-      this.renderer.clearBasePath('apexmaps-sphere')
+      clear('apexmaps-sphere')
     }
 
     if (graticule?.show) {
@@ -672,18 +811,14 @@ class ApexMaps extends BaseChart {
       if (graticule.step) generator.step([graticule.step, graticule.step])
       const d = this.viewport.path(generator())
       if (d) {
-        this.renderer.drawBasePath(
-          d,
-          {
-            fill: 'none',
-            stroke: graticule.color ?? 'rgba(128,128,128,0.25)',
-            'stroke-width': graticule.width ?? 0.5,
-          },
-          'apexmaps-graticule',
-        )
+        draw(d, 'apexmaps-graticule', {
+          fill: 'none',
+          stroke: graticule.color ?? 'rgba(128,128,128,0.25)',
+          width: graticule.width ?? 0.5,
+        })
       }
     } else {
-      this.renderer.clearBasePath('apexmaps-graticule')
+      clear('apexmaps-graticule')
     }
   }
 
@@ -1007,19 +1142,7 @@ class ApexMaps extends BaseChart {
 
     if (series.kind === 'features') {
       const feature = this.geo?.features[item]
-      if (!feature) return null
-      return {
-        series,
-        seriesIndex,
-        key: feature.key,
-        name: feature.name,
-        value: series.valueFor(feature),
-        datum: series.datumFor(feature),
-        properties: feature.properties,
-        anchor: this.anchors.get(feature.index)?.world,
-        feature,
-        markKey: feature.key || feature.index,
-      }
+      return feature ? this._featureMark(series, feature) : null
     }
 
     // Clusters are not data rows: they stand for a set of them.
@@ -1040,11 +1163,56 @@ class ApexMaps extends BaseChart {
       }
     }
 
-    const mark = (series as BubbleSeries | ArcSeries | LineSeries | MarkerSeries).itemAt(item)
+    return this._itemMark(series as BubbleSeries | ArcSeries | LineSeries | MarkerSeries, item)
+  }
+
+  /**
+   * Resolve a mark from the Canvas tier's spatial index.
+   *
+   * In canvas mode the geometry layers have no DOM, so `event.target` is the SVG
+   * itself and `_resolveMark` correctly finds nothing. This is the replacement
+   * for the hit testing the browser was doing: R-tree candidates, then an exact
+   * `isPointInPath`. It answers for exactly the layers the tier drew, so
+   * bubbles, markers and clusters continue to come from the DOM.
+   */
+  private _resolveCanvasMark(point: ScreenPoint): ResolvedMark | null {
+    const hit = this.canvas?.hitTest(point)
+    if (!hit) return null
+    const series = this.renderTargets.find((s) => s.id === hit.seriesId)
+    if (!series) return null
+
+    if (series.kind === 'features') {
+      const feature = this.geo?.features[hit.item]
+      return feature ? this._featureMark(series, feature) : null
+    }
+    return this._itemMark(series as ArcSeries | LineSeries, hit.item)
+  }
+
+  private _featureMark(series: AnySeries, feature: NormalizedFeature): ResolvedMark | null {
+    if (series.kind !== 'features') return null
+    return {
+      series,
+      seriesIndex: series.index,
+      key: feature.key,
+      name: feature.name,
+      value: series.valueFor(feature),
+      datum: series.datumFor(feature),
+      properties: feature.properties,
+      anchor: this.anchors.get(feature.index)?.world,
+      feature,
+      markKey: feature.key || feature.index,
+    }
+  }
+
+  private _itemMark(
+    series: BubbleSeries | ArcSeries | LineSeries | MarkerSeries,
+    item: number,
+  ): ResolvedMark | null {
+    const mark = series.itemAt(item)
     if (!mark) return null
     return {
       series,
-      seriesIndex,
+      seriesIndex: series.index,
       key: mark.key,
       name: mark.name,
       value: mark.value,
@@ -1234,14 +1402,18 @@ class ApexMaps extends BaseChart {
    */
   private _handleSurfacePointerMove(event: Event): void {
     if (!this.plot) return
-    const direct = this._resolveMark(event)
+    const point = pointerPosition(this.plot, event as MouseEvent)
+    // In canvas mode the geometry layers have no DOM, so this pass is also where
+    // ordinary feature hover comes from: `_resolveMark` finds nothing and the
+    // spatial index answers instead.
+    const direct = this._resolveMark(event) ?? this._resolveCanvasMark(point)
     if (direct && direct.series.kind !== 'features') {
       // A real mark is under the pointer; its own handlers own hover.
       this._proximity = null
+      if (this.rendererKind === 'canvas') this._hoverGeometry(direct)
       return
     }
 
-    const point = pointerPosition(this.plot, event as MouseEvent)
     const near = this._resolveNearest(point)
 
     if (near) {
@@ -1271,13 +1443,44 @@ class ApexMaps extends BaseChart {
         this._setHover(direct)
         this.emit('featureHover', this._eventPayload(direct) as never)
       }
+      return
     }
+
+    // Canvas mode has no `pointerover`/`pointerout` for geometry, so entering
+    // and leaving a feature is derived from what the hit test reports here.
+    if (this.rendererKind === 'canvas') this._hoverGeometry(direct)
+  }
+
+  /**
+   * Drive hover from hit-test results, which is how it works with no DOM.
+   *
+   * Compares against what is already hovered so a pointer crossing a country
+   * emits once on entry rather than on every pixel of movement, matching what
+   * `pointerover` gives the SVG tier for free.
+   */
+  private _hoverGeometry(mark: ResolvedMark | null): void {
+    if (!mark) {
+      if (this.hovered) this._clearHover()
+      return
+    }
+    if (this.hovered?.seriesId === mark.series.id && this.hovered.markKey === mark.markKey) {
+      if (this.tooltip?.visible && this.config.tooltip.followCursor !== false) return
+      return
+    }
+    this._clearHover()
+    this._setHover(mark)
+    this.emit(mark.feature ? 'featureHover' : 'markHover', this._eventPayload(mark) as never)
   }
 
   private _handleSurfacePointerLeave(): void {
-    if (!this._proximity) return
-    this._proximity = null
-    this._clearHover()
+    if (this._proximity) {
+      this._proximity = null
+      this._clearHover()
+      return
+    }
+    // Canvas mode: leaving the plot is the only "pointer out" signal geometry
+    // hover gets.
+    if (this.rendererKind === 'canvas' && this.hovered) this._clearHover()
   }
 
   /**
@@ -1294,12 +1497,29 @@ class ApexMaps extends BaseChart {
       event.stopPropagation()
       return
     }
+    const point = pointerPosition(this.plot, event as MouseEvent)
     const direct = this._resolveMark(event)
     if (direct && direct.series.kind !== 'features') return
-    const near = this._resolveNearest(pointerPosition(this.plot, event as MouseEvent))
-    if (!near) return
-    event.stopPropagation()
-    this._activateMark(near)
+
+    // Proximity still outranks geometry, so a click near a small bubble acts on
+    // the bubble whichever tier drew the country underneath it.
+    const near = this._resolveNearest(point)
+    if (near) {
+      event.stopPropagation()
+      this._activateMark(near)
+      return
+    }
+
+    // Canvas mode: there is no element to receive a click on a feature, so this
+    // is where drilldown and selection come from. In SVG mode the layer handler
+    // owns it and this must not fire a second time.
+    if (!direct && this.rendererKind === 'canvas') {
+      const geometry = this._resolveCanvasMark(point)
+      if (geometry) {
+        event.stopPropagation()
+        this._activateMark(geometry)
+      }
+    }
   }
 
   private _handleKeyDown(event: KeyboardEvent): void {
@@ -1418,6 +1638,7 @@ class ApexMaps extends BaseChart {
       this._buildSeries()
       this._draw()
       this.renderer?.applyCamera()
+      this.canvas?.applyCamera()
       this._renderBreadcrumb()
       this._reportDiagnostics()
 
@@ -1547,6 +1768,7 @@ class ApexMaps extends BaseChart {
       this._buildSeries()
       this._draw()
       this.renderer.applyCamera()
+      this.canvas?.applyCamera()
       this._renderBreadcrumb()
       this._reportDiagnostics()
 
@@ -1685,6 +1907,8 @@ class ApexMaps extends BaseChart {
   private _setHover(mark: ResolvedMark): void {
     this.hovered = { seriesId: mark.series.id, markKey: mark.markKey }
 
+    this._canvasHover(mark, true)
+
     const el = this.renderer?.markFor(mark.series.id, mark.markKey)
     const states = this.config.states?.hover
     if (el && states?.enabled !== false) {
@@ -1731,6 +1955,21 @@ class ApexMaps extends BaseChart {
     if (this.hovered) {
       const { seriesId, markKey } = this.hovered
       const series = this.renderTargets.find((s) => s.id === seriesId)
+      if (series) {
+        // Rebuild the mark to reach its feature index, which is the canvas state
+        // key. `markKey` is the DOM key and is the feature *name* key when the
+        // geometry has one, so it cannot be used directly.
+        const feature =
+          series.kind === 'features'
+            ? this.geo?.features.find((f) => (f.key || f.index) === markKey)
+            : undefined
+        const mark = feature
+          ? this._featureMark(series, feature)
+          : series.kind === 'paths'
+            ? { series, markKey, key: String(markKey) }
+            : null
+        if (mark) this._canvasHover(mark as ResolvedMark, false)
+      }
       const el = this.renderer?.markFor(seriesId, markKey)
       if (el && series) {
         el.classList.remove('is-hovered')
@@ -1749,6 +1988,54 @@ class ApexMaps extends BaseChart {
     }
     this.hovered = null
     this.tooltip?.hide()
+  }
+
+  // --- canvas state ---------------------------------------------------------
+
+  /**
+   * The key the Canvas tier stores state under, or null when it did not draw
+   * this mark.
+   *
+   * Features are keyed by their index rather than by `markKey`: the DOM key is
+   * the geometry's join key when it has one, while the canvas layer is built
+   * from feature indices, and mixing the two silently styles nothing.
+   */
+  private _canvasStateKey(mark: ResolvedMark): string | number | null {
+    if (mark.feature) return mark.feature.index
+    if (mark.series.kind === 'paths') return mark.key
+    return null
+  }
+
+  /** Whether a selection is currently dimming everything it did not include. */
+  private _muting(): boolean {
+    return this.selection.size > 0 && (this.config.states.muted?.opacity ?? 0.25) < 1
+  }
+
+  /**
+   * Move hover on or off one mark in the canvas tier, preserving whatever
+   * selection state that mark already had.
+   *
+   * Incremental rather than a full state rebuild: hover changes whenever the
+   * pointer crosses a boundary, and rewriting three thousand entries each time
+   * would put O(features) work back on the pointer path that the tier exists to
+   * take off it.
+   */
+  private _canvasHover(mark: ResolvedMark, on: boolean): void {
+    if (!this.canvas) return
+    if (on && this.config.states?.hover?.enabled === false) return
+    const key = this._canvasStateKey(mark)
+    if (key === null) return
+
+    const selected = this.selection.has(mark.key)
+    const muted = this._muting() && !selected
+    const next = on
+      ? { hovered: true, selected, muted }
+      : selected || muted
+        ? { selected, muted }
+        : null
+
+    this.canvas.setState(mark.series.id, key, next)
+    this.canvas.repaint()
   }
 
   /**
@@ -1855,18 +2142,37 @@ class ApexMaps extends BaseChart {
 
   private _redrawFills(): void {
     if (!this.renderer || !this.geo) return
+    const features = this.geo.features
     for (const series of this.renderTargets) {
       if (series.kind !== 'features') continue
-      for (const feature of this.geo.features) {
+
+      if (this.canvas) {
+        // Recolour in place: the cached paths and the spatial index are still
+        // valid, because a legend toggle changes colour and nothing else. This
+        // is the update SVG pays 3,231 attribute writes for.
+        const byIndex = new Map(features.map((f) => [f.index, f]))
+        this.canvas.refill(series.id, (index) => {
+          const feature = byIndex.get(index)
+          return feature ? series.fillFor(feature) : undefined
+        })
+        continue
+      }
+
+      for (const feature of features) {
         const path = this.renderer.pathFor(series.id, feature.key || feature.index)
         if (path) path.setAttribute('fill', series.fillFor(feature))
       }
     }
+    this.canvas?.repaint()
   }
 
   private _onCameraChange(): void {
     // Applies the world transform and repositions screen-space symbols.
     this.renderer?.applyCamera()
+    // The canvas has no free transform, so this is the tier's per-frame cost:
+    // one matrix, then a re-fill of paths that were built at draw time. It must
+    // never reproject or rebuild a Path2D; `test/canvas.test.ts` pins that.
+    this.canvas?.applyCamera()
 
     // Clustered markers depend on the camera scale, but only in steps: the level
     // is quantized, so panning never reclusters and a smooth zoom crosses a
@@ -1925,6 +2231,7 @@ class ApexMaps extends BaseChart {
 
     this._measure()
     this.renderer?.resize(this.viewport.width, this.viewport.height)
+    this.canvas?.resize(this.viewport.width, this.viewport.height)
     this.labels?.destroy()
     this.annotations?.destroy()
     this._buildViewport()
@@ -1939,6 +2246,7 @@ class ApexMaps extends BaseChart {
 
     this._draw()
     this.renderer?.applyCamera()
+    this.canvas?.applyCamera()
     this.emit('resized', {
       width: this.viewport.width,
       height: this.viewport.height,
@@ -2016,6 +2324,7 @@ class ApexMaps extends BaseChart {
     this._buildSeries()
     this._draw()
     this.renderer?.applyCamera()
+    this.canvas?.applyCamera()
 
     // The interaction tree is plain data (no formatters), so a JSON comparison is
     // exact. Recreating drops any gesture mid-flight, which is why it only happens
@@ -2080,6 +2389,25 @@ class ApexMaps extends BaseChart {
 
     for (const series of this.renderTargets) {
       if (series.kind !== 'features') continue
+
+      if (this.canvas) {
+        // One state write per feature and one paint, rather than per-feature DOM
+        // mutation. The hovered mark keeps its hover flag: a selection landing
+        // while the pointer rests on a country must not un-highlight it.
+        const hoveredKey = this.hovered?.seriesId === series.id ? this.hovered.markKey : undefined
+        for (const feature of this.geo.features) {
+          const selected = this.selection.has(feature.key)
+          const hovered = hoveredKey !== undefined && (feature.key || feature.index) === hoveredKey
+          const muted = muting && !selected
+          this.canvas.setState(
+            series.id,
+            feature.index,
+            selected || muted || hovered ? { selected, muted, hovered } : null,
+          )
+        }
+        continue
+      }
+
       for (const feature of this.geo.features) {
         const path = this.renderer.pathFor(series.id, feature.key || feature.index)
         if (!path) continue
@@ -2124,8 +2452,21 @@ class ApexMaps extends BaseChart {
           el.classList.toggle('is-selected', selected)
           el.classList.toggle('is-muted', muting && !selected)
         }
+        continue
+      }
+
+      // Arcs and routes live on the canvas when the tier is active, so their
+      // selection is state rather than classes.
+      if (this.canvas && series.kind === 'paths') {
+        for (const item of series.items) {
+          const selected = this.selection.has(item.key)
+          const muted = muting && !selected
+          this.canvas.setState(series.id, item.key, selected || muted ? { selected, muted } : null)
+        }
       }
     }
+
+    this.canvas?.repaint()
   }
 
   // --- box selection and linked maps ----------------------------------------
@@ -2417,12 +2758,9 @@ class ApexMaps extends BaseChart {
    */
   private _warnUnimplemented(): void {
     const o = this.userOptions
-    const renderer = o.chart?.renderer
-    if (renderer === 'canvas' || renderer === 'webgl') {
-      this.warnings.push(
-        `chart.renderer '${renderer}' is not implemented yet; this version always renders SVG`,
-      )
-    }
+    // `chart.renderer` is implemented: the canvas tier draws the geometry layers
+    // and `_selectRenderer` reports what it chose and why. `'webgl'` still warns,
+    // but from the controller, which knows it resolved to canvas instead.
     if (o.geo?.boundaries !== undefined) {
       this.warnings.push(
         'geo.boundaries is not a rendering policy yet; packs record their boundary policy in mapMeta()',
@@ -2626,6 +2964,7 @@ class ApexMaps extends BaseChart {
     this.breadcrumb?.destroy()
     this.a11y?.destroy()
     this.renderer?.destroy()
+    this.canvas?.destroy()
     remove(this._attribution)
     remove(this.plot)
 

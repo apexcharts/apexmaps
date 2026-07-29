@@ -105,28 +105,75 @@ for (const file of pages) {
       timeout: 20000,
     })
 
-    const result = await page.evaluate(() => ({
-      error: window.__demo.error,
-      maps: window.__demo.maps.map(({ name, map }) => ({
-        name,
-        rendered: !!map.rendered,
-        features: map.geo ? map.geo.features.length : 0,
-        marks: map.element.querySelectorAll(
-          'path.apexmaps-feature, circle.apexmaps-bubble, g.apexmaps-mark, path.apexmaps-arc',
-        ).length,
-        warnings: map.warnings.slice(0, 3),
-      })),
-    }))
+    const result = await page.evaluate(() => {
+      /**
+       * Whether a canvas holds any ink.
+       *
+       * The canvas tier draws no elements, so counting them would report every
+       * canvas map as blank. Sampling pixels is the equivalent check, and it is
+       * actually the stronger one: a canvas that exists, is sized, and is
+       * entirely transparent is exactly the "looks healthy and is blank" failure
+       * this script was written to catch.
+       */
+      const canvasHasInk = (canvas) => {
+        if (!canvas || !canvas.width || !canvas.height) return 0
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return 0
+        const { width, height } = canvas
+        const data = ctx.getImageData(0, 0, width, height).data
+        let opaque = 0
+        for (let y = 0; y < height; y += 11) {
+          for (let x = 0; x < width; x += 11) {
+            if (data[(y * width + x) * 4 + 3] > 8) opaque++
+          }
+        }
+        return opaque
+      }
+
+      return {
+        error: window.__demo.error,
+        maps: window.__demo.maps.map(({ name, map }) => {
+          const elements = map.element.querySelectorAll(
+            'path.apexmaps-feature, circle.apexmaps-bubble, g.apexmaps-mark, path.apexmaps-arc, path.apexmaps-line',
+          ).length
+          const canvas = map.element.querySelector('canvas.apexmaps-canvas')
+          const ink = canvas ? canvasHasInk(canvas) : 0
+          return {
+            name,
+            rendered: !!map.rendered,
+            renderer: map.rendererKind || 'svg',
+            features: map.geo ? map.geo.features.length : 0,
+            elements,
+            ink,
+            // What "drew something" means for whichever tier is active.
+            marks: canvas ? ink : elements,
+            warnings: map.warnings.slice(0, 3),
+          }
+        }),
+      }
+    })
 
     if (result.error) problems.push(`demo reported: ${result.error.split('\n')[0]}`)
     if (!result.maps.length) problems.push('no map registered with Demo.watch()')
     for (const map of result.maps) {
       if (!map.rendered) problems.push(`${map.name}: never finished rendering`)
       // The failure this check exists for: a demo that looks healthy and is blank.
-      else if (map.marks === 0) problems.push(`${map.name}: rendered 0 marks`)
+      else if (map.marks === 0) {
+        problems.push(
+          map.renderer === 'canvas'
+            ? `${map.name}: canvas tier drew no ink`
+            : `${map.name}: rendered 0 marks`,
+        )
+      }
     }
 
-    const summary = result.maps.map((m) => `${m.name} ${m.marks}/${m.features}`).join(', ')
+    const summary = result.maps
+      .map((m) =>
+        m.renderer === 'canvas'
+          ? `${m.name} canvas ${m.ink} ink/${m.features}`
+          : `${m.name} ${m.marks}/${m.features}`,
+      )
+      .join(', ')
     rows.push({
       file,
       status: problems.length ? 'FAIL' : 'ok',

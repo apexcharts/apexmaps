@@ -476,7 +476,32 @@ export interface ChartOptions {
   height?: number | string
   /** Seeds the default `type` for series that omit it. */
   type?: SeriesType
+  /**
+   * Which backend draws the world-space geometry layers.
+   *
+   * `'auto'` (the default) promotes to canvas once the geometry mark count
+   * reaches `rendererThreshold`; `'svg'` pins SVG; `'canvas'` asks for canvas
+   * and falls back with a dev warning if no 2D context is available; `'webgl'`
+   * is not built and resolves to the fastest tier that is.
+   *
+   * The canvas tier rasterises features, arcs, routes, the sphere and the
+   * graticule. Labels, annotations, bubbles, markers, the selection box and the
+   * accessibility tree stay SVG in every tier: see `renderers/Renderer` for why
+   * that split is a decision rather than an omission.
+   */
   renderer?: RendererKind
+  /**
+   * Geometry marks (features plus arc and route marks) at which `'auto'`
+   * promotes to canvas. Default 20,000.
+   *
+   * The canvas tier does not make panning faster: SVG's camera is already one
+   * transform and is O(1) in the feature count. What it removes is the DOM,
+   * sixteen elements instead of twenty thousand, so the threshold sits where
+   * element count starts to cost the whole page rather than where frames do.
+   * Recolouring is somewhat slower on canvas, and a pan leaves the 16 ms budget
+   * above roughly 30,000 features.
+   */
+  rendererThreshold?: number
   background?: string
   fontFamily?: string
   /**
