@@ -38,6 +38,7 @@
   "scripts": {
     "prebuild": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "rollup -c && npm run build:types",
+    "prepublishOnly": "npm run build && npm run build:wrappers && npm test && npm run check:size",
     "build:wrappers": "npm run build --workspaces --if-present",
     "examples": "npm run build && node scripts/serve.mjs 8084",
     "serve": "node scripts/serve.mjs",

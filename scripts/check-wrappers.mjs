@@ -14,10 +14,19 @@
  *   `registerMap` populates one and the map reads the other.
  * - A missing `.cjs` or a `.d.ts` that does not resolve makes the package look
  *   installed and broken.
+ * - A dist that exists on disk but never reaches the tarball looks like a good
+ *   release right up to `npm install`. What ships is decided by `files` plus
+ *   npm's ignore rules, not by the manifest, and the two can disagree silently:
+ *   npm-packlist skips nested directories that carry their own package.json,
+ *   which ng-packagr's dist does, so the Angular package once packed its
+ *   sources and tests while excluding the only directory a consumer can use.
  *
- * Usage: `npm run check:wrappers` (after `npm run build:wrappers`)
+ * Usage: `npm run check:wrappers` (after `npm run build:wrappers`), or with a
+ * wrapper's directory name to check that one alone, which is what each
+ * wrapper's `prepublishOnly` runs.
  */
 
+import { execSync } from 'node:child_process'
 import { readFileSync, existsSync } from 'node:fs'
 import { readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -42,8 +51,11 @@ const MUST_BE_EXTERNAL = ['react', 'vue', '@angular/core', 'apexmaps']
 const rows = []
 const failures = []
 
+const only = process.argv[2]
+
 const packages = existsSync(WRAPPERS)
   ? readdirSync(WRAPPERS).filter((name) => {
+      if (only && name !== only) return false
       const manifest = join(WRAPPERS, name, 'package.json')
       if (!existsSync(manifest)) return false
       // The shared internals workspace is private and has no bundle of its own.
@@ -53,6 +65,10 @@ const packages = existsSync(WRAPPERS)
   : []
 
 if (!packages.length) {
+  if (only) {
+    console.error(`\n  No publishable wrapper named '${only}' under wrappers/.\n`)
+    process.exit(1)
+  }
   console.log('\n  No wrappers found under wrappers/.\n')
   process.exit(0)
 }
@@ -127,10 +143,51 @@ for (const name of packages) {
     }
   }
 
+  // The tarball, not the working tree, is the release. Everything above ran
+  // against files on disk, and the missing-dist failure passed all of it.
+  // `--ignore-scripts` keeps the dry run from triggering build lifecycles.
+  let packed = null
+  try {
+    const out = execSync('npm pack --dry-run --json --ignore-scripts', {
+      cwd: dir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+    packed = new Set(JSON.parse(out)[0].files.map((entry) => entry.path))
+  } catch {
+    problems.push('npm pack --dry-run failed, so the tarball contents are unknown')
+  }
+
+  if (packed) {
+    for (const [file, field] of promised) {
+      if (!packed.has(file)) problems.push(`tarball is missing ${file} (promised by ${field})`)
+    }
+
+    // "SEE LICENSE IN LICENSE" is a promise like any exports target: the file
+    // it names has to travel with every copy of the package.
+    const licenseFile = /^SEE LICENSE IN (.+)$/.exec(manifest.license || '')?.[1]
+    if (licenseFile && !packed.has(licenseFile)) {
+      problems.push(`tarball is missing ${licenseFile}, which the license field points at`)
+    }
+    if (!packed.has('README.md')) problems.push('tarball is missing README.md')
+
+    // And nothing else. Shipping sources, tests or configs does not break a
+    // consumer, but it is exactly how the missing dist stayed invisible, so
+    // the contents are pinned to what a consumer resolves.
+    const expected = new Set(['package.json', 'README.md', 'LICENSE', licenseFile].filter(Boolean))
+    for (const path of packed) {
+      if (!path.startsWith('dist/') && !expected.has(path)) {
+        problems.push(`tarball ships ${path}, which no consumer resolves`)
+      }
+    }
+  }
+
   rows.push({
     name: manifest.name,
     status: problems.length ? 'FAIL' : 'ok',
-    detail: problems.length ? problems.join(' | ') : `${bundles.length} bundles, peers external`,
+    detail: problems.length
+      ? problems.join(' | ')
+      : `${bundles.length} bundles, peers external, ${packed.size} files in tarball`,
   })
   if (problems.length) failures.push(name)
 }
