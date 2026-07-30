@@ -1,118 +1,113 @@
-# Publishes apexmaps and its three wrappers when a release commit lands on main,
-# the same trigger apexcharts-js uses, so releasing is a commit rather than four
-# `npm publish` runs in four directories in the right order:
+# Publishing for every package in this repository, in one file because npm
+# verifies the workflow filename per package: all four trusted publishers point
+# at publish.yml, so every publish job has to live here.
+#
+# The trigger is the commit subject, matching the rest of the ecosystem
+# (apexcharts-js, apexstock, apexgantt, apextree, apexsankey):
+#
+#   release: X.Y.Z                   ->  apexmaps, plus any wrapper sitting at
+#                                        exactly that version (see below)
+#   release(react-apexmaps): X.Y.Z   ->  that wrapper alone
+#   release(vue-apexmaps): X.Y.Z
+#   release(ngx-apexmaps): X.Y.Z
+#
+# "release: " is matched literally, so a scoped "release(...)" subject never
+# matches the core and vice versa: at most one job publishes anything. Anything
+# else on main, including "fix(release): ...", publishes nothing.
+#
+# Releasing the whole set:
 #
 #   npm version 0.2.0 --no-git-tag-version
 #   npm version 0.2.0 --no-git-tag-version --workspaces
-#   # then widen each wrapper's `peerDependencies.apexmaps` to ^0.2.0 by hand,
-#   # which npm version does not do and which this workflow refuses to skip
+#   # then widen each wrapper's peerDependencies.apexmaps to ^0.2.0, which
+#   # `npm version` does not touch and which the core job refuses to publish
+#   # without
 #   git commit -am "release: 0.2.0"
 #   git push
 #
-# Only the commit subject triggers a release, so a body line that happens to
-# quote a version cannot publish anything.
+# Why a core release also sweeps up the wrappers, which apexstock's equivalent
+# does not: the wrappers pin the core with a caret, and under 0.x a caret does
+# not cross a minor, so a core minor forces all three wrappers out with a
+# widened peer. Doing that as four commits with no code between them is
+# ceremony. A wrapper is only swept up when it carries exactly the version being
+# released; one that moved on its own still needs its own scoped commit.
 #
-# Authentication is npm trusted publishing (OIDC), like publish-geo.yml: there is
-# no NPM_TOKEN in this repository to leak or rotate, and npm attaches a
-# provenance attestation linking each tarball to this workflow run. Two
-# consequences worth knowing before this file is edited:
+# Authentication is npm trusted publishing (OIDC), so there is no NPM_TOKEN in
+# this repository to leak or rotate, and npm attaches a provenance attestation
+# linking each tarball to this run. Two consequences:
 #
-#   1. A trusted publisher must be configured on each of apexmaps,
-#      react-apexmaps, vue-apexmaps and ngx-apexmaps, all four pointing at this
-#      repository and the workflow filename `publish.yml`. npm verifies the
-#      filename, so renaming this file breaks publishing until all four settings
-#      are updated. Leave npm's "Environment name" blank unless this job gains a
-#      matching `environment:` key.
-#   2. Provenance must NOT be requested in any package.json. `publishConfig.provenance`
-#      makes it mandatory for every publish including from a laptop, where there
-#      is no CI provider to attest anything, and npm then fails outright.
+#   1. Each of apexmaps, react-apexmaps, vue-apexmaps and ngx-apexmaps needs a
+#      trusted publisher on npm pointing at this repository and the filename
+#      publish.yml, with npm's "Environment name" left blank unless a job below
+#      gains a matching `environment:`. Renaming this file breaks all four.
+#   2. Provenance must NOT be requested in any package.json.
+#      `publishConfig.provenance` makes it mandatory for every publish including
+#      from a laptop, where there is no CI provider to attest anything, and npm
+#      then fails with "Automatic provenance generation not supported for
+#      provider: null".
 #
-# The geometry dataset is deliberately not here. It versions independently of the
-# library and releases from publish-geo.yml on a `geo-v*` tag.
+# The geometry dataset is deliberately not here: it versions independently of
+# the library and releases from publish-geo.yml on a `geo-v*` tag.
 #
-# Re-running is safe. Every package is skipped if its version is already on the
-# registry, so a run that published the core and then failed on a wrapper can be
-# retried from the Actions tab (workflow_dispatch) without a version bump and
-# without republishing anything. That guard also means a wrapper carrying a
-# version of its own publishes on the next release commit while the packages that
-# did not move stay put.
+# Retrying is safe. Any package whose version is already on the registry is
+# skipped, so a run that published the core and then failed on a wrapper is
+# fixed with "Re-run failed jobs" from the Actions tab, which replays this same
+# commit, with nothing republished. npm never allows overwriting a version,
+# which is what makes that guard worth the lines.
 name: Publish to npm
 
 on:
   push:
-    branches: [main]
-  # For retrying a partial failure. The version comes from package.json, so a
-  # manual run cannot disagree with the commit it runs against.
-  workflow_dispatch:
+    branches:
+      - main
 
 permissions:
-  contents: read
+  # Creating tags and GitHub releases.
+  contents: write
+  # The OIDC token npm exchanges for short-lived publish rights. Without it the
+  # publish fails on authentication rather than on anything informative.
+  id-token: write
 
 jobs:
-  detect:
+  # The core, and any wrapper released in lockstep with it.
+  publish:
     runs-on: ubuntu-latest
-    outputs:
-      triggered: ${{ steps.check.outputs.triggered }}
-      version: ${{ steps.check.outputs.version }}
-      dist-tag: ${{ steps.check.outputs.dist-tag }}
+    # Quoted because the expression contains ": ", which YAML would otherwise
+    # read as a nested mapping.
+    if: "startsWith(github.event.head_commit.message, 'release: ')"
     steps:
+      # Full history: the release notes are the log since the previous tag.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Read the release version
+      - name: Read the version out of the commit subject
         id: check
         env:
           # Passed as an environment variable and never interpolated into the
           # script. `${{ }}` is substituted textually before bash parses the
           # line, so a commit message containing a quote breaks the script and
           # one containing $(...) or backticks would run in a job that can
-          # publish to npm. Merge commit subjects include the PR title, which
-          # any outside contributor writes.
+          # publish to npm. Merge subjects carry the PR title, which any outside
+          # contributor writes. This is not theoretical: it broke a run in
+          # apexcharts-js on 2026-07-27.
           MSG: ${{ github.event.head_commit.message }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
-            VERSION=$(node -p "require('./package.json').version")
-            echo "manual run, releasing whatever package.json says: $VERSION"
-          else
-            SUBJECT="${MSG%%$'\n'*}"
-            case "$SUBJECT" in
-              'release: '*) VERSION="${SUBJECT#release: }"; VERSION="${VERSION%% *}" ;;
-              *) echo "not a release commit, nothing to publish"
-                 echo "triggered=false" >> "$GITHUB_OUTPUT"
-                 exit 0 ;;
-            esac
-          fi
-
+          SUBJECT="${MSG%%$'\n'*}"
+          VERSION="${SUBJECT#release: }"
+          VERSION="${VERSION%% *}"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
             echo "'$VERSION' is not a version this workflow will publish"
             exit 1
           fi
-
           # A prerelease must never become what `npm install apexmaps` resolves.
           case "$VERSION" in
             *-*) DIST_TAG=next ;;
             *) DIST_TAG=latest ;;
           esac
-
-          echo "triggered=true" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "dist-tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
-          echo "releasing $VERSION under the '$DIST_TAG' tag"
-
-  publish:
-    needs: detect
-    if: needs.detect.outputs.triggered == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      # Creating the tag and the GitHub release.
-      contents: write
-      # The OIDC token npm exchanges for short-lived publish rights. Without it
-      # the publish fails on authentication rather than on anything informative.
-      id-token: write
-    env:
-      VERSION: ${{ needs.detect.outputs.version }}
-      DIST_TAG: ${{ needs.detect.outputs.dist-tag }}
-    steps:
-      - uses: actions/checkout@v4
+          echo "releasing apexmaps $VERSION under the '$DIST_TAG' tag"
 
       - uses: actions/setup-node@v4
         with:
@@ -132,7 +127,9 @@ jobs:
 
       - run: npm ci
 
-      - name: Check every manifest agrees with the release version
+      - name: Check the manifests against the release version
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
         run: |
           set -euo pipefail
           ROOT=$(node -p "require('./package.json').version")
@@ -141,13 +138,13 @@ jobs:
             exit 1
           fi
 
-          # The likeliest release mistake in this repository, and one that only
-          # surfaces in a consumer's install: the wrappers pin the core with a
-          # caret, and under 0.x a caret does not cross a minor. Bumping
-          # everything to 0.2.0 while a wrapper still peers ^0.1.0 publishes a
-          # wrapper that refuses the only core it works with. npm's own semver
-          # is not reachable from a script, and a hand-rolled caret check would
-          # be wrong in exactly this case, so use the real one.
+          # The likeliest release mistake here, and one that only surfaces in a
+          # consumer's install: the wrappers pin the core with a caret, and under
+          # 0.x a caret does not cross a minor. Bumping everything to 0.2.0 while
+          # a wrapper still peers ^0.1.0 publishes a wrapper that refuses the
+          # only core it works with. npm's own semver is not reachable from a
+          # script and a hand-rolled caret check would be wrong in exactly this
+          # case, so use the real one.
           for dir in wrappers/*/; do
             NAME=$(node -p "require('./$dir/package.json').name")
             PEER=$(node -p "require('./$dir/package.json').peerDependencies?.apexmaps ?? ''")
@@ -159,68 +156,239 @@ jobs:
             echo "$NAME accepts apexmaps@$VERSION"
           done
 
-      # Unconditionally, before any publish. The wrappers resolve `apexmaps`
+      # Before any publish, unconditionally. The wrappers resolve `apexmaps`
       # through the linked root package, so their builds and their own
-      # prepublishOnly checks need dist/ to exist even on a retry where the core
+      # prepublishOnly checks need dist/ to exist even on a re-run where the core
       # is already on the registry and its publish is skipped.
       - run: npm run build
 
-      # Each package's prepublishOnly is the gate: the core rebuilds, rebuilds
-      # every wrapper, runs the suite and checks the size budget, and each
-      # wrapper rebuilds and asserts its own tarball contents. Those guards
-      # belong in package.json rather than here, because they have to hold for a
-      # publish from a laptop too. This workflow only decides what to publish
-      # and in what order.
+      # Each package's prepublishOnly is the real gate: the core rebuilds,
+      # rebuilds every wrapper, runs the suite and checks the size budget, and
+      # each wrapper rebuilds and asserts its own tarball contents. Those guards
+      # live in package.json rather than here because they have to hold for a
+      # publish from a laptop too. This workflow decides what to publish, in what
+      # order, and under which tag.
       - name: Publish apexmaps
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+          DIST_TAG: ${{ steps.check.outputs.dist-tag }}
         run: |
           set -euo pipefail
           if npm view "apexmaps@$VERSION" version > /dev/null 2>&1; then
             echo "apexmaps@$VERSION is already on npm, skipping"
             echo "- skipped apexmaps@$VERSION, already published" >> "$GITHUB_STEP_SUMMARY"
           else
-            npm publish --tag "$DIST_TAG"
+            npm publish --provenance --tag "$DIST_TAG"
             echo "- published apexmaps@$VERSION" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # After the core, always. All three peer on it, so a wrapper that reaches
+      # After the core, always: all three peer on it, so a wrapper that reaches
       # the registry first is uninstallable until the core follows.
-      - name: Publish the wrappers
+      - name: Publish the wrappers released in lockstep
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+          DIST_TAG: ${{ steps.check.outputs.dist-tag }}
         run: |
           set -euo pipefail
           for dir in wrappers/*/; do
             NAME=$(node -p "require('./$dir/package.json').name")
-            # The shared internals workspace, if there ever is one again, is
-            # private and has nothing to publish.
+            # A private internals workspace, if there ever is one again, has
+            # nothing to publish.
             if [ "$(node -p "!!require('./$dir/package.json').private")" = true ]; then
               echo "$NAME is private, skipping"
               continue
             fi
             WRAPPER_VERSION=$(node -p "require('./$dir/package.json').version")
+            if [ "$WRAPPER_VERSION" != "$VERSION" ]; then
+              echo "$NAME is at $WRAPPER_VERSION, not part of this release"
+              continue
+            fi
             if npm view "$NAME@$WRAPPER_VERSION" version > /dev/null 2>&1; then
               echo "$NAME@$WRAPPER_VERSION is already on npm, skipping"
               echo "- skipped $NAME@$WRAPPER_VERSION, already published" >> "$GITHUB_STEP_SUMMARY"
               continue
             fi
-            (cd "$dir" && npm publish --tag "$DIST_TAG")
+            # `npm publish <dir>` does not engage OIDC (it fails ENEEDAUTH), so
+            # the package directory has to be the cwd.
+            (cd "$dir" && npm publish --provenance --tag "$DIST_TAG")
             echo "- published $NAME@$WRAPPER_VERSION" >> "$GITHUB_STEP_SUMMARY"
           done
 
-      # Last, so a release never announces a version that failed to publish. The
-      # tag is created here rather than pushed by hand, which keeps it pointing
-      # at the commit the tarballs were actually built from.
-      - name: Tag and update the GitHub release
+      # Last, so a tag and a release never announce a version that failed to
+      # publish. Created here rather than pushed by hand, which keeps the tag on
+      # the commit the tarballs were built from.
+      - name: Tag and release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check.outputs.version }}
         run: |
           set -euo pipefail
-          if gh release view "v$VERSION" > /dev/null 2>&1; then
-            echo "release v$VERSION already exists, leaving it alone"
+          TAG="v$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git rev-parse "$TAG" > /dev/null 2>&1; then
+            echo "tag $TAG already exists, leaving it alone"
+          else
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "release $TAG already exists, leaving it alone"
             exit 0
+          fi
+          # Only library tags, so the independently versioned geometry dataset
+          # does not truncate the library's notes.
+          PREV=$(git describe --tags --abbrev=0 --match 'v*' "$TAG^" 2>/dev/null || echo '')
+          if [ -n "$PREV" ]; then
+            NOTES=$(git log "$PREV..$TAG" --pretty=format:'- %s' --no-merges)
+          else
+            NOTES=$(git log "$TAG" --pretty=format:'- %s' --no-merges)
           fi
           PRERELEASE=
           case "$VERSION" in *-*) PRERELEASE=--prerelease ;; esac
           # Unquoted on purpose: empty must expand to no argument at all.
-          gh release create "v$VERSION" \
-            --target "$GITHUB_SHA" \
-            --title "v$VERSION" \
-            --generate-notes $PRERELEASE
+          gh release create "$TAG" --title "$TAG" --notes "$NOTES" $PRERELEASE
+
+  # One wrapper, released on its own. A single job rather than a matrix of three
+  # that no-ops twice: the subject names exactly one package.
+  publish-wrapper:
+    runs-on: ubuntu-latest
+    if: "startsWith(github.event.head_commit.message, 'release(')"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read the package and version out of the commit subject
+        id: check
+        env:
+          # See the note in the core job: this is a contributor-controlled string
+          # reaching a job that can publish to npm.
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          SUBJECT="${MSG%%$'\n'*}"
+          if ! [[ "$SUBJECT" =~ ^release\(([a-z0-9@/-]+)\):\ ([0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?)($|\ ) ]]; then
+            echo "'$SUBJECT' is not a scoped release subject: expected 'release(<package>): X.Y.Z'"
+            exit 1
+          fi
+          NAME="${BASH_REMATCH[1]}"
+          VERSION="${BASH_REMATCH[2]}"
+
+          # Resolve the directory from the manifests rather than a hardcoded map,
+          # so a wrapper added later needs no edit here, and an unknown name
+          # fails loudly rather than publishing something unintended.
+          DIR=
+          for dir in wrappers/*/; do
+            if [ "$(node -p "require('./$dir/package.json').name")" = "$NAME" ]; then
+              DIR="${dir%/}"
+              break
+            fi
+          done
+          if [ -z "$DIR" ]; then
+            echo "no wrapper named '$NAME' under wrappers/"
+            exit 1
+          fi
+
+          case "$VERSION" in
+            *-*) DIST_TAG=next ;;
+            *) DIST_TAG=latest ;;
+          esac
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "dist-tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "releasing $NAME $VERSION from $DIR under the '$DIST_TAG' tag"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Use an npm that supports OIDC
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      - run: npm ci
+
+      - name: Check the manifest against the release version
+        env:
+          NAME: ${{ steps.check.outputs.name }}
+          DIR: ${{ steps.check.outputs.dir }}
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          set -euo pipefail
+          PKG=$(node -p "require('./$DIR/package.json').version")
+          if [ "$PKG" != "$VERSION" ]; then
+            echo "$DIR/package.json is $PKG but the release says $VERSION"
+            exit 1
+          fi
+          # A wrapper released on its own still has to accept the core this
+          # repository is currently at, or it installs against nothing.
+          CORE=$(node -p "require('./package.json').version")
+          PEER=$(node -p "require('./$DIR/package.json').peerDependencies?.apexmaps ?? ''")
+          if [ -n "$PEER" ] && ! npx --yes semver@7 -r "$PEER" "$CORE" > /dev/null; then
+            echo "$NAME peers apexmaps@$PEER, which does not accept the core at $CORE"
+            exit 1
+          fi
+          echo "$NAME $VERSION accepts apexmaps@$CORE"
+
+      # The wrapper resolves `apexmaps` through the linked root package, so the
+      # core has to be built before the wrapper's own build can typecheck.
+      - run: npm run build
+
+      - name: Publish
+        env:
+          NAME: ${{ steps.check.outputs.name }}
+          DIR: ${{ steps.check.outputs.dir }}
+          VERSION: ${{ steps.check.outputs.version }}
+          DIST_TAG: ${{ steps.check.outputs.dist-tag }}
+        run: |
+          set -euo pipefail
+          if npm view "$NAME@$VERSION" version > /dev/null 2>&1; then
+            echo "$NAME@$VERSION is already on npm, skipping"
+            echo "- skipped $NAME@$VERSION, already published" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # `npm publish <dir>` does not engage OIDC (it fails ENEEDAUTH), so the
+          # package directory has to be the cwd.
+          cd "$DIR"
+          npm publish --provenance --tag "$DIST_TAG"
+          echo "- published $NAME@$VERSION" >> "$GITHUB_STEP_SUMMARY"
+
+      # Namespaced by directory, following the `geo-v*` tags the dataset already
+      # uses, so wrapper releases and library releases do not share a series.
+      - name: Tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ steps.check.outputs.name }}
+          DIR: ${{ steps.check.outputs.dir }}
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          set -euo pipefail
+          SHORT="${DIR#wrappers/}"
+          TAG="$SHORT-v$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git rev-parse "$TAG" > /dev/null 2>&1; then
+            echo "tag $TAG already exists, leaving it alone"
+          else
+            git tag -a "$TAG" -m "Release $NAME $VERSION"
+            git push origin "$TAG"
+          fi
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "release $TAG already exists, leaving it alone"
+            exit 0
+          fi
+          PREV=$(git describe --tags --abbrev=0 --match "$SHORT-v*" "$TAG^" 2>/dev/null || echo '')
+          if [ -n "$PREV" ]; then
+            NOTES=$(git log "$PREV..$TAG" --pretty=format:'- %s' --no-merges -- "$DIR" src)
+          else
+            NOTES=$(git log "$TAG" --pretty=format:'- %s' --no-merges -- "$DIR" src)
+          fi
+          [ -n "$NOTES" ] || NOTES="Release $NAME $VERSION"
+          PRERELEASE=
+          case "$VERSION" in *-*) PRERELEASE=--prerelease ;; esac
+          gh release create "$TAG" --title "$NAME $VERSION" --notes "$NOTES" $PRERELEASE
