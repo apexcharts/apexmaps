@@ -1,0 +1,226 @@
+# Publishes apexmaps and its three wrappers when a release commit lands on main,
+# the same trigger apexcharts-js uses, so releasing is a commit rather than four
+# `npm publish` runs in four directories in the right order:
+#
+#   npm version 0.2.0 --no-git-tag-version
+#   npm version 0.2.0 --no-git-tag-version --workspaces
+#   # then widen each wrapper's `peerDependencies.apexmaps` to ^0.2.0 by hand,
+#   # which npm version does not do and which this workflow refuses to skip
+#   git commit -am "release: 0.2.0"
+#   git push
+#
+# Only the commit subject triggers a release, so a body line that happens to
+# quote a version cannot publish anything.
+#
+# Authentication is npm trusted publishing (OIDC), like publish-geo.yml: there is
+# no NPM_TOKEN in this repository to leak or rotate, and npm attaches a
+# provenance attestation linking each tarball to this workflow run. Two
+# consequences worth knowing before this file is edited:
+#
+#   1. A trusted publisher must be configured on each of apexmaps,
+#      react-apexmaps, vue-apexmaps and ngx-apexmaps, all four pointing at this
+#      repository and the workflow filename `publish.yml`. npm verifies the
+#      filename, so renaming this file breaks publishing until all four settings
+#      are updated. Leave npm's "Environment name" blank unless this job gains a
+#      matching `environment:` key.
+#   2. Provenance must NOT be requested in any package.json. `publishConfig.provenance`
+#      makes it mandatory for every publish including from a laptop, where there
+#      is no CI provider to attest anything, and npm then fails outright.
+#
+# The geometry dataset is deliberately not here. It versions independently of the
+# library and releases from publish-geo.yml on a `geo-v*` tag.
+#
+# Re-running is safe. Every package is skipped if its version is already on the
+# registry, so a run that published the core and then failed on a wrapper can be
+# retried from the Actions tab (workflow_dispatch) without a version bump and
+# without republishing anything. That guard also means a wrapper carrying a
+# version of its own publishes on the next release commit while the packages that
+# did not move stay put.
+name: Publish to npm
+
+on:
+  push:
+    branches: [main]
+  # For retrying a partial failure. The version comes from package.json, so a
+  # manual run cannot disagree with the commit it runs against.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      triggered: ${{ steps.check.outputs.triggered }}
+      version: ${{ steps.check.outputs.version }}
+      dist-tag: ${{ steps.check.outputs.dist-tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the release version
+        id: check
+        env:
+          # Passed as an environment variable and never interpolated into the
+          # script. `${{ }}` is substituted textually before bash parses the
+          # line, so a commit message containing a quote breaks the script and
+          # one containing $(...) or backticks would run in a job that can
+          # publish to npm. Merge commit subjects include the PR title, which
+          # any outside contributor writes.
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            VERSION=$(node -p "require('./package.json').version")
+            echo "manual run, releasing whatever package.json says: $VERSION"
+          else
+            SUBJECT="${MSG%%$'\n'*}"
+            case "$SUBJECT" in
+              'release: '*) VERSION="${SUBJECT#release: }"; VERSION="${VERSION%% *}" ;;
+              *) echo "not a release commit, nothing to publish"
+                 echo "triggered=false" >> "$GITHUB_OUTPUT"
+                 exit 0 ;;
+            esac
+          fi
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "'$VERSION' is not a version this workflow will publish"
+            exit 1
+          fi
+
+          # A prerelease must never become what `npm install apexmaps` resolves.
+          case "$VERSION" in
+            *-*) DIST_TAG=next ;;
+            *) DIST_TAG=latest ;;
+          esac
+
+          echo "triggered=true" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "dist-tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "releasing $VERSION under the '$DIST_TAG' tag"
+
+  publish:
+    needs: detect
+    if: needs.detect.outputs.triggered == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      # Creating the tag and the GitHub release.
+      contents: write
+      # The OIDC token npm exchanges for short-lived publish rights. Without it
+      # the publish fails on authentication rather than on anything informative.
+      id-token: write
+    env:
+      VERSION: ${{ needs.detect.outputs.version }}
+      DIST_TAG: ${{ needs.detect.outputs.dist-tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          # Writes the .npmrc registry entry. Deliberately no NODE_AUTH_TOKEN:
+          # setting one would make npm prefer the token over OIDC and skip
+          # provenance.
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or newer and the runner images still
+      # ship npm 10.x, so the bundled npm cannot publish this way.
+      - name: Use an npm that supports OIDC
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      - run: npm ci
+
+      - name: Check every manifest agrees with the release version
+        run: |
+          set -euo pipefail
+          ROOT=$(node -p "require('./package.json').version")
+          if [ "$ROOT" != "$VERSION" ]; then
+            echo "package.json is $ROOT but the release says $VERSION"
+            exit 1
+          fi
+
+          # The likeliest release mistake in this repository, and one that only
+          # surfaces in a consumer's install: the wrappers pin the core with a
+          # caret, and under 0.x a caret does not cross a minor. Bumping
+          # everything to 0.2.0 while a wrapper still peers ^0.1.0 publishes a
+          # wrapper that refuses the only core it works with. npm's own semver
+          # is not reachable from a script, and a hand-rolled caret check would
+          # be wrong in exactly this case, so use the real one.
+          for dir in wrappers/*/; do
+            NAME=$(node -p "require('./$dir/package.json').name")
+            PEER=$(node -p "require('./$dir/package.json').peerDependencies?.apexmaps ?? ''")
+            [ -n "$PEER" ] || continue
+            if ! npx --yes semver@7 -r "$PEER" "$VERSION" > /dev/null; then
+              echo "$NAME peers apexmaps@$PEER, which does not accept $VERSION"
+              exit 1
+            fi
+            echo "$NAME accepts apexmaps@$VERSION"
+          done
+
+      # Unconditionally, before any publish. The wrappers resolve `apexmaps`
+      # through the linked root package, so their builds and their own
+      # prepublishOnly checks need dist/ to exist even on a retry where the core
+      # is already on the registry and its publish is skipped.
+      - run: npm run build
+
+      # Each package's prepublishOnly is the gate: the core rebuilds, rebuilds
+      # every wrapper, runs the suite and checks the size budget, and each
+      # wrapper rebuilds and asserts its own tarball contents. Those guards
+      # belong in package.json rather than here, because they have to hold for a
+      # publish from a laptop too. This workflow only decides what to publish
+      # and in what order.
+      - name: Publish apexmaps
+        run: |
+          set -euo pipefail
+          if npm view "apexmaps@$VERSION" version > /dev/null 2>&1; then
+            echo "apexmaps@$VERSION is already on npm, skipping"
+            echo "- skipped apexmaps@$VERSION, already published" >> "$GITHUB_STEP_SUMMARY"
+          else
+            npm publish --tag "$DIST_TAG"
+            echo "- published apexmaps@$VERSION" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # After the core, always. All three peer on it, so a wrapper that reaches
+      # the registry first is uninstallable until the core follows.
+      - name: Publish the wrappers
+        run: |
+          set -euo pipefail
+          for dir in wrappers/*/; do
+            NAME=$(node -p "require('./$dir/package.json').name")
+            # The shared internals workspace, if there ever is one again, is
+            # private and has nothing to publish.
+            if [ "$(node -p "!!require('./$dir/package.json').private")" = true ]; then
+              echo "$NAME is private, skipping"
+              continue
+            fi
+            WRAPPER_VERSION=$(node -p "require('./$dir/package.json').version")
+            if npm view "$NAME@$WRAPPER_VERSION" version > /dev/null 2>&1; then
+              echo "$NAME@$WRAPPER_VERSION is already on npm, skipping"
+              echo "- skipped $NAME@$WRAPPER_VERSION, already published" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            (cd "$dir" && npm publish --tag "$DIST_TAG")
+            echo "- published $NAME@$WRAPPER_VERSION" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      # Last, so a release never announces a version that failed to publish. The
+      # tag is created here rather than pushed by hand, which keeps it pointing
+      # at the commit the tarballs were actually built from.
+      - name: Tag and update the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            echo "release v$VERSION already exists, leaving it alone"
+            exit 0
+          fi
+          PRERELEASE=
+          case "$VERSION" in *-*) PRERELEASE=--prerelease ;; esac
+          # Unquoted on purpose: empty must expand to no argument at all.
+          gh release create "v$VERSION" \
+            --target "$GITHUB_SHA" \
+            --title "v$VERSION" \
+            --generate-notes $PRERELEASE
