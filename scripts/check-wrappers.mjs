@@ -151,11 +151,23 @@ for (const name of packages) {
     const out = execSync('npm pack --dry-run --json --ignore-scripts', {
       cwd: dir,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
+      // stderr is captured rather than discarded: when this call fails, its
+      // message is the only thing that explains why, and swallowing it once cost
+      // a release. The npm 12 shape change below arrived in CI as
+      // "the tarball contents are unknown" and nothing else.
+      stdio: ['ignore', 'pipe', 'pipe'],
     })
-    packed = new Set(JSON.parse(out)[0].files.map((entry) => entry.path))
-  } catch {
-    problems.push('npm pack --dry-run failed, so the tarball contents are unknown')
+    const parsed = JSON.parse(out)
+    // npm 11 and earlier return an array of results; npm 12 returns an object
+    // keyed by package name. CI installs `npm@latest` (trusted publishing needs
+    // 11.5.1+), so the version here is whatever npm shipped this week, and both
+    // shapes have to work.
+    const result = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0]
+    if (!result?.files) throw new Error(`unrecognised npm pack --json shape: ${out.slice(0, 200)}`)
+    packed = new Set(result.files.map((entry) => entry.path))
+  } catch (error) {
+    const detail = (error.stderr || error.message || '').toString().trim().split('\n')[0]
+    problems.push(`npm pack --dry-run failed, so the tarball contents are unknown: ${detail}`)
   }
 
   if (packed) {
