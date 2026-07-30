@@ -281,6 +281,8 @@ export interface ChoroplethSeriesOptions extends SeriesCommon {
    * for both levels (states and counties, keyed the same way) needs no extra
    * wiring. For data fetched per level, listen for the `drilldown` event and call
    * `updateSeries` from the handler: the child level is already on screen by then.
+   *
+   * Licensed feature: works without a key for evaluation, with a watermark.
    */
   drilldown?: DrilldownOptions
 }
@@ -414,9 +416,11 @@ export interface MarkerSeriesOptions extends SeriesCommon {
   /** Field holding the category, for categorical colour and a legend. */
   colorBy?: string
   palette?: string
+  /** Licensed feature: works without a key for evaluation, with a watermark. */
   cluster?: ClusterOptions
 }
 
+/** Licensed feature: works without a key for evaluation, with a watermark. */
 export interface ArcSeriesOptions extends SeriesCommon {
   type: 'arc'
   data?: readonly ArcDatum[]
@@ -446,6 +450,8 @@ export interface ArcSeriesOptions extends SeriesCommon {
  * A route drawn through the vertices it is given, in order. Unlike an arc,
  * which derives the great circle between two endpoints, the caller supplies
  * the whole path: a GPS trace, a shipping lane, a transit line.
+ *
+ * Licensed feature: works without a key for evaluation, with a watermark.
  */
 export interface LineSeriesOptions extends SeriesCommon {
   type: 'line'
@@ -507,6 +513,8 @@ export interface ChartOptions {
   /**
    * `'story'` animates entrances; `'dashboard'` does not, because a dashboard
    * reader wants the number now rather than a performance.
+   *
+   * `'story'` is a licensed feature: works without a key for evaluation, with a watermark.
    */
   context?: 'story' | 'dashboard'
   /**
@@ -773,6 +781,7 @@ export interface ApexMapsOptions {
   theme?: { mode?: 'light' | 'dark' | 'auto'; palette?: PaletteName }
   interaction?: InteractionOptions
   a11y?: A11yOptions
+  /** Licensed feature: works without a key for evaluation, with a watermark. */
   annotations?: AnnotationOptions
   /**
    * Cross-filter group. Maps naming the same group share their selection, so
@@ -782,6 +791,8 @@ export interface ApexMapsOptions {
    *
    * `filter` controls direction: `'emit'` sends without receiving, `'receive'`
    * follows without leading.
+   *
+   * Licensed feature: works without a key for evaluation, with a watermark.
    */
   link?: { group?: string; filter?: 'bidirectional' | 'emit' | 'receive' }
   debug?: { enabled?: boolean | 'auto'; joinDiagnostics?: boolean }

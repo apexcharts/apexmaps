@@ -16,6 +16,7 @@ import './ApexMaps.css'
 import { BaseChart } from './core/BaseChart'
 import { buildConfig, applyResponsive, merge, mergeOptions } from './core/Config'
 import { A11y } from './core/A11y'
+import type { PremiumFeature } from './core/premium'
 import { resolveMap, registerMap, listMaps, mapMeta, attributionFor } from './core/MapRegistry'
 import {
   installCatalogue,
@@ -90,44 +91,7 @@ import type {
 
 const VERSION = '0.1.0'
 
-/**
- * Features that require a licence.
- *
- * The line is that a map answering a question is free, and a map that becomes an
- * application is licensed. So a choropleth, bubbles or markers on any map, with
- * tooltips, a legend, labels, zoom and pan, scales, export and accessibility, is
- * the free tier and renders clean. Depth of interaction (drilling into a level,
- * linking views, playing time), authoring on top of the map (annotations, routes),
- * summarising points into clusters, and cartography beyond the built-in
- * projections are the licensed tier.
- *
- * Two members of the free tier are there deliberately rather than by omission.
- * The canvas renderer is a rendering strategy rather than a feature, so gating it
- * would mean "your map is slow unless you pay". Accessibility is never gated: a
- * watermark over a screen-reader affordance is indefensible, and in some markets
- * it disqualifies the product from procurement.
- *
- * A name here is inert until a call site passes it to `_requirePremium`, and
- * `premium.test.ts` fails on any name with no live gate: `story` sat here ungated
- * from the first release, so the list is not evidence of anything on its own.
- * `morph`, `presentation`, `timePlayback` and `webgl` are named ahead of the
- * features themselves and are the exception the test knows about.
- */
-export const PREMIUM_FEATURES = [
-  'annotations',
-  'clustering',
-  'customProjection',
-  'drilldown',
-  'linkGroup',
-  'morph',
-  'presentation',
-  'routes',
-  'story',
-  'timePlayback',
-  'webgl',
-] as const
-
-export type PremiumFeature = (typeof PREMIUM_FEATURES)[number]
+/** The licensed feature set, and why each member is on it, lives in `core/premium`. */
 
 /** Anything the renderer can draw. */
 type AnySeries =
@@ -257,7 +221,25 @@ class ApexMaps extends BaseChart {
   breadcrumb: Breadcrumb | null = null
 
   private _listeners: Partial<Record<string, ((payload: never) => void)[]>> = {}
-  private readonly _premiumUsed = new Set<string>()
+  /**
+   * Premium features this map's current options put into use. Rebuilt from the
+   * resolved config on every `_checkPremium`, so removing the option removes the
+   * watermark: a mark that outlives what caused it describes the map's history
+   * rather than the map, and reads as a bug. Responsive rules and the framework
+   * wrappers both rewrite the config routinely, so this is a normal event, not
+   * an edge case.
+   */
+  private readonly _premiumUsed = new Set<PremiumFeature>()
+  /**
+   * Premium features used imperatively, which nothing writes to yet.
+   *
+   * The set above cannot hold these: a morph transition, a story step or a
+   * playback run leaves no option behind to recompute from, so recording it there
+   * would clear the watermark the moment the animation ended. Anything triggered
+   * by a call rather than by config belongs here, and here it stays for the life
+   * of the instance.
+   */
+  private readonly _premiumInvoked = new Set<PremiumFeature>()
   private _resizeObserver: ResizeObserver | null = null
   private _renderRaf: number | null = null
   private _resizeRaf: number | null = null
@@ -2860,6 +2842,13 @@ class ApexMaps extends BaseChart {
   private _checkPremium(): void {
     const config = this.config
 
+    // Rebuilt, not accumulated. Every gate below reads the resolved config, so the
+    // answer is recomputable, and the alternative is a watermark that survives the
+    // removal of the option that earned it. `_evaluateLicense` is only reached
+    // from `_requirePremium` (which has just added an entry) or after this method
+    // returns, so clearing here cannot flicker a watermark off mid-pass.
+    this._premiumUsed.clear()
+
     if (config.chart.context === 'story') this._requirePremium('story')
     if (config.link?.group) this._requirePremium('linkGroup')
 
@@ -2925,7 +2914,7 @@ class ApexMaps extends BaseChart {
 
     // The watermark is the trial state for premium capability, not a tax on the
     // free tier: with no premium feature in use it is never added.
-    if (this._premiumUsed.size === 0) {
+    if (this._premiumUsed.size === 0 && this._premiumInvoked.size === 0) {
       // Untracked, not merely erased. Reconciliation inside apex-commons is
       // licence-driven (paint every tracked container whenever the licence is
       // invalid) while this policy is usage-driven, and `Watermark.remove`
@@ -3103,6 +3092,14 @@ class ApexMaps extends BaseChart {
     return ApexMaps
   }
 
+  /**
+   * Register a projection factory under a name.
+   *
+   * Registering is free, and so is every built-in projection. Rendering a map
+   * *with* a projection registered here is a licensed feature: works without a
+   * key for evaluation, with a watermark. Re-registering a built-in name over the
+   * built-in stays free, since the gate is by name.
+   */
   static registerProjection(name: string, factory: ProjectionFactory): typeof ApexMaps {
     registerProjection(name, factory)
     return ApexMaps

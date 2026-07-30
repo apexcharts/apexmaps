@@ -31,18 +31,21 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 
 | Area | Detail |
 |---|---|
-| Series | `choropleth`, `bubble` (proportional symbols), `marker` (seven shapes, categorical colour, clustering), `arc` (great-circle connections), plus an automatic basemap whenever no feature series is present |
-| Projections | 13 core projections with aliases (`equalEarth` default, `webMercator`, `epsg:3857`, `albersUsa`, `orthographic`, conics, azimuthals), spec objects with `rotate` / `parallels` / `clipAngle`, and `ApexMaps.registerProjection()` for the rest of `d3-geo-projection` |
+| Series | `choropleth`, `bubble` (proportional symbols), `marker` (seven shapes, categorical colour, clustering&nbsp;†), `arc` (great-circle connections)&nbsp;†, `line` (routes through given vertices)&nbsp;†, plus an automatic basemap whenever no feature series is present |
+| Projections | 13 core projections with aliases (`equalEarth` default, `webMercator`, `epsg:3857`, `albersUsa`, `orthographic`, conics, azimuthals), spec objects with `rotate` / `parallels` / `clipAngle`, and `ApexMaps.registerProjection()`&nbsp;† for the rest of `d3-geo-projection` |
 | Geometry | 26 built-in packs: world countries and land, US states and counties, EU NUTS 0-3, and admin-1 for 15 more countries. Lazy, one request per pack, provenance and attribution attached |
 | Data | GeoJSON, TopoJSON, bare geometry, feature arrays; automatic winding repair; join-key auto-detection |
 | Joins | Explicit `joinBy`, mismatch diagnostics with suggestions, FIPS leading-zero repair, opt-in `fuzzyJoin` |
 | Scales | quantile, equal interval, Jenks, threshold, linear, log, sqrt, ordinal; OkLab-sampled ramps; 17 palettes; automatic diverging selection; square-root size scales with nested-circle legends |
-| Interaction | Anchored wheel zoom, inertial pan, pinch, double-click zoom, hover states, click and box selection with dimming, cross-map linked selection, legend class muting, drilldown with automatic parent detection and a breadcrumb |
+| Interaction | Anchored wheel zoom, inertial pan, pinch, double-click zoom, hover states, click and box selection with dimming, cross-map linked selection&nbsp;†, legend class muting, drilldown with automatic parent detection and a breadcrumb&nbsp;† |
 | Camera | `flyTo` (Van Wijk zoom-and-pan path), `easeTo`, `jumpTo`, `fitBounds`, `frameFeature`, `resetView`, interruptible and retargeting |
-| Components | Classed, gradient and nested-circle legends, HTML tooltips with edge flipping, collision-avoiding labels with halos |
+| Components | Classed, gradient and nested-circle legends, HTML tooltips with edge flipping, collision-avoiding labels with halos, editorial annotations&nbsp;† |
 | Accessibility | ARIA roles, auto-generated description, roving-tabindex keyboard navigation, live-region announcements, optional data table, `prefers-reduced-motion` |
 | Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 54 kB gzipped core |
 | Frameworks | [`react-apexmaps`](wrappers/react), [`vue-apexmaps`](wrappers/vue) and [`ngx-apexmaps`](wrappers/angular), typed against this package's own options |
+
+† Licensed feature. It works without a key so you can evaluate it, with a watermark on the map. See
+[Licensing](#licensing) for the whole list and the reasoning.
 
 ## React
 
@@ -261,6 +264,9 @@ island.
 
 ## Bubbles and arcs
 
+> **Licensed:** the `arc` and `line` route series. Bubbles are free. Licensed features work without a key so
+> you can evaluate them, with a watermark on the map. See [Licensing](#licensing).
+
 Both series exist to say something a choropleth cannot.
 
 **Bubbles** are for absolute magnitudes. A choropleth of totals mostly redraws the map of where big
@@ -289,6 +295,9 @@ while bubbles live in screen space and hold their radius, because that radius ca
 arcs get an invisible wider hit path so a 1px flight line is still hoverable.
 
 ## Markers and clustering
+
+> **Licensed:** clustering. Markers themselves are free. Licensed features work without a key so you can
+> evaluate them, with a watermark on the map. See [Licensing](#licensing).
 
 A marker says **"something is here"**, so its size is fixed. The moment size varies, a reader starts
 decoding it as a quantity, and that is the bubble series, which scales by area and ships a legend
@@ -335,6 +344,9 @@ rather do something else. Members that share a position would give a zero-size b
 for infinite zoom, so that case steps in by a fixed amount instead.
 
 ## Drilldown
+
+> **Licensed:** drilldown, and the breadcrumb with it. Licensed features work without a key so you can
+> evaluate them, with a watermark on the map. See [Licensing](#licensing).
 
 Click a state, get its counties. One option:
 
@@ -402,6 +414,9 @@ back. And the selection does not survive a level change, because those keys belo
 left.
 
 ## Selection, and linked maps
+
+> **Licensed:** linking maps with `link: { group }`. Selection itself is free. Licensed features work without
+> a key so you can evaluate them, with a watermark on the map. See [Licensing](#licensing).
 
 Click a feature to select it. Shift-drag a box to select everything inside it, Alt to add to what is
 already selected, Escape to abandon the box, and a box over nothing clears the selection, which is
@@ -556,29 +571,47 @@ individuals, non-profits, educators and organizations under $2M USD annual reven
 Commercial or OEM license above that. One key works across every Apex product, so an ApexCharts or
 ApexGrid customer does not buy a second one for maps. See [LICENSE](LICENSE).
 
-What is licensed is a **short list of features**, not map count, map size, or geometry downloads.
-There is no metering of map loads.
+What is licensed is a **set of features**, not map count, map size, or geometry downloads. There is
+no metering of map loads, no seat counting in the library, and no network call to check anything.
 
-| Licensed feature | Status |
+The line is that **a map that answers a question is free, and a map that becomes an application is
+licensed.** A rule rather than a list, because a list invites an argument per feature and a rule
+survives the next one.
+
+| Free, always | Licensed |
 |---|---|
-| Story mode and scrollytelling | Not built yet (phase 2) |
-| Presentation mode | Not built yet (phase 2) |
-| Map to chart morphing | Not built yet (phase 3) |
-| WebGL renderer tier | Not built yet (phase 3) |
-| Time playback | Not built yet (phase 3) |
-| Linked selection across maps (`link: { group }`) | **Shipped**. Cross-*product* linking is phase 2 |
+| `choropleth`, `bubble` and `marker` series, and the automatic basemap | Point clustering (`cluster`) |
+| Every one of the 13 built-in projections, with spec objects | Projections you register yourself (`registerProjection`) |
+| The geometry registry, all 26 packs, provenance and attribution | Drilldown and the breadcrumb (`drilldown`) |
+| Tooltips, legends, labels, data labels, states and themes | Editorial annotations (`annotations`) |
+| Zoom, pan, pinch, hover, click and box selection, the camera API | `arc` and `line` route series |
+| Joins, including `fuzzyJoin`, and the join diagnostics | Linked selection across maps (`link: { group }`) |
+| Scales, palettes, size legends, responsive rules | Story mode (`chart: { context: 'story' }`) |
+| PNG and SVG export | Presentation mode, map-to-chart morphing, time playback, the WebGL tier *(not built yet)* |
+| The canvas renderer and the whole performance path | |
+| The accessibility layer | |
 
-Without a valid key those features still work (**trial mode**) but the map shows a watermark. A valid
-key removes it. Everything else, including every series type, every projection, drilldown, box
-selection, the geometry registry and the accessibility layer, is free and never watermarked. A map
-that declares no `link.group` renders clean.
+Two of those free entries are deliberate rather than accidental. **The canvas renderer is free**
+because it is a rendering strategy, not a feature, and charging for it would mean "your map is slow
+unless you pay". **`fuzzyJoin` is free** for the same reason: cleaning up someone's data is not a
+premium experience, it is the cost of using real data.
+
+Without a valid key the licensed features **still work, in full, with a watermark on the map**. That
+is deliberate: evaluate the thing before paying for it, in your own app, with your own data. A valid
+key removes the watermark. A map that uses none of them renders clean, with or without a key.
 
 ```js
-ApexMaps.setLicense('APEX-xxxxxxxx') // set once, before rendering; applies to every map on the page
+ApexMaps.setLicense('APEX-xxxxxxxx') // before rendering; applies to every map on the page
 ```
 
-The watermark is re-evaluated on every render, so a late `setLicense()` followed by `updateOptions()`
-clears it. Get a license at [apexcharts.com/pricing](https://apexcharts.com/pricing).
+One key covers every Apex product, but **each product needs its own call**: `ApexMaps.setLicense()`
+and `ApexCharts.setLicense()` set different copies of the licence manager, because each library
+bundles its own. A page with a chart and a map calls both, with the same key.
+
+The watermark tracks the current options rather than the map's history. It is recomputed on every
+render and every `updateOptions`, so turning a licensed feature off removes the watermark, and a late
+`setLicense()` clears it without a reload. Get a license at
+[apexcharts.com/pricing](https://apexcharts.com/pricing).
 
 Two commitments that do not change with tier:
 
@@ -605,13 +638,14 @@ views, and `mapMeta(id).boundaries` says so.
 ## Development
 
 ```sh
-npm test                # vitest, 498 tests, including the real geometry packs and perf invariants
+npm test                # vitest, 536 tests, including the real geometry packs and perf invariants
 npm run test:coverage
 npm run lint
 npm run typecheck
 npm run format          # prettier, config matches apexcharts-js
 npm run build           # rollup bundles + tsc declarations (cleans dist/ first)
 npm run check:size      # fail if a bundle crosses the 150 kB gzipped budget
+npm run check:license   # drive the BUILT bundle through licence enforcement (gates publishing)
 npm run check:geo       # verify the geo/ dataset and the library agree (gates publishing)
 npm run check:geo-source # verify the default CDN geometry source actually serves geometry
 npm run examples        # build, then serve examples/ on :8084

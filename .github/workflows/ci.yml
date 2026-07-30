@@ -24,6 +24,10 @@ jobs:
       - run: npm run build
       # The 150 kB gzipped budget.
       - run: npm run check:size
+      # Licence enforcement, driven through the built bundle rather than the
+      # source the suite imports. apex-commons is inlined, so what enforces in a
+      # customer's app is a minified copy that no test would otherwise load.
+      - run: npm run check:license
       # Wrappers resolve `apexmaps` the way a consumer does, through the package's
       # own declarations, so they come after `npm run build` emitted them. This is
       # the point of keeping them in this repository: a core option shape that no

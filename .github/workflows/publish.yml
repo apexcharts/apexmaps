@@ -162,6 +162,12 @@ jobs:
       # is already on the registry and its publish is skipped.
       - run: npm run build
 
+      # Named as its own step, so a licence-enforcement failure at release time is
+      # attributable rather than buried in npm's lifecycle output. The core's
+      # prepublishOnly runs it again, which is what protects a publish from a
+      # laptop; two seconds of duplication is worth the readable failure.
+      - run: npm run check:license
+
       # Each package's prepublishOnly is the real gate: the core rebuilds,
       # rebuilds every wrapper, runs the suite and checks the size budget, and
       # each wrapper rebuilds and asserts its own tarball contents. Those guards

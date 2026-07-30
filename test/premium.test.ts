@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { geoMercator } from 'd3-geo'
-import ApexMaps, { PREMIUM_FEATURES } from '../src/ApexMaps'
-import type { PremiumFeature } from '../src/ApexMaps'
+import ApexMaps from '../src/ApexMaps'
+import { PREMIUM_FEATURES } from '../src/core/premium'
+import type { PremiumFeature } from '../src/core/premium'
 import { LicenseManager } from 'apex-commons'
 
 /**
@@ -100,6 +101,22 @@ const ACTIVATES: Partial<Record<PremiumFeature, Record<string, unknown>>> = {
   story: { chart: { context: 'story' } },
 }
 
+/**
+ * The smallest change that takes each feature back out of use, applied through
+ * `updateOptions`. Written by hand rather than derived, because the merge skips
+ * `undefined` (so a key cannot be blanked), replaces arrays and deep-merges
+ * objects, and each feature turns off differently under those rules.
+ */
+const TURNS_OFF: Partial<Record<PremiumFeature, Record<string, unknown>>> = {
+  annotations: { annotations: { points: [] } },
+  clustering: { series: BASE.series },
+  customProjection: { geo: { projection: 'mercator' } },
+  drilldown: { series: BASE.series },
+  linkGroup: { link: { group: '' } },
+  routes: { series: BASE.series },
+  story: { chart: { context: 'dashboard' } },
+}
+
 describe('premium gating', () => {
   let el: HTMLElement
 
@@ -144,6 +161,26 @@ describe('premium gating', () => {
   for (const [feature, options] of Object.entries(ACTIVATES)) {
     it(`watermarks an unlicensed ${feature}`, async () => {
       expect(await watermarked(options)).toBe(true)
+    })
+  }
+
+  // The watermark describes the map on screen, not the map's history. Premium
+  // usage is recomputed from the config on every options change, so taking the
+  // feature back out takes the watermark with it. Both directions are asserted in
+  // one test, because the interesting failure is the second half only.
+  for (const feature of Object.keys(ACTIVATES) as PremiumFeature[]) {
+    it(`clears the watermark when ${feature} is turned off`, async () => {
+      const off = TURNS_OFF[feature]
+      expect(off, `${feature} has no entry in TURNS_OFF`).toBeDefined()
+
+      const map = new ApexMaps(el, { ...BASE, ...ACTIVATES[feature] } as never)
+      await map.render()
+      expect(el.querySelector(WATERMARK)).not.toBeNull()
+
+      await map.updateOptions(off as never)
+      expect(el.querySelector(WATERMARK)).toBeNull()
+
+      map.destroy()
     })
   }
 
