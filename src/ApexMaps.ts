@@ -93,8 +93,11 @@ const VERSION = '0.1.0'
 /**
  * Features that require a licence. Basic maps are deliberately absent: the free
  * tier carries no watermark, and the watermark exists only as the trial state for
- * premium capability. Nothing shipped so
- * far is premium, so an unlicensed map renders clean.
+ * premium capability, so an unlicensed basic map renders clean.
+ *
+ * A name here is inert until something calls `_requirePremium` with it. Of these,
+ * `story` and `linkGroup` are gated today; the rest are named ahead of the
+ * features themselves, so adding one is a call site rather than a policy change.
  */
 const PREMIUM_FEATURES = new Set([
   'story',
@@ -2829,11 +2832,12 @@ class ApexMaps extends BaseChart {
   /**
    * Declare which premium features this spec actually uses.
    *
-   * Called on render and on every options change, so a map that gains a link group
-   * later is evaluated then rather than staying on whatever the first render
-   * decided.
+   * Called on render and on every options change, so a map that gains a story
+   * context or a link group later is evaluated then rather than staying on
+   * whatever the first render decided.
    */
   private _checkPremium(): void {
+    if (this.config.chart.context === 'story') this._requirePremium('story')
     if (this.config.link?.group) this._requirePremium('linkGroup')
   }
 
@@ -2862,9 +2866,26 @@ class ApexMaps extends BaseChart {
     // re-register a container that no longer holds a map, and the next licence
     // verdict would paint a watermark into it.
     if (this._destroyed) return
+
     // The watermark is the trial state for premium capability, not a tax on the
     // free tier: with no premium feature in use it is never added.
-    if (this._premiumUsed.size === 0 || LicenseManager.isLicenseValid()) {
+    if (this._premiumUsed.size === 0) {
+      // Untracked, not merely erased. Reconciliation inside apex-commons is
+      // licence-driven (paint every tracked container whenever the licence is
+      // invalid) while this policy is usage-driven, and `Watermark.remove`
+      // tracks. A tracked free map is therefore repainted the moment a key's
+      // asynchronous verdict flips to invalid: a watermark on a map that uses
+      // nothing premium, and on every other plain map on the page alongside the
+      // one premium map that deserved it.
+      Watermark.remove(this.element)
+      Watermark.untrack(this.element)
+      return
+    }
+
+    if (LicenseManager.isLicenseValid()) {
+      // Left tracked on purpose. Signature verification is asynchronous, so this
+      // verdict may be provisional, and the correction has to be able to come
+      // back and mark this map.
       Watermark.remove(this.element)
     } else {
       Watermark.add(this.element)

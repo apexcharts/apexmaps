@@ -72,10 +72,24 @@ async function settle(done?: () => boolean) {
   } while (Date.now() < deadline)
 }
 
+function makeHost() {
+  const host = document.createElement('div')
+  Object.defineProperty(host, 'clientWidth', { value: 800, configurable: true })
+  Object.defineProperty(host, 'clientHeight', { value: 400, configurable: true })
+  document.body.appendChild(host)
+  return host
+}
+
+/**
+ * A premium map. `chart.context: 'story'` is gated by `_checkPremium`, which is
+ * what makes the licence decision observable at all: with no premium feature in
+ * use the watermark is never added, and these tests would pass while checking
+ * nothing. That is not hypothetical, it is how they passed before: `story` was
+ * listed in `PREMIUM_FEATURES` but nothing called `_requirePremium` with it, so
+ * the watermark these tests saw was arriving from the free-tier defect below
+ * rather than from the gate.
+ */
 function makeMap(el: HTMLElement) {
-  // `story` is a premium feature, so the licence decision has an effect at all.
-  // Without one the watermark is never added and these tests would pass while
-  // checking nothing.
   return new ApexMaps(el, {
     geo: { map: BOX as never },
     series: [{ type: 'choropleth', data: [{ key: 'AAA', value: 1 }] }],
@@ -83,14 +97,19 @@ function makeMap(el: HTMLElement) {
   } as never)
 }
 
+/** The same map with nothing premium in it: the free tier. */
+function makeFreeMap(el: HTMLElement) {
+  return new ApexMaps(el, {
+    geo: { map: BOX as never },
+    series: [{ type: 'choropleth', data: [{ key: 'AAA', value: 1 }] }],
+  } as never)
+}
+
 describe('licence enforcement', () => {
   let el: HTMLElement
 
   beforeEach(() => {
-    el = document.createElement('div')
-    Object.defineProperty(el, 'clientWidth', { value: 800, configurable: true })
-    Object.defineProperty(el, 'clientHeight', { value: 400, configurable: true })
-    document.body.appendChild(el)
+    el = makeHost()
     LicenseManager.setLicense('')
   })
 
@@ -108,6 +127,42 @@ describe('licence enforcement', () => {
     expect(el.querySelector(WATERMARK)).not.toBeNull()
 
     map.destroy()
+  })
+
+  it('leaves a free-tier map alone when a forged key is rejected', async () => {
+    // The free tier carries no watermark, which has to survive the correction
+    // meant for premium maps. `Watermark.remove()` TRACKS the container, and
+    // reconciliation inside apex-commons is licence-driven (paint everything
+    // tracked while the licence is invalid) rather than usage-driven, so a plain
+    // map was painted the moment a forged key's verdict landed. The fix untracks
+    // a container with no premium feature in use.
+    ApexMaps.setLicense(forgedKey())
+    const map = makeFreeMap(el)
+    await map.render()
+
+    await settle()
+    expect(el.querySelector(WATERMARK)).toBeNull()
+
+    map.destroy()
+  })
+
+  it('marks the premium map and not the plain one beside it', async () => {
+    // The same defect at page scale, and the shape a customer actually hits: one
+    // story map and one ordinary choropleth, sharing a global licence verdict.
+    const other = makeHost()
+    ApexMaps.setLicense(forgedKey())
+    const premium = makeMap(el)
+    const free = makeFreeMap(other)
+    await premium.render()
+    await free.render()
+
+    await settle(() => el.querySelector(WATERMARK) !== null)
+    expect(el.querySelector(WATERMARK)).not.toBeNull()
+    expect(other.querySelector(WATERMARK)).toBeNull()
+
+    premium.destroy()
+    free.destroy()
+    other.remove()
   })
 
   it('leaves an unsigned legacy key alone', async () => {
