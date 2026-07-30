@@ -106,6 +106,28 @@ registerProjection('transverseMercator', geoTransverseMercator as unknown as Pro
 registerProjection('identity', geoIdentity as unknown as ProjectionFactory)
 
 /**
+ * The names above, snapshotted before any consumer can call
+ * `registerProjection`. Anything registered later came from the caller, which is
+ * what `isCustomProjection` answers and the only way to distinguish the two: a
+ * registration goes into the same map either way.
+ *
+ * Placement matters. This has to sit below the last built-in registration and
+ * above everything else, so adding a built-in keeps working and adding one
+ * *after* this line would silently make it premium.
+ */
+const BUILT_IN = new Set(registry.keys())
+
+/**
+ * Whether this projection came from `ApexMaps.registerProjection` rather than the
+ * built-in set. Used for licensing, so it answers about the name a caller asked
+ * for, not about the factory behind it: re-registering `'mercator'` over the
+ * built-in is still the built-in name.
+ */
+export function isCustomProjection(name: string): boolean {
+  return registry.has(name) && !BUILT_IN.has(name)
+}
+
+/**
  * Projections whose output is already a fixed composite layout. They must not
  * be re-centred or rotated: `geoAlbersUsa` in particular translates Alaska and
  * Hawaii into insets internally, and mutating `center`/`rotate` breaks it.

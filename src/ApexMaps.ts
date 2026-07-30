@@ -28,7 +28,7 @@ import type { MapMeta } from './core/MapRegistry'
 import { normalizeGeo } from './geo/GeoData'
 import { Viewport } from './geo/Viewport'
 import { Camera } from './geo/Camera'
-import { registerProjection, listProjections } from './geo/Projections'
+import { registerProjection, listProjections, isCustomProjection } from './geo/Projections'
 import type { ProjectionFactory } from './geo/Projections'
 import { SvgRenderer } from './renderers/SvgRenderer'
 import { CanvasRenderer } from './renderers/CanvasRenderer'
@@ -91,22 +91,43 @@ import type {
 const VERSION = '0.1.0'
 
 /**
- * Features that require a licence. Basic maps are deliberately absent: the free
- * tier carries no watermark, and the watermark exists only as the trial state for
- * premium capability, so an unlicensed basic map renders clean.
+ * Features that require a licence.
  *
- * A name here is inert until something calls `_requirePremium` with it. Of these,
- * `story` and `linkGroup` are gated today; the rest are named ahead of the
- * features themselves, so adding one is a call site rather than a policy change.
+ * The line is that a map answering a question is free, and a map that becomes an
+ * application is licensed. So a choropleth, bubbles or markers on any map, with
+ * tooltips, a legend, labels, zoom and pan, scales, export and accessibility, is
+ * the free tier and renders clean. Depth of interaction (drilling into a level,
+ * linking views, playing time), authoring on top of the map (annotations, routes),
+ * summarising points into clusters, and cartography beyond the built-in
+ * projections are the licensed tier.
+ *
+ * Two members of the free tier are there deliberately rather than by omission.
+ * The canvas renderer is a rendering strategy rather than a feature, so gating it
+ * would mean "your map is slow unless you pay". Accessibility is never gated: a
+ * watermark over a screen-reader affordance is indefensible, and in some markets
+ * it disqualifies the product from procurement.
+ *
+ * A name here is inert until a call site passes it to `_requirePremium`, and
+ * `premium.test.ts` fails on any name with no live gate: `story` sat here ungated
+ * from the first release, so the list is not evidence of anything on its own.
+ * `morph`, `presentation`, `timePlayback` and `webgl` are named ahead of the
+ * features themselves and are the exception the test knows about.
  */
-const PREMIUM_FEATURES = new Set([
-  'story',
-  'presentation',
-  'morph',
-  'webgl',
-  'timePlayback',
+export const PREMIUM_FEATURES = [
+  'annotations',
+  'clustering',
+  'customProjection',
+  'drilldown',
   'linkGroup',
-])
+  'morph',
+  'presentation',
+  'routes',
+  'story',
+  'timePlayback',
+  'webgl',
+] as const
+
+export type PremiumFeature = (typeof PREMIUM_FEATURES)[number]
 
 /** Anything the renderer can draw. */
 type AnySeries =
@@ -2837,16 +2858,51 @@ class ApexMaps extends BaseChart {
    * whatever the first render decided.
    */
   private _checkPremium(): void {
-    if (this.config.chart.context === 'story') this._requirePremium('story')
-    if (this.config.link?.group) this._requirePremium('linkGroup')
+    const config = this.config
+
+    if (config.chart.context === 'story') this._requirePremium('story')
+    if (config.link?.group) this._requirePremium('linkGroup')
+
+    const annotations = config.annotations
+    if (
+      (annotations?.points?.length ?? 0) > 0 ||
+      (annotations?.features?.length ?? 0) > 0 ||
+      (annotations?.areas?.length ?? 0) > 0
+    ) {
+      this._requirePremium('annotations')
+    }
+
+    // By the name the caller asked for, so every built-in stays free, including
+    // the one a map's metadata recommends, and only a projection that arrived
+    // through `registerProjection` is licensed.
+    const projection = config.geo?.projection
+    const projectionName = typeof projection === 'string' ? projection : projection?.name
+    if (projectionName && isCustomProjection(projectionName)) {
+      this._requirePremium('customProjection')
+    }
+
+    for (const series of config.series ?? []) {
+      if (series.type === 'arc' || series.type === 'line') this._requirePremium('routes')
+      // A `cluster` object present at all means clustering is on, so only an
+      // explicit `enabled: false` opts out.
+      if ('cluster' in series && series.cluster && series.cluster.enabled !== false) {
+        this._requirePremium('clustering')
+      }
+      // Configured counts as used: the reader can drill whether or not they have
+      // clicked yet, exactly as with a link group.
+      if ('drilldown' in series && series.drilldown) this._requirePremium('drilldown')
+    }
   }
 
   /**
    * Mark a premium feature as in use. Basic maps never call this, which is how the
    * free tier stays watermark-free.
+   *
+   * The parameter is the `PremiumFeature` union rather than a string, so a typo at
+   * a call site is a compile error. It used to be a string checked against the set
+   * at runtime, which silently made the feature free.
    */
-  private _requirePremium(feature: string): boolean {
-    if (!PREMIUM_FEATURES.has(feature)) return true
+  private _requirePremium(feature: PremiumFeature): boolean {
     this._premiumUsed.add(feature)
     const licensed = LicenseManager.isLicenseValid()
     if (!licensed && this._isDebug()) {
