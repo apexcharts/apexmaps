@@ -4,25 +4,26 @@
  * not page styling.
  */
 
+/*
+ * Light for everyone, rather than following the reader's operating system. The
+ * demos are a reference: a screenshot, a copied snippet and a bug report should
+ * describe the same page whoever opened it. `color-scheme: light` is part of that,
+ * because without it the scrollbars and form controls still follow the OS, and a
+ * dark-mode reader gets dark widgets around a light page.
+ *
+ * The library's own dark mode is unaffected and still demonstrated: `theme.mode`
+ * defaults to 'light' and applies dark as a class on the map container, so
+ * theming.html switches a map to dark on this light page, which is the more honest
+ * demo of it anyway.
+ */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --page-fg: #111827;
   --page-bg: #f9fafb;
   --card-bg: #ffffff;
   --card-border: #e5e7eb;
   --muted: #6b7280;
   --accent: #2563eb;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --page-fg: #e5e7eb;
-    --page-bg: #111827;
-    --card-bg: #1f2937;
-    --card-border: #374151;
-    --muted: #9ca3af;
-    --accent: #60a5fa;
-  }
 }
 
 * {
