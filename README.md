@@ -2,10 +2,10 @@
 
 Interactive geographic data visualization and storytelling for the ApexCharts ecosystem.
 
-> **Status: phase 1, pre-alpha (0.1.0).** Written in TypeScript. The engine, four series
-> (choropleth, bubble, marker, arc), projections, joins, scales, legend, tooltip, labels, camera,
-> geometry registry, drilldown, selection and accessibility layer are working and tested. The story
-> engine and tiles are not built yet.
+> **Status: phase 1, pre-alpha (0.2.0).** Written in TypeScript. The engine, five series
+> (choropleth, bubble, marker, arc, line), projections, joins, scales, legend, tooltip, labels,
+> annotations, camera, geometry registry, drilldown, clustering, selection and accessibility layer
+> are working and tested. The story engine and tiles are not built yet.
 
 ```js
 import ApexMaps from 'apexmaps'
@@ -41,7 +41,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Camera | `flyTo` (Van Wijk zoom-and-pan path), `easeTo`, `jumpTo`, `fitBounds`, `frameFeature`, `resetView`, interruptible and retargeting |
 | Components | Classed, gradient and nested-circle legends, HTML tooltips with edge flipping, collision-avoiding labels with halos, editorial annotations&nbsp;† |
 | Accessibility | ARIA roles, auto-generated description, roving-tabindex keyboard navigation, live-region announcements, optional data table, `prefers-reduced-motion` |
-| Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 54 kB gzipped core |
+| Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 66 kB gzipped core |
 | Frameworks | [`react-apexmaps`](wrappers/react), [`vue-apexmaps`](wrappers/vue) and [`ngx-apexmaps`](wrappers/angular), typed against this package's own options |
 
 † Licensed feature. It works without a key so you can evaluate it, with a watermark on the map. See

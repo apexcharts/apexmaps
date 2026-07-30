@@ -89,7 +89,7 @@ import type {
   WorldPoint,
 } from './types'
 
-const VERSION = '0.1.0'
+const VERSION = '0.2.0'
 
 /** The licensed feature set, and why each member is on it, lives in `core/premium`. */
 

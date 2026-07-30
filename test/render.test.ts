@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 import ApexMaps from '../src/ApexMaps'
 
 /**
@@ -462,5 +465,22 @@ describe('camera', () => {
     expect(map.viewport.camera.k).toBe(4)
     map.camera.set({ k: 0.01 })
     expect(map.viewport.camera.k).toBe(1)
+  })
+})
+
+describe('version', () => {
+  // `npm version` rewrites package.json and nothing else, so the string the
+  // library reports about itself is hand-maintained. It sat at 0.1.0 while the
+  // package went to 0.2.0 until this test existed, and the drift is invisible:
+  // every other test passes either way, and the wrong number reaches a consumer
+  // in the bundle, the wrappers and every bug report.
+  it('matches the package version', () => {
+    // `process.cwd()` rather than `import.meta.url`: under Vitest the module URL
+    // is not a file: URL, so `readFileSync` on it throws. The suite always runs
+    // from the repository root.
+    const pkg = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
+      version: string
+    }
+    expect(ApexMaps.version).toBe(pkg.version)
   })
 })
