@@ -62,6 +62,14 @@ export class BubbleSeries {
   readonly sizeScale: SizeScale
   readonly colorScale: Scale | null = null
   readonly join: JoinResult | null = null
+  /**
+   * Colour classes switched off from the legend.
+   *
+   * A muted class hides its bubbles rather than greying them, for the reason
+   * `series/Arc` gives: a choropleth cannot remove a country so it can only drain
+   * the colour out of it, while a bubble is nothing but the datum.
+   */
+  readonly mutedClasses = new Set<number>()
 
   constructor({
     config,
@@ -202,11 +210,19 @@ export class BubbleSeries {
     return this.config.color ?? DEFAULT_COLOR
   }
 
+  /** Whether the legend has switched off the colour class this bubble falls in. */
+  isMuted(item: BubbleItem): boolean {
+    if (!this.mutedClasses.size || !this.colorScale) return false
+    const value = item.colorValue
+    if (typeof value !== 'number' || !Number.isFinite(value)) return false
+    return this.mutedClasses.has(this.colorScale.classIndex(value))
+  }
+
   /** Symbol specs for the renderer, in paint order, skipping unplaceable marks. */
   symbols(): SymbolSpec[] {
     const out: SymbolSpec[] = []
     this.items.forEach((item, i) => {
-      if (!item.world || item.radius == null) return
+      if (!item.world || item.radius == null || this.isMuted(item)) return
       out.push({
         key: item.key,
         item: i,
@@ -232,9 +248,22 @@ export class BubbleSeries {
     return this.sizeScale.legendEntries()
   }
 
-  /** Bubbles mute by size, not by class, so legend toggling is a no-op for now. */
-  toggleClass(): boolean {
-    return false
+  /**
+   * Switch a colour class off, or back on. Returns the new muted state.
+   *
+   * Only the colour legend toggles. The nested reference circles beside it are a
+   * size legend, and a size is not a class: there is no set of bubbles a reader
+   * could mean by clicking "50,000". So `sizeLegend` stays non-interactive and
+   * this only ever hears from a `colorScale` section.
+   */
+  toggleClass(classIndex: number): boolean {
+    if (!this.colorScale) return false
+    if (this.mutedClasses.has(classIndex)) {
+      this.mutedClasses.delete(classIndex)
+      return false
+    }
+    this.mutedClasses.add(classIndex)
+    return true
   }
 
   legendItems(): never[] {

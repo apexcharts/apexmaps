@@ -161,6 +161,52 @@ describe('bubble series', () => {
     }
   })
 
+  /*
+   * A colour-scaled bubble legend draws the same `<button aria-pressed>` swatches
+   * a choropleth does, so it focuses and dims like a control. It was not one:
+   * `toggleClass` returned false and the map never moved.
+   */
+  describe('legend classes switch bubbles off', () => {
+    const scaled = {
+      type: 'bubble' as const,
+      name: 'Population',
+      data: CITIES,
+      colorScale: { classes: 2 },
+    }
+    const swatches = () => [
+      ...el.querySelectorAll<HTMLButtonElement>('button.apexmaps-legend-item'),
+    ]
+    const drawn = () => el.querySelectorAll('circle.apexmaps-bubble').length
+
+    it('hides the bubbles in a class, and puts them back', async () => {
+      await render({ series: [scaled], legend: { show: true, style: 'classes' } })
+      expect(swatches()).toHaveLength(2)
+      expect(drawn()).toBe(4)
+
+      swatches()[0].click()
+      const after = drawn()
+      expect(after).toBeLessThan(4)
+      expect(after).toBeGreaterThan(0)
+      expect(swatches()[0].getAttribute('aria-pressed')).toBe('false')
+
+      swatches()[0].click()
+      expect(drawn()).toBe(4)
+    })
+
+    it('offers no toggle on the size legend, because a size is not a class', async () => {
+      await render({
+        series: [{ type: 'bubble', name: 'Population', data: CITIES }],
+        legend: { show: true },
+      })
+      // Nested reference circles are there, and none of them is a control: there
+      // is no set of bubbles a reader could mean by clicking "37,400,000".
+      expect(el.querySelectorAll('.apexmaps-legend-sizes').length).toBeGreaterThan(0)
+      expect(swatches()).toHaveLength(0)
+      expect(map.series[0].toggleClass(0)).toBe(false)
+      expect(drawn()).toBe(4)
+    })
+  })
+
   it('still draws the basemap underneath, because bubbles in the void are not a map', async () => {
     await render({
       series: [{ type: 'bubble', name: 'Population', data: CITIES }],
