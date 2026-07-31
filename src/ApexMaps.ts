@@ -593,6 +593,7 @@ class ApexMaps extends BaseChart {
               geo,
               index: i,
               theme: this.config.theme,
+              dark: this._isDark(),
             }),
           )
           break

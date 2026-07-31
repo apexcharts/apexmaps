@@ -15,6 +15,9 @@
   --apexmaps-border: rgba(0, 0, 0, 0.12);
   --apexmaps-shadow: 0 4px 16px rgba(15, 23, 42, 0.14);
   --apexmaps-focus: #2563eb;
+  /* The label halo, so it flips with the theme rather than staying white over a
+     dark map. */
+  --apexmaps-halo: rgba(255, 255, 255, 0.85);
   --apexmaps-radius: 6px;
   --apexmaps-font-size: 12px;
 
@@ -26,13 +29,20 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* Dark mode paints its own background, unlike the light default which stays
+   transparent. Forcing dark on a page that is still light is the whole point of
+   this being a class, and light text over the host's white card is not a theme,
+   it is an unreadable map. A dashboard that is already dark can hand the
+   background back with `--apexmaps-bg: transparent`. */
 .apexmaps--dark {
   --apexmaps-fg: #e5e7eb;
   --apexmaps-fg-muted: #9ca3af;
+  --apexmaps-bg: #111827;
   --apexmaps-surface: #1f2937;
   --apexmaps-border: rgba(255, 255, 255, 0.16);
   --apexmaps-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   --apexmaps-focus: #60a5fa;
+  --apexmaps-halo: rgba(17, 24, 39, 0.85);
 }
 
 .apexmaps-plot {

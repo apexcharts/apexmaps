@@ -15,7 +15,7 @@
  */
 
 import { resolveJoin } from '../data/Join'
-import { createScale, Scale } from '../scales/Scale'
+import { createScale, DARK_NULL_COLOR, Scale } from '../scales/Scale'
 import { readNumber } from './accessors'
 import type { JoinResult } from '../data/Join'
 import type {
@@ -36,6 +36,7 @@ export class ChoroplethSeries {
   readonly index: number
   readonly id: string
   readonly theme: { palette?: string }
+  readonly dark: boolean
   readonly warnings: string[] = []
   /** Class indices muted via the legend. */
   readonly mutedClasses = new Set<number>()
@@ -48,6 +49,7 @@ export class ChoroplethSeries {
     geo,
     index,
     theme,
+    dark = false,
   }: {
     /** Series config, already merged with defaults. */
     config: ChoroplethSeriesOptions
@@ -55,12 +57,15 @@ export class ChoroplethSeries {
     /** Series index, used for the stable series id. */
     index: number
     theme?: { palette?: string }
+    /** Dark mode, already resolved from `theme.mode` (`'auto'` included). */
+    dark?: boolean
   }) {
     this.config = config
     this.geo = geo
     this.index = index
     this.id = `s${index}`
     this.theme = theme ?? {}
+    this.dark = dark
 
     this.join = resolveJoin({
       features: geo.features,
@@ -80,6 +85,9 @@ export class ChoroplethSeries {
     return {
       ...s,
       palette: s.palette ?? this.theme.palette,
+      // No-data follows the theme, so the legend's last swatch and every
+      // unmatched feature stay no-data rather than reading as the top class.
+      nullColor: s.nullColor ?? (this.dark ? DARK_NULL_COLOR : undefined),
     }
   }
 

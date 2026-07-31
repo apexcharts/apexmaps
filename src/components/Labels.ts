@@ -157,7 +157,10 @@ export class Labels {
         // paint-order puts the stroke behind the fill, which is how a halo is
         // done without duplicating the element.
         text.setAttribute('paint-order', 'stroke')
-        text.setAttribute('stroke', style.haloColor || 'rgba(255,255,255,0.85)')
+        text.setAttribute(
+          'stroke',
+          style.haloColor || 'var(--apexmaps-halo, rgba(255,255,255,0.85))',
+        )
         text.setAttribute('stroke-width', String(style.haloWidth ?? 2.5))
         text.setAttribute('stroke-linejoin', 'round')
       }

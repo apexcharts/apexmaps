@@ -26,6 +26,13 @@ const SEQUENTIAL_LIGHT_INSET = 0.1
 
 const DEFAULT_NULL_COLOR = '#eeeeee'
 
+/**
+ * No-data on a dark map. Light grey reads as the brightest class there, which is
+ * the one thing a no-data fill must never do, so callers that know the theme pass
+ * this as `nullColor`.
+ */
+export const DARK_NULL_COLOR = '#374151'
+
 /** Finite numbers only, ascending. */
 function cleanNumbers(values: readonly unknown[]): number[] {
   const out: number[] = []
