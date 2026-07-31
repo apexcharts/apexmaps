@@ -44,6 +44,17 @@
               </div>
             </div>
           </div>
+          <div class="row">
+            <div class="seg" id="legend-position" role="group" aria-label="Legend position">
+              <button data-position="bottom" aria-pressed="true">Bottom</button>
+              <button data-position="top" aria-pressed="false">Top</button>
+              <button data-position="left" aria-pressed="false">Left</button>
+              <button data-position="right" aria-pressed="false">Right</button>
+            </div>
+            <span class="readout" id="legend-readout"
+              >Hover a country: the arrow finds it on the scale.</span
+            >
+          </div>
           <div class="plot" id="map"></div>
           <p class="source">
             <span><b>Illustrative data.</b> A smooth field over the globe, identical on every load.</span>
@@ -176,6 +187,23 @@ legend: { title: 'Composite index',     // say what the number is
               },
             }),
           )
+          // A side legend is a column, so the bar turns vertical and the plot is
+          // measured against what is left of the container. Nothing here has to
+          // know that: the position is one option.
+          document.getElementById('legend-position').addEventListener('click', (event) => {
+            const button = event.target.closest('button')
+            if (!button) return
+            for (const other of event.currentTarget.querySelectorAll('button')) {
+              other.setAttribute('aria-pressed', String(other === button))
+            }
+            const position = button.dataset.position
+            document.getElementById('legend-readout').textContent =
+              position === 'left' || position === 'right'
+                ? 'A column: the bar runs bottom to top, low at the bottom.'
+                : 'Hover a country: the arrow finds it on the scale.'
+            map.updateOptions({ legend: { position } })
+          })
+
           return map.render()
         }),
       )

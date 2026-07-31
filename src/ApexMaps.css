@@ -27,6 +27,36 @@
   font-size: var(--apexmaps-font-size);
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
+
+  /* The root lays out the furniture: plot, legend, breadcrumb. Flex rather than
+     normal flow because `legend.position` is then a one-line change of axis or
+     order instead of a DOM move, and the breadcrumb keeps its place in the tab
+     order whichever side the legend lands on. Column by default, so the stack is
+     the same as it always was. */
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+
+/* The breadcrumb is "you are here", so it stays above everything whatever the
+   legend does. Ordered rather than moved, so it keeps its place in the tab
+   order as the first thing after the container. */
+.apexmaps > .apexmaps-breadcrumb {
+  order: -2;
+}
+
+/* A side legend turns the root into a row. The breadcrumb takes a full line of
+   its own above both, which is where a reader looks for "you are here". */
+.apexmaps--legend-left,
+.apexmaps--legend-right {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.apexmaps--legend-left > .apexmaps-breadcrumb,
+.apexmaps--legend-right > .apexmaps-breadcrumb {
+  width: 100%;
 }
 
 /* Dark mode paints its own background, unlike the light default which stays
@@ -48,6 +78,9 @@
 .apexmaps-plot {
   position: relative;
   overflow: hidden;
+  /* Sized in pixels by `_measure`; nothing about the legend may shrink it, or
+     the SVG viewBox and the box it is drawn in would disagree. */
+  flex: 0 0 auto;
   /* A drag on a map is a pan or a selection box, never a text selection. Without
      this, dragging highlights the surrounding page copy, which looks like a bug and
      leaves stray highlight behind after the gesture. */
@@ -293,7 +326,25 @@
   padding: 8px 4px 2px;
 }
 
+/* `legend.position`. The root is the layout container and the legend is one of
+   its flex items, so a position is an `order` (top/bottom) or a change of main
+   axis (left/right); see the `.apexmaps--legend-*` rules at the top of the file.
+   The class stays on the legend itself for `--top` because that is the one case
+   the legend can settle on its own. */
 .apexmaps-legend--top {
+  order: -1;
+}
+
+/* A side legend is a column of fixed width, so the plot can be measured against
+   what is left over rather than fighting it for the same pixels. */
+.apexmaps-legend--left,
+.apexmaps-legend--right {
+  width: var(--apexmaps-legend-width, 180px);
+  flex: 0 0 var(--apexmaps-legend-width, 180px);
+  padding: 2px 6px;
+}
+
+.apexmaps-legend--left {
   order: -1;
 }
 
@@ -444,10 +495,85 @@
   border-top: 6px solid var(--apexmaps-fg);
 }
 
+/* --- vertical bar, for a legend on the left or the right ------------------- */
+
+/* Same parts, rotated: the bar runs bottom-to-top because that is how a reader
+   expects magnitude stacked vertically, the marker points sideways into it, and
+   the numbers sit beside their break instead of under it. */
+.apexmaps-legend--vertical .apexmaps-legend-gradient-wrap {
+  flex-direction: row;
+  gap: 6px;
+  width: auto;
+  max-width: none;
+}
+
+.apexmaps-legend--vertical .apexmaps-legend-gradient-track {
+  padding-top: 0;
+  padding-left: 30px;
+}
+
+.apexmaps-legend--vertical .apexmaps-legend-gradient {
+  width: 12px;
+  height: var(--apexmaps-legend-bar, 140px);
+}
+
+.apexmaps-legend--vertical .apexmaps-legend-marker {
+  top: auto;
+  bottom: 0;
+  left: 0;
+  width: 30px;
+  height: auto;
+  flex-direction: row;
+  justify-content: flex-end;
+  align-items: center;
+  transform: translateY(50%);
+  transition:
+    bottom 140ms ease-out,
+    opacity 120ms ease-out;
+}
+
+.apexmaps-legend--vertical .apexmaps-legend-marker-label {
+  margin: 0 3px 0 0;
+}
+
+.apexmaps-legend--vertical .apexmaps-legend-marker-arrow {
+  border: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid var(--apexmaps-fg);
+}
+
+.apexmaps-legend--vertical .apexmaps-legend-gradient-labels {
+  flex-direction: column-reverse;
+  justify-content: space-between;
+  height: var(--apexmaps-legend-bar, 140px);
+}
+
+.apexmaps-legend--vertical .apexmaps-legend-gradient-labels.is-ticks {
+  height: var(--apexmaps-legend-bar, 140px);
+  width: auto;
+}
+
+.apexmaps-legend--vertical .apexmaps-legend-tick {
+  top: auto;
+  left: 0;
+  transform: translateY(50%);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .apexmaps-legend-marker {
+  .apexmaps-legend-marker,
+  .apexmaps-legend--vertical .apexmaps-legend-marker {
     transition: none;
   }
+}
+
+/* A vertical bar is as tall as the column allows; the swatch list beside it
+   wraps to one item per line rather than spilling out of the column. */
+.apexmaps-legend--left .apexmaps-legend-items,
+.apexmaps-legend--right .apexmaps-legend-items {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 /* legend.align. The declared default is 'center', matching the rest of the
@@ -508,6 +634,121 @@
 .apexmaps-breadcrumb-current {
   padding: 2px 6px;
   font-weight: 600;
+}
+
+/* --- zoom controls -------------------------------------------------------- */
+
+/* One card of stacked cells, divided rather than spaced: the group is a single
+   piece of furniture, and separate floating buttons read as two unrelated
+   controls. Inside the plot, which is `position: relative`, so the corner offsets
+   are the plot's corners and not the container's. Absolutely positioned, so it is
+   out of flow and takes nothing off the map: the plot is sized in pixels by
+   `_measure`, and furniture that claimed layout would shrink the geography. */
+.apexmaps-zoom {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--apexmaps-border);
+  border-radius: var(--apexmaps-radius);
+  background: var(--apexmaps-surface);
+  box-shadow: var(--apexmaps-shadow);
+  /* Recessive until wanted: the map is the content, and a control sitting at full
+     strength over the geography competes with it. Overridable per instance with
+     `--apexmaps-zoom-idle-opacity`, and 1 turns the behaviour off. */
+  opacity: var(--apexmaps-zoom-idle-opacity, 0.7);
+  transition: opacity var(--apexmaps-anim, 180ms) ease-out;
+}
+
+/* Full strength once the reader is anywhere near it, and on keyboard focus, which
+   is the same intent arriving by another route. `:focus-within` on the group rather
+   than `:focus` on a button, so tabbing to `+` does not leave `-` half faded. */
+.apexmaps-plot:hover .apexmaps-zoom,
+.apexmaps-zoom:hover,
+.apexmaps-zoom:focus-within {
+  opacity: 1;
+}
+
+/* A touch screen has no hover, so the idle state would be the only state and the
+   controls would sit permanently faded. `hover: hover` is the test for "this
+   pointer can express intent before committing to a tap". */
+@media (hover: none) {
+  .apexmaps-zoom {
+    opacity: 1;
+  }
+}
+
+/* Fading is decoration; a reader who has asked for less motion still gets both
+   states, just without the crossfade. */
+@media (prefers-reduced-motion: reduce) {
+  .apexmaps-zoom {
+    transition: none;
+  }
+}
+
+.apexmaps-zoom--top-left {
+  top: 8px;
+  left: 8px;
+}
+
+.apexmaps-zoom--top-right {
+  top: 8px;
+  right: 8px;
+}
+
+.apexmaps-zoom--bottom-left {
+  bottom: 8px;
+  left: 8px;
+}
+
+/* Clear of the attribution, which owns the bottom-right corner and is not
+   allowed to be covered. */
+.apexmaps-zoom--bottom-right {
+  right: 8px;
+  bottom: 22px;
+}
+
+.apexmaps-zoom-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: none;
+  /* Full foreground rather than the muted tone the breadcrumb uses. The group
+     already spends contrast on being faded while idle, and an icon is a non-text
+     UI component: 3:1 against its own background is the floor, and muted plus
+     faded lands on the wrong side of it. */
+  color: var(--apexmaps-fg);
+  cursor: pointer;
+  /* iOS paints a grey block over a tapped control, which on a 28px button in the
+     corner of a map reads as a rendering fault. The hover rule is the feedback. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+.apexmaps-zoom-button + .apexmaps-zoom-button {
+  border-top: 1px solid var(--apexmaps-border);
+}
+
+/* The cell, not the group, so a hover says which control is under the pointer.
+   The group's own fade is a different signal: "the whole thing is live now". */
+.apexmaps-zoom-button:hover:not(:disabled) {
+  background: var(--apexmaps-border);
+}
+
+.apexmaps-zoom-button:focus-visible {
+  outline: 2px solid var(--apexmaps-focus);
+  outline-offset: -2px;
+}
+
+/* At the end of the range the control is spent, and it has to look it: an
+   enabled `+` that cannot zoom is a control that lies. */
+.apexmaps-zoom-button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* --- attribution ---------------------------------------------------------- */

@@ -58,6 +58,8 @@ import type { LabelCandidate } from './components/Labels'
 import { Annotations } from './components/Annotations'
 import { Breadcrumb } from './components/Breadcrumb'
 import type { Crumb } from './components/Breadcrumb'
+import { ZoomControls } from './components/ZoomControls'
+import type { ZoomControlsState } from './components/ZoomControls'
 import { scopeToParent } from './data/Hierarchy'
 import { ZoomPan } from './interaction/ZoomPan'
 import type { SelectBox, SelectBoxPhase } from './interaction/ZoomPan'
@@ -80,6 +82,7 @@ import type {
   DrilldownContext,
   DrilldownOptions,
   GeoInput,
+  LegendOptions,
   LonLat,
   MapSource,
   NormalizedFeature,
@@ -92,6 +95,7 @@ import type {
   Series,
   WorldBounds,
   WorldPoint,
+  ZoomControlsOptions,
 } from './types'
 
 const VERSION = '0.2.0'
@@ -115,6 +119,14 @@ const LEVEL_TRANSITION = 280
  * movement instead of two.
  */
 const LEVEL_REVEAL_SPREAD = 180
+
+/**
+ * Width of a left or right legend column, in pixels, unless `legend.width` says
+ * otherwise. Fixed rather than measured because the plot is sized before the
+ * legend has any content to measure, and a plot that resizes once the legend
+ * arrives is a visible reflow on every load.
+ */
+const DEFAULT_LEGEND_WIDTH = 180
 
 /** The licensed feature set, and why each member is on it, lives in `core/premium`. */
 
@@ -230,6 +242,7 @@ class ApexMaps extends BaseChart {
   zoomPan: ZoomPan | null = null
   globe: GlobeRotation | null = null
   breadcrumb: Breadcrumb | null = null
+  zoomControls: ZoomControls | null = null
 
   private _listeners: Partial<Record<string, ((payload: never) => void)[]>> = {}
   /**
@@ -400,6 +413,17 @@ class ApexMaps extends BaseChart {
       onSelect: (up) => void this.drillUp(up),
     })
 
+    // Over the plot rather than in the container's flow, which is the one place a
+    // zoom control belongs: it acts on the view, so it has to sit on the view. The
+    // corner it takes is a handful of pixels of ocean, and `_zoomControlsOptions`
+    // lets a caller move it to another corner or take it away.
+    this.zoomControls = new ZoomControls({
+      container: this.plot,
+      options: this._zoomControlsOptions(),
+      onStep: (direction) => this._zoomStep(direction),
+      onReset: () => void this.resetView(),
+    })
+
     this.a11y = new A11y({
       container: this.element,
       options: this.config.a11y,
@@ -415,7 +439,11 @@ class ApexMaps extends BaseChart {
   private _measure(): void {
     const { chart } = this.config
     const rect = this.element.getBoundingClientRect()
-    const width = Math.max(1, Math.round(resolveSize(chart.width, rect.width || 0, 600)))
+    // A legend down the side takes its column out of the container before the
+    // plot is sized. Measuring the container and then putting a legend beside
+    // the plot is how a map ends up wider than the element it was given.
+    const available = Math.max(1, (rect.width || 0) - this._reservedLegendWidth())
+    const width = Math.max(1, Math.round(resolveSize(chart.width, available, 600)))
     const height = Math.max(1, Math.round(resolveSize(chart.height, rect.height || 0, 400)))
 
     // Responsive overrides resolve against the measured width, so a legend
@@ -426,6 +454,32 @@ class ApexMaps extends BaseChart {
       this.plot.style.width = `${width}px`
       this.plot.style.height = `${height}px`
     }
+    this._applyLegendLayout()
+  }
+
+  /** Column width a left or right legend claims, and zero for top or bottom. */
+  private _reservedLegendWidth(): number {
+    return reservedLegendWidth(this.config.legend)
+  }
+
+  /**
+   * Tell the root which side the legend is on.
+   *
+   * The root is the layout container (see `ApexMaps.css`), so the position is a
+   * class on it rather than a DOM move: the legend keeps its place in the tab
+   * order and its element identity through a position change, and `updateOptions`
+   * can flip a legend from bottom to left without a re-render.
+   */
+  private _applyLegendLayout(): void {
+    const legend = this.config.legend
+    const position = legend.show === false ? null : legend.position || 'bottom'
+    for (const side of ['top', 'bottom', 'left', 'right'] as const) {
+      this.element.classList.toggle(`apexmaps--legend-${side}`, side === position)
+    }
+    this.element.style.setProperty(
+      '--apexmaps-legend-width',
+      `${Math.max(60, legend.width ?? DEFAULT_LEGEND_WIDTH)}px`,
+    )
   }
 
   /**
@@ -794,6 +848,7 @@ class ApexMaps extends BaseChart {
    * reach these components by exactly the same path.
    */
   private _syncComponentOptions(): void {
+    this._applyLegendLayout()
     if (this.labels) this.labels.options = this.config.dataLabels
     if (this.annotations) this.annotations.options = this.config.annotations
     if (this.legend) this.legend.options = this.config.legend
@@ -1046,6 +1101,69 @@ class ApexMaps extends BaseChart {
       globe: this.globe,
     })
     this.zoomPan.attach()
+
+    // Rebuilt from the same live config, so `zoom.enabled: false` set later takes
+    // the buttons with it: leaving controls on a map that no longer zooms would be
+    // the same lie as an enabled `+` at maximum scale.
+    if (this.zoomControls) {
+      this.zoomControls.options = this._zoomControlsOptions()
+      this.zoomControls.render(this._zoomControlsState())
+    }
+  }
+
+  /**
+   * The controls' options in object form, `show: false` when they are off.
+   *
+   * `controls: false` is what a caller writes, and the resolved tree carries an
+   * object; normalising here means the component never has to know about both.
+   */
+  private _zoomControlsOptions(): ZoomControlsOptions {
+    const zoom = this.config.interaction.zoom ?? {}
+    if (zoom.enabled === false || zoom.controls === false) return { show: false }
+    if (zoom.controls === true || zoom.controls == null) return { show: true }
+    return zoom.controls
+  }
+
+  private _zoomControlsState(): ZoomControlsState {
+    const camera = this.viewport.camera
+    return {
+      k: camera.k,
+      minZoom: this.camera?.options.minZoom ?? 0.8,
+      maxZoom: this.camera?.options.maxZoom ?? 4096,
+      // A spun globe is somewhere the reader navigated to just as much as a pan is,
+      // and `resetView` undoes it, so the button has to offer to.
+      moved:
+        camera.k !== 1 ||
+        camera.x !== 0 ||
+        camera.y !== 0 ||
+        (this.viewport.rotatable && !sameRotation(this.viewport.rotation, this._initialRotation)),
+    }
+  }
+
+  /**
+   * Step the zoom about the centre of the plot, animated.
+   *
+   * Centre rather than the pointer, because a button press has no position on the
+   * map: anchoring to where the button happens to sit would drag the geography
+   * towards the corner. Animated for the same reason the double-click zoom is: a
+   * scale change that teleports loses the reader's place.
+   */
+  private _zoomStep(direction: 1 | -1): void {
+    if (!this.camera) return
+    const step = this.config.interaction.zoom?.step ?? 1.6
+    const factor = direction > 0 ? step : 1 / step
+    const centre: ScreenPoint = [this.viewport.width / 2, this.viewport.height / 2]
+
+    this.camera.stop()
+    // Same shape as ZoomPan's double-click: compute the anchored destination with
+    // the camera's own clamping, put the camera back, then ease to it.
+    const before = { ...this.camera.state }
+    this.camera.zoomAbout(factor, centre)
+    const target = { ...this.camera.state }
+    this.camera.set(before)
+    if (target.k === before.k) return
+    void this.camera.easeTo({ k: target.k, x: target.x, y: target.y, duration: 260 })
+    this.emit('zoom', { k: target.k })
   }
 
   private _bindMarkEvents(): void {
@@ -1413,6 +1531,7 @@ class ApexMaps extends BaseChart {
   }
 
   private _handleKeyDown(event: KeyboardEvent): void {
+    if (this._handleZoomKey(event)) return
     if (event.key !== 'Escape') return
 
     // A box being dragged is the most immediate thing Escape can abandon, so it
@@ -1430,6 +1549,41 @@ class ApexMaps extends BaseChart {
     event.stopPropagation()
     event.preventDefault()
     void this.drillUp()
+  }
+
+  /**
+   * `+` and `-` zoom, and `0` returns the opening view.
+   *
+   * The keyboard path exists whether or not the controls are rendered, because a
+   * host that hides them is styling the map, not opting its readers out of
+   * navigating it. Only while the map surface itself holds focus: the container
+   * listener is on the whole element, and a `-` typed into a host's own input
+   * inside it is a character, not a gesture.
+   *
+   * @returns Whether the key was consumed.
+   */
+  private _handleZoomKey(event: KeyboardEvent): boolean {
+    if (this.config.interaction.zoom?.enabled === false) return false
+    if (event.metaKey || event.ctrlKey || event.altKey) return false
+
+    const target = event.target as Element | null
+    const onSurface =
+      target === this.renderer?.root ||
+      target === this.plot ||
+      (target instanceof Element && target.closest('.apexmaps-zoom') !== null)
+    if (!onSurface) return false
+
+    // `=` and `_` are the unshifted keys `+` and `-` share, so a reader who does
+    // not hold shift still zooms.
+    const { key } = event
+    const direction = key === '+' || key === '=' ? 1 : key === '-' || key === '_' ? -1 : 0
+    if (direction === 0 && key !== '0') return false
+
+    event.preventDefault()
+    event.stopPropagation()
+    if (direction === 0) void this.resetView()
+    else this._zoomStep(direction as 1 | -1)
+    return true
   }
 
   /**
@@ -2198,6 +2352,9 @@ class ApexMaps extends BaseChart {
   private _onCameraChange(): void {
     // Applies the world transform and repositions screen-space symbols.
     this.renderer?.applyCamera()
+    // Cheap enough for a per-frame call: `sync` compares against what it last
+    // wrote and returns without touching the DOM, which is every frame of a pan.
+    this.zoomControls?.sync(this._zoomControlsState())
     // Null except during a level change, where it is the outgoing level being
     // carried along by the same move that settles the incoming one.
     this._ghost?.track(this.viewport.camera)
@@ -2317,6 +2474,8 @@ class ApexMaps extends BaseChart {
   private _onRotate(immediate = false): void {
     if (this._destroyed || !this.rendered) return
     this.emit('rotate', { rotate: this.viewport.rotation })
+    // A spin is navigation, so it is what the reset button offers to undo.
+    this.zoomControls?.sync(this._zoomControlsState())
 
     if (immediate || typeof requestAnimationFrame === 'undefined') {
       // A deferred pass would only repeat this one against the same rotation.
@@ -2395,7 +2554,10 @@ class ApexMaps extends BaseChart {
       JSON.stringify(previous.geo?.projection) !== JSON.stringify(this.config.geo?.projection)
     const sizeChanged =
       previous.chart?.width !== this.config.chart?.width ||
-      previous.chart?.height !== this.config.chart?.height
+      previous.chart?.height !== this.config.chart?.height ||
+      // A legend moving to or from a side changes how much width is left for
+      // the plot, which is a resize by any other name.
+      this._reservedLegendWidth() !== reservedLegendWidth(previous.legend)
 
     if (redrawGeometry || mapChanged || projectionChanged) {
       if (mapChanged) {
@@ -2718,6 +2880,27 @@ class ApexMaps extends BaseChart {
       this.emit('rotate', { rotate: this.viewport.rotation })
     }
     return this
+  }
+
+  /**
+   * Step the zoom in by `interaction.zoom.step` (1.6 by default), about the
+   * centre of the plot. What the `+` control does, so a host that renders its own
+   * chrome behaves identically to the built-in one.
+   */
+  zoomIn(): this {
+    this._zoomStep(1)
+    return this
+  }
+
+  /** Step the zoom out. See {@link zoomIn}. */
+  zoomOut(): this {
+    this._zoomStep(-1)
+    return this
+  }
+
+  /** The camera's current scale, 1 at the opening fit. */
+  get zoom(): number {
+    return this.viewport.camera.k
   }
 
   /**
@@ -3191,12 +3374,22 @@ class ApexMaps extends BaseChart {
     this.legend?.destroy()
     this.tooltip?.destroy()
     this.breadcrumb?.destroy()
+    this.zoomControls?.destroy()
     this.a11y?.destroy()
     this.renderer?.destroy()
     remove(this._attribution)
     remove(this.plot)
 
-    this.element.classList.remove('apexmaps', 'apexmaps--dark', 'apexmaps--enter')
+    this.element.classList.remove(
+      'apexmaps',
+      'apexmaps--dark',
+      'apexmaps--enter',
+      'apexmaps--legend-top',
+      'apexmaps--legend-bottom',
+      'apexmaps--legend-left',
+      'apexmaps--legend-right',
+    )
+    this.element.style.removeProperty('--apexmaps-legend-width')
     // `remove` also TRACKS the container, because signature verification is
     // asynchronous and a container that looked licensed at render time may need
     // correcting a microtask later. That is right while a map is alive and wrong
@@ -3325,6 +3518,12 @@ class ApexMaps extends BaseChart {
  * classes, particularly when a hover marker is going to ride along it. Ordinal
  * scales get none, because a bar implies an order categories do not have.
  */
+function reservedLegendWidth(legend: LegendOptions | undefined): number {
+  if (!legend || legend.show === false) return 0
+  if (legend.position !== 'left' && legend.position !== 'right') return 0
+  return Math.max(60, legend.width ?? DEFAULT_LEGEND_WIDTH)
+}
+
 function legendGradient(scale: Scale): { offset: number; color: string }[] | undefined {
   if (scale.isOrdinal) return undefined
   return scale.continuous ? scale.gradientStops() : scale.classStops()

@@ -613,7 +613,14 @@ export interface GeoOptions {
 
 export interface LegendOptions {
   show?: boolean
+  /**
+   * Which side of the plot the legend sits on. `'left'` and `'right'` make it a
+   * column: the plot is measured against what is left of the container, and a
+   * gradient bar turns vertical.
+   */
   position?: 'bottom' | 'top' | 'left' | 'right'
+  /** Column width in pixels for `position: 'left' | 'right'`. Default 180. */
+  width?: number
   align?: 'start' | 'center' | 'end'
   title?: string
   /** Click a class to mute it. */
@@ -696,6 +703,29 @@ export interface SelectionOptions {
   modifier?: 'shift' | 'alt' | 'meta' | 'ctrl' | 'none'
 }
 
+export type ZoomControlsPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+
+/**
+ * On-screen `+` / `-` buttons, and a control that returns the opening view.
+ *
+ * Rendered by default wherever zoom is enabled, because every other way to
+ * change scale is a gesture: without them there is no keyboard path to a closer
+ * look, and on a trackpad over a scrolling page there is barely a mouse one.
+ * A dashboard that wants a clean tile sets `interaction.zoom.controls: false`.
+ */
+export interface ZoomControlsOptions {
+  show?: boolean
+  /** Corner of the plot the group sits in. Default `'top-right'`. */
+  position?: ZoomControlsPosition
+  /**
+   * Include the reset control. Default true: at the default step, eight clicks
+   * of `+` pass 40x, and no gesture takes the reader back to the whole map in
+   * one move. Turn it off where a breadcrumb or the host's own chrome says
+   * "back" already.
+   */
+  reset?: boolean
+}
+
 export interface InteractionOptions {
   zoom?: {
     enabled?: boolean
@@ -703,7 +733,13 @@ export interface InteractionOptions {
     max?: number
     wheel?: boolean
     doubleClick?: boolean
+    /**
+     * Scale factor per step, used by the buttons, the keyboard and a
+     * double-click. Default 1.6.
+     */
     step?: number
+    /** `false` removes the on-screen controls. See {@link ZoomControlsOptions}. */
+    controls?: boolean | ZoomControlsOptions
   }
   pan?: { enabled?: boolean; inertia?: boolean }
   /**

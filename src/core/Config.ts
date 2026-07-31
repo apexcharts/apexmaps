@@ -146,6 +146,11 @@ export function defaults(): ResolvedOptions {
         wheel: true,
         doubleClick: true,
         step: 1.6,
+        /**
+         * On-screen `+` / `-` / reset buttons. On by default: every other way to
+         * change scale is a gesture, and a gesture is not a keyboard path.
+         */
+        controls: { show: true, position: 'top-right', reset: true },
       },
       pan: { enabled: true, inertia: true },
       /** `'auto'`: a drag spins the globe projections and pans everything else. */

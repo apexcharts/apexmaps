@@ -74,6 +74,11 @@ map.camera.fitBounds(worldBounds, { padding: 40, maxZoom: 12 })
 await map.frameFeature('France', { padding: 40 })
 await map.resetView()
 
+// One step about the centre of the plot: what the on-screen +/- buttons and the
+// +/- keys do, so host chrome behaves exactly like the built-in controls.
+map.zoomIn()
+map.zoomOut()
+
 // Same call, orthographic projection: turns the sphere rather than panning it.
 await globe.camera.flyTo({ center: [79, 22] })</pre
         >

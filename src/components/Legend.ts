@@ -34,6 +34,8 @@ export interface LegendSection {
 interface BarHandle {
   marker: HTMLElement
   label: HTMLElement
+  /** A left/right legend runs its bar bottom-to-top, so the marker moves in y. */
+  vertical: boolean
 }
 
 export class Legend {
@@ -87,7 +89,8 @@ export class Legend {
     this.el.setAttribute(
       'class',
       `apexmaps-legend apexmaps-legend--${this.options.position || 'bottom'}` +
-        ` apexmaps-legend--align-${this.options.align || 'center'}`,
+        ` apexmaps-legend--align-${this.options.align || 'center'}` +
+        (this.isVertical() ? ' apexmaps-legend--vertical' : ''),
     )
     empty(this.el)
 
@@ -184,6 +187,7 @@ export class Legend {
     gradient: { offset: number; color: string }[],
     seriesIndex: number,
   ): HTMLElement {
+    const vertical = this.isVertical()
     const stops = gradient.map((s) => `${s.color} ${(s.offset * 100).toFixed(1)}%`).join(', ')
     const nullItem = items.find((i) => i.isNull)
     const real = items.filter((i) => !i.isNull)
@@ -196,18 +200,18 @@ export class Legend {
       'aria-hidden': 'true',
     })
     marker.appendChild(markerLabel)
-    this.bars.set(seriesIndex, { marker, label: markerLabel })
+    this.bars.set(seriesIndex, { marker, label: markerLabel, vertical })
 
     const wrap = html('div', { class: 'apexmaps-legend-gradient-wrap' }, [
       html('div', { class: 'apexmaps-legend-gradient-track' }, [
         html('div', {
           class: 'apexmaps-legend-gradient',
-          style: { background: `linear-gradient(to right, ${stops})` },
+          style: { background: `linear-gradient(to ${vertical ? 'top' : 'right'}, ${stops})` },
           'aria-hidden': 'true',
         }),
         marker,
       ]),
-      this.gradientLabels(real),
+      this.gradientLabels(real, vertical),
     ])
 
     if (nullItem) {
@@ -237,7 +241,7 @@ export class Legend {
    * reader needs: printing "10 to 20" under a band says the same thing twice and
    * leaves the band edge unlabelled, which is where the eye actually goes.
    */
-  private gradientLabels(real: LegendItem[]): HTMLElement {
+  private gradientLabels(real: LegendItem[], vertical: boolean): HTMLElement {
     const format = this.options.tickFormatter ?? formatNumber
     const classed = real.length > 2 && real.every((i) => i.from != null && i.to != null)
 
@@ -248,13 +252,14 @@ export class Legend {
       ])
     }
 
-    const ticks = real.slice(1).map((item, i) =>
-      html('span', {
+    const ticks = real.slice(1).map((item, i) => {
+      const at = `${(((i + 1) / real.length) * 100).toFixed(2)}%`
+      return html('span', {
         class: 'apexmaps-legend-tick',
-        style: { left: `${(((i + 1) / real.length) * 100).toFixed(2)}%` },
+        style: vertical ? { bottom: at } : { left: at },
         text: format(item.from as number),
-      }),
-    )
+      })
+    })
     return html('div', { class: 'apexmaps-legend-gradient-labels is-ticks' }, ticks)
   }
 
@@ -272,7 +277,8 @@ export class Legend {
       return
     }
     const pct = Math.max(0, Math.min(1, position)) * 100
-    bar.marker.style.left = `${pct.toFixed(2)}%`
+    if (bar.vertical) bar.marker.style.bottom = `${pct.toFixed(2)}%`
+    else bar.marker.style.left = `${pct.toFixed(2)}%`
     bar.marker.classList.add('is-visible')
     bar.label.textContent = this.markerLabels() && label ? label : ''
   }
@@ -283,6 +289,12 @@ export class Legend {
       bar.marker.classList.remove('is-visible')
       bar.label.textContent = ''
     }
+  }
+
+  /** Left and right legends are columns, so their bar runs vertically. */
+  private isVertical(): boolean {
+    const position = this.options.position
+    return position === 'left' || position === 'right'
   }
 
   private markerEnabled(): boolean {

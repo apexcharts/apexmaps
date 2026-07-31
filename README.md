@@ -613,14 +613,18 @@ const map = new ApexMaps(element, {
   ],
   dataLabels: { enabled: true, collision: 'hide' },
   interaction: {
-    zoom: { enabled: true, wheel: true },
+    // `+` / `-` / reset buttons over the plot, on by default: a gesture is not a
+    // keyboard path. `controls: false` removes them, `{ position, reset }` tunes them.
+    zoom: { enabled: true, wheel: true, controls: { position: 'top-right' } },
     pan: { enabled: true, inertia: true },
     rotate: { enabled: 'auto' },    // a drag spins a globe instead of panning it
     selection: { multiple: true, rectangle: true, modifier: 'shift' },
   },
   link: { group: 'dashboard' },   // brush this map, brush the others (licensed)
   legend: {
-    position: 'bottom', interactive: true,
+    position: 'bottom',           // 'top' | 'left' | 'right' too; a side is a column,
+    width: 180,                   //   this wide, taken out of the plot's width
+    interactive: true,
     style: 'gradient',            // one bar; classed scales draw as hard bands
     marker: true,                 // arrow on the bar tracks the hovered feature
   },
@@ -631,6 +635,8 @@ const map = new ApexMaps(element, {
 await map.render()
 
 map.camera.flyTo({ center: [2.35, 48.85], zoom: 8 })   // a pan here, a rotation on a globe
+map.zoomIn(); map.zoomOut()     // one step, what the buttons and the +/- keys do
+await map.resetView()           // back to the opening fit, and a globe's opening spin
 map.rotateTo([-25, -18])       // turns the sphere, on a projection that can be turned
 await map.frameFeature('FRA', { padding: 40 })
 await map.drillTo('FRA')       // as a click would; drillUp() / drillUp(Infinity) climb back

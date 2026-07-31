@@ -80,7 +80,15 @@ async function render(options: Record<string, unknown> = {}) {
   return map
 }
 
+/** jsdom does no layout, so the container's box has to be declared. */
+function sizeContainer(width: number, height = 400) {
+  el.getBoundingClientRect = () =>
+    ({ width, height, top: 0, left: 0, right: width, bottom: height }) as DOMRect
+}
+
 const marker = () => el.querySelector('.apexmaps-legend-marker') as HTMLElement
+const legendEl = () => el.querySelector('.apexmaps-legend') as HTMLElement
+const plot = () => el.querySelector('.apexmaps-plot') as HTMLElement
 const hover = (i: number, type = 'pointerover') =>
   el
     .querySelectorAll('path.apexmaps-feature')
@@ -190,5 +198,81 @@ describe('legend hover marker', () => {
       expect(left).toBeGreaterThan(0)
       expect(left).toBeLessThan(100)
     }
+  })
+})
+
+describe('legend.position', () => {
+  it('marks the root with the side the legend is on', async () => {
+    for (const position of ['top', 'bottom', 'left', 'right'] as const) {
+      await render({ legend: { style: 'gradient', position } })
+      expect(el.classList.contains(`apexmaps--legend-${position}`)).toBe(true)
+      expect(legendEl().classList.contains(`apexmaps-legend--${position}`)).toBe(true)
+      // Exactly one side at a time, or two layout rules would fight.
+      const sides = ['top', 'bottom', 'left', 'right'].filter((s) =>
+        el.classList.contains(`apexmaps--legend-${s}`),
+      )
+      expect(sides).toEqual([position])
+      map?.destroy()
+      map = null
+    }
+  })
+
+  it('claims no side when the legend is hidden', async () => {
+    await render({ legend: { show: false, position: 'left' } })
+    for (const side of ['top', 'bottom', 'left', 'right']) {
+      expect(el.classList.contains(`apexmaps--legend-${side}`)).toBe(false)
+    }
+  })
+
+  it('takes a side legend out of the width the plot is measured against', async () => {
+    sizeContainer(800)
+    await render({ chart: { width: '100%', height: 300 }, legend: { position: 'left' } })
+    expect(plot().style.width).toBe('620px')
+
+    map?.destroy()
+    sizeContainer(800)
+    await render({
+      chart: { width: '100%', height: 300 },
+      legend: { position: 'left', width: 240 },
+    })
+    expect(plot().style.width).toBe('560px')
+
+    map?.destroy()
+    sizeContainer(800)
+    await render({ chart: { width: '100%', height: 300 }, legend: { position: 'bottom' } })
+    expect(plot().style.width).toBe('800px')
+  })
+
+  it('re-measures the plot when the legend moves after render', async () => {
+    sizeContainer(800)
+    await render({ chart: { width: '100%', height: 300 }, legend: { position: 'bottom' } })
+    expect(plot().style.width).toBe('800px')
+
+    await map!.updateOptions({ legend: { position: 'right' } } as never)
+    expect(plot().style.width).toBe('620px')
+    expect(el.classList.contains('apexmaps--legend-right')).toBe(true)
+
+    await map!.updateOptions({ legend: { position: 'bottom' } } as never)
+    expect(plot().style.width).toBe('800px')
+  })
+
+  it('runs the bar bottom-to-top on a side legend, and moves the marker in y', async () => {
+    await render({ legend: { style: 'gradient', position: 'left' } })
+    expect(legendEl().classList.contains('apexmaps-legend--vertical')).toBe(true)
+
+    const bar = el.querySelector('.apexmaps-legend-gradient') as HTMLElement
+    expect(bar.style.background).toContain('to top')
+
+    hover(0)
+    const low = parseFloat(marker().style.bottom)
+    expect(marker().style.left).toBe('')
+    hover(0, 'pointerout')
+    hover(3)
+    expect(parseFloat(marker().style.bottom)).toBeGreaterThan(low)
+
+    // Ticks travel up the bar with it.
+    const tick = el.querySelector('.apexmaps-legend-tick') as HTMLElement
+    expect(tick.style.bottom).not.toBe('')
+    expect(tick.style.left).toBe('')
   })
 })

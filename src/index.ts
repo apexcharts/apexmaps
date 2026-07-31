@@ -66,6 +66,8 @@ export type {
   StrokeOptions,
   TooltipContext,
   TooltipOptions,
+  ZoomControlsOptions,
+  ZoomControlsPosition,
 } from './types'
 
 export type { ExportOptions } from './export/Exporter'
