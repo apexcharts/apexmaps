@@ -78,9 +78,9 @@ export class Viewport {
     // is the only honest source.
     const angles = typeof this.projection.rotate === 'function' ? this.projection.rotate() : null
     this.rotation = angles ? [angles[0] ?? 0, angles[1] ?? 0, angles[2] ?? 0] : [0, 0, 0]
-    // `geoPath` with no context returns SVG path strings. A Canvas renderer
-    // reuses the same generator with a context, which is why the path lives on
-    // the viewport rather than inside the SVG renderer.
+    // `geoPath` with no context returns SVG path strings. It lives on the
+    // viewport rather than inside the renderer because the series measure and
+    // project through it too.
     this.path = geoPath(this.projection as never) as unknown as GeoPathLike
   }
 

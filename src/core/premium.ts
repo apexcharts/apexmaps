@@ -16,10 +16,8 @@
  * summarising points into clusters, and cartography beyond the built-in
  * projections are the licensed tier.
  *
- * Three members of the free tier are there deliberately rather than by omission.
- * The canvas renderer is a rendering strategy rather than a feature, so gating it
- * would mean "your map is slow unless you pay". The spatial index is internal
- * hit-testing that no caller opts into. Accessibility is never gated: a watermark
+ * One member of the free tier is there deliberately rather than by omission.
+ * Accessibility is never gated: a watermark
  * over a screen-reader affordance is indefensible, and in some markets it
  * disqualifies the product from procurement.
  *

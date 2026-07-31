@@ -3,25 +3,238 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ApexMaps examples</title>
+    <title>ApexMaps gallery</title>
     <link rel="stylesheet" href="_shared.css" />
+    <style>
+      /*
+       * Index-only chrome. The previews are live maps rather than screenshots,
+       * because a screenshot of a map is a claim and a map is the evidence: the
+       * geometry, the projection, the ramp and the legend on this page are the
+       * ones the demo behind the card uses.
+       *
+       * They are deliberately inert. Pointer events are off, so a card is one
+       * link and not a zoomable widget that eats the click a visitor meant for
+       * the page behind it.
+       */
+      .preview {
+        pointer-events: none;
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      @media (max-width: 1020px) {
+        .feature-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 680px) {
+        .feature-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+
+      .hero__grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 46%);
+        gap: 56px;
+        align-items: center;
+      }
+
+      @media (max-width: 980px) {
+        .hero__grid {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 32px;
+        }
+      }
+
+      .hero__globe {
+        position: relative;
+      }
+
+      /* Cards that carry a live preview. Same object as .demo-list a, laid out
+         one per grid cell rather than in an auto-fill row. */
+      .feature {
+        display: flex;
+        flex-direction: column;
+        border-radius: var(--r-lg);
+        overflow: hidden;
+        background: var(--paper);
+        box-shadow: var(--shadow-1);
+        text-decoration: none;
+        color: inherit;
+        transition:
+          transform 160ms ease,
+          box-shadow 160ms ease;
+      }
+
+      .feature:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-2);
+      }
+
+      .feature__plot {
+        height: 186px;
+        border-bottom: 1px solid var(--line);
+        background: #fbfcfe;
+      }
+
+      .feature__body {
+        padding: 15px 17px 17px;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        flex: 1;
+      }
+
+      .feature__body strong {
+        font-size: 14.5px;
+        font-weight: 620;
+        letter-spacing: -0.012em;
+        color: var(--ink);
+      }
+
+      .feature:hover .feature__body strong {
+        color: var(--accent);
+      }
+
+      .feature__body span {
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--ink-3);
+      }
+
+      .feature__tag {
+        margin-top: 8px;
+        font-size: 11px;
+        font-weight: 620;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--ink-4);
+      }
+    </style>
   </head>
   <body>
-    <div class="grid">
-      <div>
-        <h1>ApexMaps examples</h1>
-        <p class="sub">
-          One page per feature, so each one loads on its own and can be linked to directly. Geometry
-          comes from the built-in registry, served out of <code>geo/</code> in this repository by
-          <code>ApexMaps.setGeoSource('../geo/')</code>. Nothing needs downloading first. Run
-          <code>npm run check:examples</code> to load every page and fail on a demo that errors or
-          draws nothing.
-        </p>
+    <header class="topbar">
+      <div class="topbar__inner">
+        <a class="brand" href="index.html"><span class="brand__mark"></span> ApexMaps</a>
+        <nav class="crumb"><span>/</span> Gallery</nav>
+        <span class="spacer"></span>
+        <a class="crumb" href="../README.md">Docs</a>
+        <a class="crumb" href="https://github.com/apexcharts/apexmaps">GitHub</a>
       </div>
+    </header>
 
-      <div class="card">
-        <h2 style="margin-top: 0">The map itself</h2>
-        <ul class="demo-list">
+    <section class="hero">
+      <div class="wrap wrap--wide">
+        <div class="hero__grid">
+          <div>
+            <p class="kicker">ApexCharts ecosystem &middot; pre-alpha 0.2.0</p>
+            <h1 class="hero__title">Maps that are finished the moment they render</h1>
+            <p class="hero__dek">
+              Twenty-two demos, every one of them a map you could publish as it stands. Pass a
+              geometry id and an array of values: ApexMaps picks the projection, the classification,
+              the ramp, the legend, the labels and the tooltip, and it picks them the way a
+              cartographer would.
+            </p>
+            <div class="hero__actions">
+              <a class="btn btn--primary" href="choropleth.html">Start with a choropleth</a>
+              <a class="btn btn--ghost" href="arcs.html">See the route map</a>
+            </div>
+            <div style="margin-top: 26px; max-width: 34ch">
+              <pre>npm install apexmaps</pre>
+            </div>
+          </div>
+
+          <div class="hero__globe">
+            <div class="plot preview" id="globe"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <main class="wrap wrap--wide">
+      <section class="section">
+        <div class="section__head">
+          <div>
+            <h2>Six maps, six defaults</h2>
+            <p>
+              Live, not screenshots. Every preview below is a real instance drawing real geometry
+              out of the built-in registry, with nothing configured but the data.
+            </p>
+          </div>
+          <span class="chip chip--free">All free tier</span>
+        </div>
+
+        <div class="feature-grid">
+          <a class="feature" href="choropleth.html">
+            <div class="feature__plot plot preview" id="p-world"></div>
+            <div class="feature__body">
+              <strong>Choropleth defaults</strong>
+              <span>Equal Earth, quantile breaks, an OkLab ramp. Two options passed.</span>
+              <span class="feature__tag">The map itself</span>
+            </div>
+          </a>
+
+          <a class="feature" href="bubbles.html">
+            <div class="feature__plot plot preview" id="p-bubbles"></div>
+            <div class="feature__body">
+              <strong>Proportional symbols</strong>
+              <span>The world's 25 largest metros, area scaled by square root.</span>
+              <span class="feature__tag">Series</span>
+            </div>
+          </a>
+
+          <a class="feature" href="projections.html">
+            <div class="feature__plot plot preview" id="p-globe"></div>
+            <div class="feature__body">
+              <strong>Thirteen projections</strong>
+              <span>Orthographic, conics, azimuthals, and the graticule to prove it.</span>
+              <span class="feature__tag">Cartography</span>
+            </div>
+          </a>
+
+          <a class="feature" href="drilldown.html">
+            <div class="feature__plot plot preview" id="p-us"></div>
+            <div class="feature__body">
+              <strong>States, then counties</strong>
+              <span>Click a state and the map replaces itself with the level below.</span>
+              <span class="feature__tag">Interaction</span>
+            </div>
+          </a>
+
+          <a class="feature" href="theming.html">
+            <div class="feature__plot plot preview" id="p-eu" style="background: #0d121b"></div>
+            <div class="feature__body">
+              <strong>EU regions, themed</strong>
+              <span>NUTS 0 to 3 built in, dark mode and CSS custom properties.</span>
+              <span class="feature__tag">Platform</span>
+            </div>
+          </a>
+
+          <a class="feature" href="scales.html">
+            <div class="feature__plot plot preview" id="p-jenks"></div>
+            <div class="feature__body">
+              <strong>Classification changes the story</strong>
+              <span>Jenks, quantile, equal interval, threshold. One dataset.</span>
+              <span class="feature__tag">Information design</span>
+            </div>
+          </a>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section__head">
+          <div>
+            <h2>Encode the data</h2>
+            <p>The decisions that decide what a choropleth actually says.</p>
+          </div>
+        </div>
+        <ul class="demo-list demo-list--compact">
           <li>
             <a href="choropleth.html">
               <strong>Choropleth defaults</strong>
@@ -31,7 +244,7 @@
           <li>
             <a href="scales.html">
               <strong>Classification</strong>
-              <span>Quantile, Jenks, equal interval, threshold: the same data, four conclusions</span>
+              <span>Quantile, Jenks, equal interval, threshold: four conclusions</span>
             </a>
           </li>
           <li>
@@ -47,23 +260,22 @@
             </a>
           </li>
           <li>
-            <a href="projections.html">
-              <strong>Projections</strong>
-              <span>Same data, different lie about the earth</span>
-            </a>
-          </li>
-          <li>
             <a href="basemap.html">
               <strong>Basemap only</strong>
               <span>Geometry with no series still renders</span>
             </a>
           </li>
         </ul>
-      </div>
+      </section>
 
-      <div class="card">
-        <h2 style="margin-top: 0">Series</h2>
-        <ul class="demo-list">
+      <section class="section">
+        <div class="section__head">
+          <div>
+            <h2>Marks beyond the fill</h2>
+            <p>Points, connections and routes, each with the encoding it deserves.</p>
+          </div>
+        </div>
+        <ul class="demo-list demo-list--compact">
           <li>
             <a href="bubbles.html">
               <strong>Bubbles</strong>
@@ -79,7 +291,7 @@
           <li>
             <a href="arcs.html">
               <strong>Arcs</strong>
-              <span>Great circles, cut at the antimeridian</span>
+              <span>Great circles on a night map, cut at the antimeridian</span>
             </a>
           </li>
           <li>
@@ -89,33 +301,20 @@
             </a>
           </li>
         </ul>
-      </div>
+      </section>
 
-      <div class="card">
-        <h2 style="margin-top: 0">Data and interaction</h2>
-        <ul class="demo-list">
+      <section class="section">
+        <div class="section__head">
+          <div>
+            <h2>Frame the world</h2>
+            <p>Projection, camera and the editorial layer that says why you published it.</p>
+          </div>
+        </div>
+        <ul class="demo-list demo-list--compact">
           <li>
-            <a href="registry.html">
-              <strong>The geometry registry</strong>
-              <span>26 packs with recommended keys, projections, views and provenance</span>
-            </a>
-          </li>
-          <li>
-            <a href="joins.html">
-              <strong>Join diagnostics</strong>
-              <span>Why the map is grey, answered in one line</span>
-            </a>
-          </li>
-          <li>
-            <a href="drilldown.html">
-              <strong>Drilldown</strong>
-              <span>States into counties, scoped to the state you clicked</span>
-            </a>
-          </li>
-          <li>
-            <a href="selection.html">
-              <strong>Box selection and linked maps</strong>
-              <span>Shift-drag to brush, and brush two maps at once</span>
+            <a href="projections.html">
+              <strong>Projections</strong>
+              <span>Same data, a different lie about the earth</span>
             </a>
           </li>
           <li>
@@ -130,28 +329,45 @@
               <span>Points, features and areas, with generated labels yielding to them</span>
             </a>
           </li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <h2 style="margin-top: 0">Platform</h2>
-        <ul class="demo-list">
-          <li>
-            <a href="a11y.html">
-              <strong>Accessibility</strong>
-              <span>Keyboard navigation, generated description, data table</span>
-            </a>
-          </li>
           <li>
             <a href="theming.html">
               <strong>Theming and responsive</strong>
               <span>Dark mode, CSS custom properties, breakpoint rules</span>
             </a>
           </li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <div class="section__head">
+          <div>
+            <h2>Wire it to a product</h2>
+            <p>The parts that turn a graphic into an interface.</p>
+          </div>
+        </div>
+        <ul class="demo-list demo-list--compact">
           <li>
-            <a href="export.html">
-              <strong>Export</strong>
-              <span>Download the current view as SVG or PNG, or embed it as a data URI</span>
+            <a href="drilldown.html">
+              <strong>Drilldown</strong>
+              <span>States into counties, scoped to the state you clicked</span>
+            </a>
+          </li>
+          <li>
+            <a href="selection.html">
+              <strong>Box selection and linked maps</strong>
+              <span>Shift-drag to brush, and brush two maps at once</span>
+            </a>
+          </li>
+          <li>
+            <a href="joins.html">
+              <strong>Join diagnostics</strong>
+              <span>Why the map is grey, answered in one line</span>
+            </a>
+          </li>
+          <li>
+            <a href="registry.html">
+              <strong>The geometry registry</strong>
+              <span>26 packs with recommended keys, projections, views and provenance</span>
             </a>
           </li>
           <li>
@@ -161,11 +377,28 @@
             </a>
           </li>
           <li>
-            <a href="canvas.html">
-              <strong>Canvas tier</strong>
-              <span>10,000 features with no DOM per feature, and R-tree hit testing</span>
+            <a href="export.html">
+              <strong>Export</strong>
+              <span>Download the current view as SVG or PNG, or embed it as a data URI</span>
             </a>
           </li>
+          <li>
+            <a href="a11y.html">
+              <strong>Accessibility</strong>
+              <span>Keyboard navigation, generated description, data table</span>
+            </a>
+          </li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <div class="section__head">
+          <div>
+            <h2>At scale</h2>
+            <p>What a dense map costs in your own browser.</p>
+          </div>
+        </div>
+        <ul class="demo-list demo-list--compact">
           <li>
             <a href="bench.html">
               <strong>Performance bench</strong>
@@ -173,7 +406,234 @@
             </a>
           </li>
         </ul>
-      </div>
-    </div>
+      </section>
+
+      <p class="note" style="margin: 48px 0 0">
+        Geometry comes from the built-in registry, served out of <code>geo/</code> in this repository
+        by <code>ApexMaps.setGeoSource('../geo/')</code>, so nothing needs downloading first. Run
+        <code>npm run check:examples</code> to load every page and fail on a demo that errors or
+        draws nothing. Data marked illustrative is generated: it is a smooth field over the globe,
+        deterministic on every load, and it is never presented as a measurement.
+      </p>
+    </main>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      /*
+       * Every preview is inert: no zoom, no pan, no tooltip, no selection. A card
+       * is a link, and a map that fights the link is worse than a screenshot.
+       */
+      const INERT = {
+        interaction: {
+          zoom: { enabled: false },
+          pan: { enabled: false },
+          selection: { enabled: false },
+        },
+        tooltip: { enabled: false },
+        a11y: { enabled: false },
+      }
+
+      const preview = (id, options) =>
+        Demo.watch(
+          id,
+          new ApexMaps(document.getElementById(id), {
+            ...INERT,
+            ...options,
+            chart: {
+              height: 186,
+              fontFamily:
+                '-apple-system, BlinkMacSystemFont, Inter, "Segoe UI", Roboto, sans-serif',
+              ...options.chart,
+            },
+            legend: { show: false, ...options.legend },
+          }),
+        )
+
+      Demo.ready(
+        (async () => {
+          const world = await Demo.places('world-countries-110m.json')
+          const values = world.map((place) => ({ name: place.name, value: Demo.field(place) }))
+
+          /* --- the hero globe ------------------------------------------------ */
+
+          const globe = Demo.watch(
+            'globe',
+            new ApexMaps(document.getElementById('globe'), {
+              ...INERT,
+              chart: { height: 420, animations: { enabled: false } },
+              theme: { mode: 'dark' },
+              geo: {
+                map: 'world/countries@110m',
+                // Rotated to put the land mass on the lit side of the disc rather
+                // than the Pacific, which is what a default orthographic gives.
+                projection: { name: 'orthographic', rotate: [-25, -18] },
+                view: { fit: 'world', padding: 8 },
+                sphere: { show: true, fill: '#0e141d', stroke: 'rgba(255,255,255,0.14)' },
+                graticule: { show: true, step: 20, color: 'rgba(255,255,255,0.07)', width: 0.6 },
+              },
+              legend: { show: false },
+              series: [
+                {
+                  name: 'Index',
+                  joinBy: 'name',
+                  data: values,
+                  scale: { palette: 'teal', classes: 6 },
+                  stroke: { color: 'rgba(0,0,0,0.35)', width: 0.4 },
+                },
+              ],
+            }),
+          )
+
+          /* --- the six previews --------------------------------------------- */
+
+          const maps = [
+            globe,
+
+            preview('p-world', {
+              geo: {
+                map: 'world/countries@110m',
+                view: { fit: Demo.INHABITED, padding: 6 },
+                sphere: { show: true, fill: '#f5f8fc', stroke: 'transparent' },
+              },
+              series: [{ name: 'Index', joinBy: 'name', data: values }],
+            }),
+
+            preview('p-bubbles', {
+              geo: {
+                map: 'world/land@110m',
+                fill: '#e8ecf2',
+                view: { fit: Demo.INHABITED, padding: 8 },
+                sphere: { show: true, fill: '#f7f9fc', stroke: 'transparent' },
+              },
+              series: [
+                {
+                  type: 'bubble',
+                  name: 'Metro population',
+                  color: '#d0303f',
+                  opacity: 0.62,
+                  stroke: { color: '#fff', width: 0.8 },
+                  size: { scale: 'sqrt', range: [2, 15] },
+                  data: [
+                    { name: 'Tokyo', lon: 139.69, lat: 35.69, value: 37400068 },
+                    { name: 'Delhi', lon: 77.21, lat: 28.61, value: 28514000 },
+                    { name: 'Shanghai', lon: 121.47, lat: 31.23, value: 25582000 },
+                    { name: 'São Paulo', lon: -46.63, lat: -23.55, value: 21650000 },
+                    { name: 'Mexico City', lon: -99.13, lat: 19.43, value: 21581000 },
+                    { name: 'Cairo', lon: 31.24, lat: 30.04, value: 20076000 },
+                    { name: 'Mumbai', lon: 72.88, lat: 19.08, value: 19980000 },
+                    { name: 'Beijing', lon: 116.41, lat: 39.9, value: 19618000 },
+                    { name: 'Dhaka', lon: 90.41, lat: 23.81, value: 19578000 },
+                    { name: 'New York', lon: -74.01, lat: 40.71, value: 18819000 },
+                    { name: 'Lagos', lon: 3.38, lat: 6.52, value: 13904000 },
+                    { name: 'Manila', lon: 120.98, lat: 14.6, value: 13482000 },
+                    { name: 'Moscow', lon: 37.62, lat: 55.75, value: 12410000 },
+                    { name: 'Paris', lon: 2.35, lat: 48.86, value: 10901000 },
+                    { name: 'London', lon: -0.13, lat: 51.51, value: 9046000 },
+                  ],
+                },
+              ],
+            }),
+
+            preview('p-globe', {
+              geo: {
+                map: 'world/countries@110m',
+                projection: { name: 'orthographic', rotate: [-10, -25] },
+                view: { fit: 'world', padding: 6 },
+                sphere: { show: true, fill: '#eef3f9', stroke: 'rgba(12,17,24,0.12)' },
+                graticule: { show: true, step: 20, color: 'rgba(12,17,24,0.07)', width: 0.6 },
+              },
+              series: [
+                {
+                  name: 'Index',
+                  joinBy: 'name',
+                  data: values,
+                  scale: { palette: 'greens', classes: 6 },
+                },
+              ],
+            }),
+
+            preview('p-us', {
+              // No view override: the registry already recommends albersUsa and
+              // the bounds that frame the lower 48 with Alaska and Hawaii inset.
+              geo: { map: 'us' },
+              series: [
+                {
+                  name: 'Adoption',
+                  joinBy: ['abbr', 'key'],
+                  data: [],
+                  scale: { palette: 'purples', classes: 5 },
+                },
+              ],
+            }),
+
+            preview('p-eu', {
+              theme: { mode: 'dark' },
+              // Likewise. Fitting to the data here would frame French Guiana and
+              // Réunion along with Europe, and Europe would be the small part.
+              geo: {
+                map: 'eu/nuts1@20m',
+                sphere: { show: false },
+              },
+              series: [
+                {
+                  name: 'Adoption',
+                  joinBy: ['nuts_id', 'key'],
+                  data: [],
+                  scale: { palette: 'teal', classes: 5 },
+                  stroke: { color: 'rgba(0,0,0,0.4)', width: 0.4 },
+                },
+              ],
+            }),
+
+            preview('p-jenks', {
+              geo: {
+                map: 'world/countries@110m',
+                view: { fit: Demo.INHABITED, padding: 6 },
+                sphere: { show: true, fill: '#fdf8f3', stroke: 'transparent' },
+              },
+              series: [
+                {
+                  name: 'Exposure',
+                  joinBy: 'name',
+                  data: values.map((row) => ({ ...row, value: Math.pow(row.value / 96, 3) * 900 })),
+                  scale: { type: 'jenks', classes: 6, palette: 'oranges' },
+                },
+              ],
+            }),
+          ]
+
+          await Promise.all(maps.map((map) => map.render()))
+
+          /*
+           * The two regional previews get their values after the pack has loaded,
+           * because the keys live in the geometry rather than in a list this page
+           * could hard-code. Same reason the demos behind them do it.
+           */
+          for (const [map, name] of [
+            [maps[4], 'Adoption'],
+            [maps[5], 'Adoption'],
+          ]) {
+            const keys = map.geo.features.map((feature) => feature.key)
+            await map.updateSeries([
+              {
+                name,
+                joinBy: map === maps[4] ? ['abbr', 'key'] : ['nuts_id', 'key'],
+                data: keys.map((key, index) => ({
+                  key,
+                  // A ramp along the feature order rather than a hash: it reads as
+                  // geography instead of noise at thumbnail size.
+                  value: Demo.value(key, 20, 90) * 0.4 + (index / keys.length) * 60,
+                })),
+                scale: {
+                  palette: map === maps[4] ? 'purples' : 'teal',
+                  classes: 5,
+                },
+              },
+            ])
+          }
+        })(),
+      )
+    </script>
   </body>
 </html>

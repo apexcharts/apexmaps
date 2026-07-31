@@ -37,9 +37,9 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Data | GeoJSON, TopoJSON, bare geometry, feature arrays; automatic winding repair; join-key auto-detection |
 | Joins | Explicit `joinBy`, mismatch diagnostics with suggestions, FIPS leading-zero repair, opt-in `fuzzyJoin` |
 | Scales | quantile, equal interval, Jenks, threshold, linear, log, sqrt, ordinal; OkLab-sampled ramps; 17 palettes; automatic diverging selection; square-root size scales with nested-circle legends |
-| Components | Classed, gradient and nested-circle legends, HTML tooltips with edge flipping, collision-avoiding labels with halos, editorial annotations&nbsp;† |
 | Interaction | Anchored wheel zoom, inertial pan, pinch, double-click zoom, versor globe dragging on `orthographic`, hover states, click and box selection with dimming, cross-map linked selection&nbsp;†, legend class muting, drilldown with automatic parent detection and a breadcrumb&nbsp;† |
 | Camera | `flyTo` (Van Wijk zoom-and-pan path), `easeTo`, `jumpTo`, `fitBounds`, `frameFeature`, `resetView`, interruptible and retargeting; on azimuthal projections a move to a place turns the sphere (quaternion slerp) instead of panning |
+| Components | Classed, gradient and nested-circle legends with a hover marker that tracks the pointer along the bar, HTML tooltips with edge flipping, collision-avoiding labels with halos, editorial annotations&nbsp;† |
 | Accessibility | ARIA roles, auto-generated description, roving-tabindex keyboard navigation, live-region announcements, optional data table, `prefers-reduced-motion` |
 | Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 66 kB gzipped core |
 | Frameworks | [`react-apexmaps`](wrappers/react), [`vue-apexmaps`](wrappers/vue) and [`ngx-apexmaps`](wrappers/angular), typed against this package's own options |
@@ -550,7 +550,7 @@ parallels rather than by a centre, so turning one would re-skew the whole map un
 
 ```js
 const map = new ApexMaps(element, {
-  chart: { height: 520, renderer: 'auto', animations: { enabled: true } },
+  chart: { height: 520, animations: { enabled: true } },
   geo: {
     map: 'world/countries@110m',   // registry id, URL, GeoJSON or TopoJSON
     projection: 'equalEarth',      // name, or { name, rotate, parallels, ... }
@@ -602,7 +602,11 @@ const map = new ApexMaps(element, {
     selection: { multiple: true, rectangle: true, modifier: 'shift' },
   },
   link: { group: 'dashboard' },   // brush this map, brush the others (licensed)
-  legend: { position: 'bottom', interactive: true },
+  legend: {
+    position: 'bottom', interactive: true,
+    style: 'gradient',            // one bar; classed scales draw as hard bands
+    marker: true,                 // arrow on the bar tracks the hovered feature
+  },
   tooltip: { formatter: ({ name, value }) => `${name}: ${value}` },
   a11y: { enabled: true, description: 'auto', dataTable: false },
 })
@@ -659,13 +663,10 @@ survives the next one.
 | Joins, including `fuzzyJoin`, and the join diagnostics | Linked selection across maps (`link: { group }`) |
 | Scales, palettes, size legends, responsive rules | Story mode (`chart: { context: 'story' }`) |
 | PNG and SVG export | Presentation mode, map-to-chart morphing, time playback, the WebGL tier *(not built yet)* |
-| The canvas renderer and the whole performance path | |
 | The accessibility layer | |
 
-Two of those free entries are deliberate rather than accidental. **The canvas renderer is free**
-because it is a rendering strategy, not a feature, and charging for it would mean "your map is slow
-unless you pay". **`fuzzyJoin` is free** for the same reason: cleaning up someone's data is not a
-premium experience, it is the cost of using real data.
+One of those free entries is deliberate rather than accidental. **`fuzzyJoin` is free** because
+cleaning up someone's data is not a premium experience, it is the cost of using real data.
 
 Without a valid key the licensed features **still work, in full, with a watermark on the map**. That
 is deliberate: evaluate the thing before paying for it, in your own app, with your own data. A valid

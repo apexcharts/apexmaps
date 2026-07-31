@@ -70,14 +70,9 @@ afterEach(() => {
 
 async function render(count: number, options: ApexMapsOptions = {}) {
   map = new ApexMaps(el, {
-    // `renderer: 'svg'` is explicit, not incidental. Every assertion below is
-    // about the SVG tier's invariant (one transform, no geometry rewrite), and
-    // the canvas tier deliberately does not hold it: it repaints per frame. Left
-    // on `'auto'`, these tests would pass in jsdom only because jsdom cannot
-    // provide a 2D context, and would fail the moment they ran anywhere real
-    // with a feature count above the promotion threshold. The canvas tier's own
-    // invariant is pinned in `test/canvas.test.ts`.
-    chart: { width: 800, height: 500, animations: { enabled: false }, renderer: 'svg' },
+    // Every assertion below is about the renderer's camera invariant: one
+    // transform on one group, and no geometry rewrite per frame.
+    chart: { width: 800, height: 500, animations: { enabled: false } },
     geo: { map: grid(count), projection: 'equirectangular' },
     legend: { show: false },
     ...options,

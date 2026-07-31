@@ -157,7 +157,7 @@ export function niceDomain([min, max]: [number, number]): [number, number] {
   return [Math.floor(min / step) * step, Math.ceil(max / step) * step]
 }
 
-function formatNumber(v: number): string {
+export function formatNumber(v: number): string {
   if (!Number.isFinite(v)) return String(v)
   const abs = Math.abs(v)
   if (abs >= 1e9) return `${(v / 1e9).toFixed(1)}B`
@@ -473,4 +473,68 @@ export class Scale {
     }
     return out
   }
+
+  /**
+   * Stop list for a *classed* legend bar: each class repeated at both edges of
+   * its band, so the bar reads as the hard steps the map actually uses instead
+   * of implying a continuum the classification does not have.
+   */
+  classStops(): { offset: number; color: string }[] {
+    const n = this.colors.length
+    if (!n) return []
+    const out: { offset: number; color: string }[] = []
+    this.colors.forEach((color, i) => {
+      out.push({ offset: i / n, color })
+      out.push({ offset: (i + 1) / n, color })
+    })
+    return out
+  }
+
+  /**
+   * Where a value sits along the legend bar, as a fraction from 0 to 1, or null
+   * when it has no place on it (no data, or a category this scale never saw).
+   *
+   * On a continuous bar this is the same transform the colour uses, so the
+   * marker lands on the exact shade the feature was painted. On a classed bar
+   * the classes are drawn as equal-width bands regardless of how wide their
+   * value ranges are, so the position is the band index plus the value's
+   * progress through that band: the marker stays inside the band whose colour
+   * the reader is being asked to match.
+   */
+  position(value: unknown): number | null {
+    if (this.isOrdinal) {
+      if (value == null || value === '') return null
+      const i = this.categories.indexOf(String(value))
+      return i === -1 ? null : (i + 0.5) / Math.max(1, this.categories.length)
+    }
+
+    const n = typeof value === 'number' ? value : Number(value)
+    if (value == null || value === '' || !Number.isFinite(n)) return null
+
+    const [lo, hi] = this.domain
+
+    if (this.continuous) {
+      let t = hi === lo ? 0.5 : (n - lo) / (hi - lo)
+      if (this.type === 'log') {
+        const safeLo = Math.max(lo, 1e-9)
+        const safeN = Math.max(n, 1e-9)
+        t = Math.log(safeN / safeLo) / Math.log(Math.max(hi, 1e-9) / safeLo)
+      } else if (this.type === 'sqrt') {
+        t = Math.sqrt(Math.max(0, t))
+      }
+      return clamp01(t)
+    }
+
+    const bands = this.breaks.length + 1
+    const index = Math.min(this.classIndex(n), bands - 1)
+    const edges = [lo, ...this.breaks, hi]
+    const from = edges[index]
+    const to = edges[index + 1]
+    const within = to === from ? 0.5 : clamp01((n - from) / (to - from))
+    return clamp01((index + within) / bands)
+  }
+}
+
+function clamp01(t: number): number {
+  return t < 0 ? 0 : t > 1 ? 1 : t
 }

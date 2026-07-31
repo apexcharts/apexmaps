@@ -312,11 +312,21 @@
   white-space: nowrap;
 }
 
+/* An explicit width, not just a cap: the bar itself has no intrinsic width and
+   both the marker and the tick labels are absolutely positioned, so under a
+   centred (shrink-to-fit) legend the whole thing would collapse to nothing. */
 .apexmaps-legend-gradient-wrap {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  width: min(320px, 100%);
   max-width: 320px;
+}
+
+.apexmaps-legend-gradient-track {
+  position: relative;
+  /* Room above the bar for the marker arrow and its value. */
+  padding-top: 22px;
 }
 
 .apexmaps-legend-gradient {
@@ -332,6 +342,73 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Boundary numbers sit *at* the break they describe rather than inside a band,
+   so each is centred on its own tick and allowed to overlap nothing. */
+.apexmaps-legend-gradient-labels.is-ticks {
+  position: relative;
+  display: block;
+  height: 1.2em;
+}
+
+.apexmaps-legend-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+/* --- legend hover marker --- */
+
+.apexmaps-legend-marker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 22px;
+  /* `left` is the value's position on the scale, so the arrow's tip has to sit
+     on it, not its left edge. */
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  pointer-events: none;
+  opacity: 0;
+  /* Opacity fades; the travel along the bar is a transition on `left`, which is
+     what makes the arrow read as one marker moving rather than several blinking. */
+  transition:
+    left 140ms ease-out,
+    opacity 120ms ease-out;
+}
+
+.apexmaps-legend-marker.is-visible {
+  opacity: 1;
+}
+
+.apexmaps-legend-marker-label {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--apexmaps-fg);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  order: -1;
+  margin-bottom: 3px;
+}
+
+.apexmaps-legend-marker-arrow {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--apexmaps-fg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apexmaps-legend-marker {
+    transition: none;
+  }
+}
+
 /* legend.align. The declared default is 'center', matching the rest of the
    Apex family; 'left' and 'right' are the overrides. */
 .apexmaps-legend--align-center {
@@ -341,11 +418,13 @@
 .apexmaps-legend--align-center .apexmaps-legend-items {
   justify-content: center;
 }
-.apexmaps-legend--align-right {
+.apexmaps-legend--align-right,
+.apexmaps-legend--align-end {
   align-items: flex-end;
   text-align: right;
 }
-.apexmaps-legend--align-right .apexmaps-legend-items {
+.apexmaps-legend--align-right .apexmaps-legend-items,
+.apexmaps-legend--align-end .apexmaps-legend-items {
   justify-content: flex-end;
 }
 

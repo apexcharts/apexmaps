@@ -45,11 +45,9 @@ export interface GhostSource {
   /** The plot box, which is the positioning context the copy is laid over. */
   plot: HTMLElement | null
   svg: SVGSVGElement | null
-  canvas: HTMLCanvasElement | null
   /**
    * Clone the SVG. A clone is DOM proportional to the outgoing mark count, so
-   * the caller decides against its motion budget; the canvas copy is one bitmap
-   * whatever the feature count and is always taken.
+   * the caller decides against its motion budget.
    */
   cloneSvg?: boolean
 }
@@ -66,12 +64,11 @@ export class LevelGhost {
   /**
    * Copy what is currently on screen, mounted above it.
    *
-   * Returns null when there was nothing to copy: no plot, no surfaces, or a
-   * refused 2D context with the SVG clone declined. A caller treats that as "no
-   * cross-fade" rather than as an error, exactly as the canvas tier treats a
-   * refused context.
+   * Returns null when there was nothing to copy: no plot, no SVG, or the clone
+   * declined by the motion budget. A caller treats that as "no cross-fade"
+   * rather than as an error.
    */
-  static capture({ plot, svg, canvas, cloneSvg = true }: GhostSource): LevelGhost | null {
+  static capture({ plot, svg, cloneSvg = true }: GhostSource): LevelGhost | null {
     if (!plot) return null
 
     const container = html('div', {
@@ -91,14 +88,6 @@ export class LevelGhost {
     })
 
     let copied = false
-
-    if (canvas) {
-      const copy = copyCanvas(canvas)
-      if (copy) {
-        container.appendChild(copy)
-        copied = true
-      }
-    }
 
     if (svg && cloneSvg) {
       const clone = svg.cloneNode(true) as SVGSVGElement
@@ -121,8 +110,8 @@ export class LevelGhost {
 
     if (!copied) return null
 
-    // Last child of the plot, so it paints over both the canvas tier (first
-    // child) and the SVG, with no z-index for anything else to have to beat.
+    // Last child of the plot, so it paints over the SVG with no z-index for
+    // anything else to have to beat.
     plot.appendChild(container)
     return new LevelGhost(container)
   }
@@ -192,36 +181,4 @@ function strip(el: Element): void {
   const kept = classes.split(/\s+/).filter((token) => token && !token.startsWith('apexmaps-'))
   if (kept.length) el.setAttribute('class', kept.join(' '))
   else el.removeAttribute('class')
-}
-
-/**
- * A canvas holding the same pixels, at the same device resolution.
- *
- * Cloning the element would copy its size and nothing it has drawn, so this
- * goes through `drawImage`. Same-document, same-origin, so it never taints.
- */
-function copyCanvas(source: HTMLCanvasElement): HTMLCanvasElement | null {
-  const copy = html('canvas', {
-    class: 'apexmaps-ghost-canvas',
-    style: { position: 'absolute', inset: '0', display: 'block' },
-  })
-  copy.width = source.width
-  copy.height = source.height
-  copy.style.width = source.style.width
-  copy.style.height = source.style.height
-
-  let ctx: CanvasRenderingContext2D | null
-  try {
-    ctx = copy.getContext('2d')
-  } catch {
-    ctx = null
-  }
-  if (!ctx) return null
-
-  try {
-    ctx.drawImage(source, 0, 0)
-  } catch {
-    return null
-  }
-  return copy
 }

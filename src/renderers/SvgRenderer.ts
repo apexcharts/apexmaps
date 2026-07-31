@@ -24,8 +24,8 @@
  * Symbols are the exception: a bubble must **not** grow when the reader zooms in,
  * because its radius encodes a value. They therefore live in screen space and are
  * repositioned per camera frame, which is two attribute writes per symbol. That is
- * fine for the hundreds-to-low-thousands range SVG is the right renderer for, and
- * it is the specific cost the Canvas tier removes.
+ * fine for the hundreds-to-low-thousands range this renderer is built for, and
+ * clustering bounds the count above it.
  *
  * @module renderers/SvgRenderer
  */

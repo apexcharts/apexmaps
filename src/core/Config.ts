@@ -22,15 +22,6 @@ export function defaults(): ResolvedOptions {
       height: 400,
       /** Sets sensible defaults for the whole spec. */
       type: 'choropleth',
-      /** `'auto' | 'svg' | 'canvas' | 'webgl'`. A hint, not a contract. */
-      renderer: 'auto',
-      /**
-       * Geometry marks at which `'auto'` promotes to the canvas tier. Set where
-       * the DOM itself becomes the problem, not where frames do: canvas does not
-       * make panning faster, it removes the elements. See
-       * DEFAULT_RENDERER_THRESHOLD for the measurements.
-       */
-      rendererThreshold: 20000,
       background: 'transparent',
       fontFamily: 'inherit',
       /**

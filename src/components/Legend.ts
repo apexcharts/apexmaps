@@ -15,6 +15,7 @@
  */
 
 import { html, svg, remove, empty } from '../utils/dom'
+import { formatNumber } from '../scales/Scale'
 import type { LegendItem, LegendOptions, SizeLegendEntry } from '../types'
 
 export interface LegendSection {
@@ -29,6 +30,12 @@ export interface LegendSection {
   seriesIndex?: number
 }
 
+/** The live gradient bar for one series, so hover can move its marker. */
+interface BarHandle {
+  marker: HTMLElement
+  label: HTMLElement
+}
+
 export class Legend {
   readonly container: HTMLElement
   /** Re-pointed at the live config on every draw; see `_syncComponentOptions`. */
@@ -37,6 +44,8 @@ export class Legend {
   el: HTMLElement | null = null
   /** Muted class indices, keyed by series index. */
   readonly muted = new Map<number, Set<number>>()
+  /** Gradient bars by series index, rebuilt on every render. */
+  private bars = new Map<number, BarHandle>()
 
   constructor({
     container,
@@ -59,6 +68,8 @@ export class Legend {
     const meaningful = sections.filter(
       (s) => (s.items && s.items.length) || (s.sizes && s.sizes.length) || s.gradient?.length,
     )
+    this.bars.clear()
+
     if (!meaningful.length) {
       remove(this.el)
       this.el = null
@@ -113,7 +124,7 @@ export class Legend {
         : this.options.style
 
     if (style === 'gradient' && section.gradient?.length) {
-      wrap.appendChild(this.gradientBar(items, section.gradient))
+      wrap.appendChild(this.gradientBar(items, section.gradient, section.seriesIndex ?? 0))
     } else {
       wrap.appendChild(this.classList(items, section.seriesIndex ?? 0))
     }
@@ -171,22 +182,32 @@ export class Legend {
   private gradientBar(
     items: LegendItem[],
     gradient: { offset: number; color: string }[],
+    seriesIndex: number,
   ): HTMLElement {
     const stops = gradient.map((s) => `${s.color} ${(s.offset * 100).toFixed(1)}%`).join(', ')
     const nullItem = items.find((i) => i.isNull)
-    const first = items.find((i) => !i.isNull)
-    const last = [...items].reverse().find((i) => !i.isNull)
+    const real = items.filter((i) => !i.isNull)
+
+    const marker = html('div', { class: 'apexmaps-legend-marker', 'aria-hidden': 'true' }, [
+      html('span', { class: 'apexmaps-legend-marker-arrow' }),
+    ])
+    const markerLabel = html('div', {
+      class: 'apexmaps-legend-marker-label',
+      'aria-hidden': 'true',
+    })
+    marker.appendChild(markerLabel)
+    this.bars.set(seriesIndex, { marker, label: markerLabel })
 
     const wrap = html('div', { class: 'apexmaps-legend-gradient-wrap' }, [
-      html('div', {
-        class: 'apexmaps-legend-gradient',
-        style: { background: `linear-gradient(to right, ${stops})` },
-        'aria-hidden': 'true',
-      }),
-      html('div', { class: 'apexmaps-legend-gradient-labels' }, [
-        html('span', { text: first?.label ?? '' }),
-        html('span', { text: last?.label ?? '' }),
+      html('div', { class: 'apexmaps-legend-gradient-track' }, [
+        html('div', {
+          class: 'apexmaps-legend-gradient',
+          style: { background: `linear-gradient(to right, ${stops})` },
+          'aria-hidden': 'true',
+        }),
+        marker,
       ]),
+      this.gradientLabels(real),
     ])
 
     if (nullItem) {
@@ -206,6 +227,74 @@ export class Legend {
     }
 
     return wrap
+  }
+
+  /**
+   * Numbers under the bar.
+   *
+   * A continuous bar has two ends and nothing in between, so the ends are the
+   * labels. A classed bar has boundaries, and the boundary is the number the
+   * reader needs: printing "10 to 20" under a band says the same thing twice and
+   * leaves the band edge unlabelled, which is where the eye actually goes.
+   */
+  private gradientLabels(real: LegendItem[]): HTMLElement {
+    const format = this.options.tickFormatter ?? formatNumber
+    const classed = real.length > 2 && real.every((i) => i.from != null && i.to != null)
+
+    if (!classed) {
+      return html('div', { class: 'apexmaps-legend-gradient-labels' }, [
+        html('span', { text: real[0]?.label ?? '' }),
+        html('span', { text: real[real.length - 1]?.label ?? '' }),
+      ])
+    }
+
+    const ticks = real.slice(1).map((item, i) =>
+      html('span', {
+        class: 'apexmaps-legend-tick',
+        style: { left: `${(((i + 1) / real.length) * 100).toFixed(2)}%` },
+        text: format(item.from as number),
+      }),
+    )
+    return html('div', { class: 'apexmaps-legend-gradient-labels is-ticks' }, ticks)
+  }
+
+  /**
+   * Move the hover marker to `position` (0 to 1 along the bar). Called as the
+   * pointer crosses features: the reader sees where the feature they are looking
+   * at falls on the scale without translating a colour back into a number.
+   */
+  highlight(seriesIndex: number, position: number | null, label?: string): void {
+    if (this.markerEnabled() === false) return
+    const bar = this.bars.get(seriesIndex)
+    if (!bar) return
+    if (position == null) {
+      this.clearHighlight()
+      return
+    }
+    const pct = Math.max(0, Math.min(1, position)) * 100
+    bar.marker.style.left = `${pct.toFixed(2)}%`
+    bar.marker.classList.add('is-visible')
+    bar.label.textContent = this.markerLabels() && label ? label : ''
+  }
+
+  /** Park every marker. */
+  clearHighlight(): void {
+    for (const bar of this.bars.values()) {
+      bar.marker.classList.remove('is-visible')
+      bar.label.textContent = ''
+    }
+  }
+
+  private markerEnabled(): boolean {
+    const marker = this.options.marker
+    if (marker === false) return false
+    if (typeof marker === 'object' && marker.show === false) return false
+    return true
+  }
+
+  private markerLabels(): boolean {
+    const marker = this.options.marker
+    return typeof marker === 'object' ? marker.label !== false : true
   }
 
   /**
@@ -306,5 +395,6 @@ export class Legend {
     remove(this.el)
     this.el = null
     this.muted.clear()
+    this.bars.clear()
   }
 }
