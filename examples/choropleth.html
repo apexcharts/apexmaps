@@ -7,52 +7,173 @@
     <link rel="stylesheet" href="_shared.css" />
   </head>
   <body>
-    <div class="grid">
-      <nav class="crumb"><a href="index.html">All demos</a> › Choropleth defaults</nav>
-
-      <div class="card">
-        <h1>Choropleth, default configuration</h1>
-        <p class="note">
-          No styling passed: Equal Earth projection, quantile classification, an OkLab-sampled ramp,
-          computed class breaks in the legend, and a no-data swatch. Click a legend class to mute it.
-          Hover, scroll to zoom, drag to pan, double-click to zoom in, shift-drag to select.
-        </p>
-        <div id="map"></div>
+    <header class="topbar">
+      <div class="topbar__inner">
+        <a class="brand" href="index.html"><span class="brand__mark"></span> ApexMaps</a>
+        <nav class="crumb"><span>/</span> <a href="index.html">Gallery</a> <span>/</span> Choropleth</nav>
+        <span class="spacer"></span>
+        <span class="chip chip--free">Free tier</span>
       </div>
+    </header>
 
-      <div class="card">
-        <h2 style="margin-top: 0">The whole configuration</h2>
-        <p class="note">
-          Two keys. Everything the map decides beyond this, it decides because the default is meant to
-          be publishable rather than neutral.
-        </p>
-        <pre>
+    <main class="wrap wrap--wide" style="padding-top: 40px">
+      <div class="stack-lg">
+        <section class="figure figure--bleed">
+          <p class="kicker kicker--accent">Choropleth</p>
+          <div class="figure__head">
+            <div>
+              <h1 class="title title--lg">Two keys in, a publishable map out</h1>
+              <p class="dek">
+                Equal Earth. Quantile breaks, printed in the legend rather than hidden. A ramp
+                sampled in OkLab so no class is a dead step. None of it was configured: that is
+                what a default is for.
+              </p>
+            </div>
+            <div class="stats">
+              <div>
+                <div class="stat__value">177</div>
+                <div class="stat__label">Features</div>
+              </div>
+              <div>
+                <div class="stat__value">5</div>
+                <div class="stat__label">Quantile classes</div>
+              </div>
+              <div>
+                <div class="stat__value">2</div>
+                <div class="stat__label">Options passed</div>
+              </div>
+            </div>
+          </div>
+          <div class="plot" id="map"></div>
+          <p class="source">
+            <span><b>Illustrative data.</b> A smooth field over the globe, identical on every load.</span>
+            <span><b>Geometry</b> Natural Earth 1:110m, built-in registry</span>
+            <span><b>Projection</b> Equal Earth, cropped below 58&deg;S</span>
+          </p>
+        </section>
+
+        <div class="two">
+          <section class="card">
+            <p class="kicker">What was passed</p>
+            <h2>The whole configuration</h2>
+            <p class="note">
+              Everything the map decided beyond this, it decided because a default that needs
+              styling before it can be shown is not a default.
+            </p>
+            <pre>
 new ApexMaps(element, {
   geo: { map: 'world/countries@110m' },
-  series: [{ name: 'Index score', joinBy: 'name', data }],
+  series: [{ name: 'Index', joinBy: 'name', data }],
 })</pre
-        >
+            >
+          </section>
+
+          <section class="card">
+            <p class="kicker">What the demo adds</p>
+            <h2>Four editorial choices</h2>
+            <p class="note">
+              Presentation, not capability. Each one is the difference between output and a
+              published graphic, and each is a single option.
+            </p>
+            <pre>
+view:   { fit: [-180, -58, 180, 84] }   // crop Antarctica
+labels: { formatter: featuredOnly }     // 14 names, not 177
+legend: { title: 'Composite index',     // say what the number is
+          align: 'center',
+          style: 'gradient',            // one banded bar, not five swatches
+          marker: true }                // arrow tracks the hovered country</pre
+            >
+          </section>
+        </div>
       </div>
-    </div>
+    </main>
 
     <script src="../dist/apexmaps.min.js"></script>
     <script src="_shared.js"></script>
     <script>
+      /*
+       * Labelling every country at world scale is not labelling: 177 names at one
+       * weight is texture. A published world map names the features that carry the
+       * story and leaves the rest to the pointer, so the formatter is a whitelist
+       * and the long official names are shortened to what a reader would say.
+       */
+      const FEATURED = {
+        'United States of America': 'United States',
+        Brazil: 'Brazil',
+        India: 'India',
+        China: 'China',
+        Russia: 'Russia',
+        Australia: 'Australia',
+        Canada: 'Canada',
+        Indonesia: 'Indonesia',
+        Nigeria: 'Nigeria',
+        Egypt: 'Egypt',
+        Kazakhstan: 'Kazakhstan',
+        Argentina: 'Argentina',
+        Algeria: 'Algeria',
+        'Saudi Arabia': 'Saudi Arabia',
+      }
+
       Demo.ready(
-        Demo.names('world-countries-110m.json').then((names) => {
+        Demo.places('world-countries-110m.json').then((places) => {
+          const data = places.map((place) => ({
+            name: place.name,
+            value: Demo.field(place),
+            region: place.props.subregion,
+          }))
+
           const map = Demo.watch(
             'choropleth',
             new ApexMaps(document.getElementById('map'), {
-              chart: { height: 480 },
-              geo: { map: 'world/countries@110m' },
-              series: [
-                {
-                  name: 'Index score',
-                  joinBy: 'name',
-                  data: names.map((name) => ({ name, value: Demo.value(name) })),
-                },
-              ],
-              dataLabels: { enabled: true },
+              chart: {
+                height: 560,
+                fontFamily:
+                  '-apple-system, BlinkMacSystemFont, Inter, "Segoe UI", Roboto, sans-serif',
+              },
+              geo: {
+                map: 'world/countries@110m',
+                // One line, and the populated world stops sitting in the top two
+                // thirds of the frame.
+                view: { fit: Demo.INHABITED, padding: 10 },
+                // The faintest water plane. Land on pure white floats; land on a
+                // tinted sphere sits inside a map.
+                sphere: { show: true, fill: '#f6f9fc', stroke: 'transparent' },
+              },
+              series: [{ name: 'Index', joinBy: 'name', data }],
+              legend: {
+                title: 'Composite index (illustrative)',
+                align: 'center',
+                // One banded bar instead of five swatches, so the classes read as
+                // one scale. The arrow above it tracks whatever is hovered: the
+                // reader stops matching colours by eye, which is the one thing a
+                // choropleth always asks them to do and they are always bad at.
+                style: 'gradient',
+                marker: true,
+                // Rounded, because a break at 28.216 tells the reader the machine
+                // chose it and nothing else.
+                tickFormatter: (value) => String(Math.round(value)),
+                formatter: (item) =>
+                  item.isNull
+                    ? 'No data'
+                    : `${Math.round(item.from)} to ${Math.round(item.to)}`,
+              },
+              dataLabels: {
+                enabled: true,
+                minFeatureArea: 700,
+                formatter: ({ name, value }) =>
+                  FEATURED[name] && value != null
+                    ? `${FEATURED[name]}  ${Math.round(value)}`
+                    : '',
+                style: { fontSize: 11, fontWeight: 600, halo: true, haloWidth: 2.6 },
+              },
+              tooltip: {
+                formatter: ({ name, value, datum }) =>
+                  `<div style="font-weight:640;margin-bottom:2px">${name}</div>` +
+                  `<div style="font-variant-numeric:tabular-nums;font-size:15px;font-weight:600">${
+                    value == null ? 'No data' : Demo.fmt.one(value)
+                  }</div>` +
+                  `<div style="opacity:.62;margin-top:2px">${datum?.region ?? ''}</div>`,
+              },
             }),
           )
           return map.render()

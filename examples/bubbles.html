@@ -7,55 +7,117 @@
     <link rel="stylesheet" href="_shared.css" />
   </head>
   <body>
-    <div class="grid">
-      <nav class="crumb"><a href="index.html">All demos</a> › Bubbles</nav>
-
-      <div class="card">
-        <h1>Bubble series: proportional symbols</h1>
-        <p class="note">
-          The right mark for absolute magnitudes. Area is proportional to value (square-root radius
-          scaling), largest painted first so small circles stay clickable, and the legend nests three
-          reference circles so areas can actually be decoded. Zoom in: the circles hold their size,
-          because a radius that grew with the camera would no longer encode the value. Hover near a
-          small bubble rather than on it: the nearest mark within 20px catches the pointer, so a 3px
-          circle never demands a 3px hit (<code>interaction.nearest</code> to tune or disable).
-        </p>
-        <div class="row">
-          <select id="scale">
-            <option value="sqrt">size.scale: 'sqrt' (default)</option>
-            <option value="linear">size.scale: 'linear'</option>
-          </select>
-          <button id="colour">Toggle second encoding</button>
-          <span class="label" id="status"></span>
-        </div>
-        <div id="map"></div>
+    <header class="topbar">
+      <div class="topbar__inner">
+        <a class="brand" href="index.html"><span class="brand__mark"></span> ApexMaps</a>
+        <nav class="crumb"><span>/</span> <a href="index.html">Gallery</a> <span>/</span> Bubbles</nav>
+        <span class="spacer"></span>
+        <span class="chip chip--free">Free tier</span>
       </div>
+    </header>
 
-      <div class="card">
-        <h2 style="margin-top: 0">Why square root is the default</h2>
-        <p class="note">
-          With <code>linear</code>, radius grows with the value, so a city twice the size draws four
-          times the ink. Switch the select and watch Tokyo swallow Japan: the ranking survives but every
-          comparison is overstated. The option exists because some publications standardise on it, and
-          it warns in dev mode.
-        </p>
-        <pre>
+    <main class="wrap wrap--wide" style="padding-top: 40px">
+      <div class="stack-lg">
+        <section class="figure">
+          <p class="kicker kicker--accent">Bubble series</p>
+          <div class="figure__head">
+            <div>
+              <h1 class="title title--lg">The thirty-five million people in Tokyo</h1>
+              <p class="dek">
+                Absolute magnitudes want area, not colour. Radius scales by square root so a metro
+                twice the size draws twice the ink, and the legend nests reference circles because
+                area is the one encoding a reader cannot decode without one.
+              </p>
+            </div>
+            <div class="stats">
+              <div>
+                <div class="stat__value" id="stat-total">&mdash;</div>
+                <div class="stat__label">People, top 25 metros</div>
+              </div>
+              <div>
+                <div class="stat__value" id="stat-share">&mdash;</div>
+                <div class="stat__label">Largest as share of set</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="seg" id="scale" role="group" aria-label="Size encoding">
+              <button data-scale="sqrt" aria-pressed="true">Area shows the value</button>
+              <button data-scale="linear" aria-pressed="false">Radius shows the value</button>
+            </div>
+            <button id="colour" aria-pressed="false">Add growth as colour</button>
+            <span class="readout" id="status"></span>
+          </div>
+
+          <div class="split">
+            <div class="plot" id="map"></div>
+            <div>
+              <p class="label" style="margin-bottom: 6px">
+                Ranked by population &middot; click to fly there
+              </p>
+              <ol class="ranked" id="ranked"></ol>
+            </div>
+          </div>
+
+          <p class="source">
+            <span><b>Population</b> UN World Urbanization Prospects, 2018 revision</span>
+            <span><b>Growth</b> annual %, illustrative</span>
+            <span><b>Geometry</b> Natural Earth land, 1:110m</span>
+          </p>
+        </section>
+
+        <div class="two">
+          <section class="card">
+            <p class="kicker">The default that matters</p>
+            <h2>Why square root</h2>
+            <p class="note">
+              Switch to <code>linear</code> and watch Tokyo swallow Japan. Radius proportional to
+              value makes <em>area</em> grow with the square of it, so every comparison on the map
+              is overstated: the ranking survives, the magnitudes do not. The option exists because
+              some publications standardise on it, and it warns in dev mode.
+            </p>
+            <pre>
 {
   type: 'bubble',
   name: 'Metro population',
-  data: [{ name: 'Tokyo', lon: 139.69, lat: 35.69, value: 37400068 }],
-  size: { scale: 'sqrt', range: [3, 30] },
-  colorScale: { palette: 'reds' },   // optional second variable
-  colorField: 'growth',
+  data: metros,                    // { name, lon, lat, value }
+  size: { scale: 'sqrt', range: [4, 34] },
+  color: '#d0303f',
+  opacity: 0.62,                   // overlap has to stay readable
+  stroke: { color: '#fff', width: 1 },
 }</pre
-        >
+            >
+          </section>
+
+          <section class="card">
+            <p class="kicker">Craft</p>
+            <h2>Four decisions in the drawing</h2>
+            <p class="note">
+              <strong>Largest painted first,</strong> so a small circle is never buried under a big
+              one. <strong>Fill at 62% with a white stroke,</strong> because twenty-five metros on
+              one world map overlap and opaque discs merge into a blob. <strong>Fixed radius
+              through zoom,</strong> since a circle that grew with the camera would stop encoding
+              the value. <strong>Nearest-mark hit testing</strong> inside 20px, so a 4px bubble does
+              not demand a 4px pointer.
+            </p>
+            <pre>
+interaction: { nearest: { radius: 20 } }
+sortBySize: true                   // default
+legend: { title: 'Metro population' }</pre
+            >
+          </section>
+        </div>
       </div>
-    </div>
+    </main>
 
     <script src="../dist/apexmaps.min.js"></script>
     <script src="_shared.js"></script>
     <script>
-      const CITIES = [
+      // UN World Urbanization Prospects, 2018 revision. Real figures, so the map
+      // is worth reading: a proportional-symbol demo drawn on invented numbers
+      // teaches the reader nothing about the encoding.
+      const METROS = [
         { name: 'Tokyo', lon: 139.69, lat: 35.69, value: 37400068, growth: 0.2 },
         { name: 'Delhi', lon: 77.21, lat: 28.61, value: 28514000, growth: 3.6 },
         { name: 'Shanghai', lon: 121.47, lat: 31.23, value: 25582000, growth: 2.4 },
@@ -74,8 +136,8 @@
         { name: 'Lagos', lon: 3.38, lat: 6.52, value: 13904000, growth: 3.5 },
         { name: 'Manila', lon: 120.98, lat: 14.6, value: 13482000, growth: 1.9 },
         { name: 'Rio de Janeiro', lon: -43.17, lat: -22.91, value: 13293000, growth: 0.6 },
-        { name: 'Moscow', lon: 37.62, lat: 55.75, value: 12410000, growth: 0.4 },
         { name: 'Los Angeles', lon: -118.24, lat: 34.05, value: 12458000, growth: 0.4 },
+        { name: 'Moscow', lon: 37.62, lat: 55.75, value: 12410000, growth: 0.4 },
         { name: 'Paris', lon: 2.35, lat: 48.86, value: 10901000, growth: 0.5 },
         { name: 'Lima', lon: -77.04, lat: -12.05, value: 10391000, growth: 1.6 },
         { name: 'Bangkok', lon: 100.5, lat: 13.76, value: 10156000, growth: 1.4 },
@@ -90,38 +152,117 @@
       const series = () => ({
         type: 'bubble',
         name: 'Metro population',
-        data: CITIES,
-        size: { scale: sizeScale, range: [3, 30] },
-        color: '#FF4560',
+        data: METROS,
+        size: { scale: sizeScale, range: [4, 34] },
+        // A crimson from the sequential reds rather than a brand accent: brand
+        // colour belongs in the page chrome, cartographic colour in the data.
+        color: '#d0303f',
+        opacity: 0.62,
+        stroke: { color: '#ffffff', width: 1 },
         ...(coloured
-          ? { colorField: 'growth', colorScale: { palette: 'rdylgn', classes: 5 } }
+          ? {
+              colorField: 'growth',
+              // Growth is not good or bad, so a sequential ramp rather than a
+              // red-to-green one that would editorialise it.
+              colorScale: { palette: 'oranges', classes: 5 },
+            }
           : {}),
       })
 
       const map = Demo.watch(
         'bubbles',
         new ApexMaps(document.getElementById('map'), {
-          chart: { height: 460 },
-          geo: { map: 'world/countries@110m' },
+          chart: {
+            height: 520,
+            fontFamily: '-apple-system, BlinkMacSystemFont, Inter, "Segoe UI", Roboto, sans-serif',
+          },
+          geo: {
+            // Land, not countries: borders under a symbol map are texture the
+            // reader has to look past to compare circles.
+            map: 'world/land@110m',
+            fill: '#e8ecf2',
+            view: { fit: Demo.INHABITED, padding: 14 },
+            sphere: { show: true, fill: '#f7f9fc', stroke: 'transparent' },
+          },
+          legend: { title: 'Metro population', align: 'start' },
+          tooltip: {
+            formatter: ({ name, value, datum }) =>
+              `<div style="font-weight:640;margin-bottom:2px">${name}</div>` +
+              `<div style="font-size:15px;font-weight:600;font-variant-numeric:tabular-nums">${Demo.fmt.int(
+                value,
+              )}</div>` +
+              `<div style="opacity:.62;margin-top:2px">${
+                datum.growth > 0 ? '+' : ''
+              }${datum.growth}% a year</div>`,
+          },
           series: [series()],
         }),
       )
 
+      /* --- the ranked list, and the camera it drives ------------------------ */
+
+      const total = METROS.reduce((sum, m) => sum + m.value, 0)
+      document.getElementById('stat-total').textContent = Demo.fmt.compact(total)
+      document.getElementById('stat-share').textContent = Demo.fmt.pct(
+        (METROS[0].value / total) * 100,
+      )
+
+      const list = document.getElementById('ranked')
+      const leaders = METROS.slice(0, 10)
+      list.innerHTML = leaders
+        .map(
+          (metro, i) => `
+            <li style="--w:${(metro.value / leaders[0].value) * 100}%;--bar:#d0303f"
+                data-i="${i}" tabindex="0" role="button">
+              <span class="ranked__name">${i + 1}. ${metro.name}</span>
+              <span class="ranked__value">${Demo.fmt.compact(metro.value)}</span>
+            </li>`,
+        )
+        .join('')
+
+      const flyTo = (index) => {
+        const metro = leaders[index]
+        map.camera.flyTo({ center: [metro.lon, metro.lat], zoom: 5 })
+        status.textContent = `flying to ${metro.name}`
+      }
+      list.addEventListener('click', (event) => {
+        const row = event.target.closest('li')
+        if (row) flyTo(Number(row.dataset.i))
+      })
+      list.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        const row = event.target.closest('li')
+        if (row) {
+          event.preventDefault()
+          flyTo(Number(row.dataset.i))
+        }
+      })
+
+      /* --- controls -------------------------------------------------------- */
+
       const report = () => {
-        status.textContent = `${CITIES.length} cities, area ${
-          sizeScale === 'sqrt' ? 'proportional to value' : 'proportional to value squared'
-        }${coloured ? ', coloured by annual growth' : ''}`
+        status.textContent = `${METROS.length} metros, ${
+          sizeScale === 'sqrt' ? 'area' : 'radius'
+        } proportional to population${coloured ? ', filled by annual growth' : ''}`
       }
 
       Demo.ready(map.render().then(report))
 
-      document.getElementById('scale').addEventListener('change', (event) => {
-        sizeScale = event.target.value
+      document.getElementById('scale').addEventListener('click', (event) => {
+        const button = event.target.closest('button')
+        if (!button) return
+        sizeScale = button.dataset.scale
+        for (const other of event.currentTarget.querySelectorAll('button')) {
+          other.setAttribute('aria-pressed', String(other === button))
+        }
         map.updateSeries([series()])
         report()
       })
-      document.getElementById('colour').addEventListener('click', () => {
+
+      document.getElementById('colour').addEventListener('click', (event) => {
         coloured = !coloured
+        event.currentTarget.setAttribute('aria-pressed', String(coloured))
+        event.currentTarget.textContent = coloured ? 'Population only' : 'Add growth as colour'
         map.updateSeries([series()])
         report()
       })

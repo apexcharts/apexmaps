@@ -7,126 +7,291 @@
     <link rel="stylesheet" href="_shared.css" />
   </head>
   <body>
-    <div class="grid">
-      <nav class="crumb"><a href="index.html">All demos</a> › Arcs</nav>
-
-      <div class="card">
-        <h1>Arc series: great-circle routes</h1>
-        <p class="note">
-          Singapore's long-haul network, drawn as great circles. The routes to Los Angeles and Vancouver
-          cross the Pacific, so they are cut at the antimeridian and re-enter on the left edge instead of
-          streaking back across the map. The São Paulo route sweeps south past the Cape, which is
-          genuinely the shortest path. Thin arcs carry an invisible wider hit path so they stay hoverable:
-          a 1px flight line is otherwise unpointable, and widening the visible stroke would misrepresent
-          the value it encodes.
-        </p>
-        <div class="row">
-          <button id="geodesic">Toggle geodesic</button>
-          <button id="curvature">Toggle curvature</button>
-          <select id="projection">
-            <option value="equalEarth">Equal Earth</option>
-            <option value="mercator">Web Mercator</option>
-            <option value="orthographic">Orthographic</option>
-          </select>
-          <span class="label" id="status"></span>
-        </div>
-        <div id="map"></div>
+    <header class="topbar">
+      <div class="topbar__inner">
+        <a class="brand" href="index.html"><span class="brand__mark"></span> ApexMaps</a>
+        <nav class="crumb"><span>/</span> <a href="index.html">Gallery</a> <span>/</span> Arcs</nav>
+        <span class="spacer"></span>
+        <span class="chip chip--licensed">Licensed feature</span>
       </div>
+    </header>
 
-      <div class="card">
-        <h2 style="margin-top: 0">Geodesic, or decorative</h2>
-        <p class="note">
-          <code>geodesic: true</code> (the default) follows the real great circle, resampled densely
-          enough to stay smooth at any zoom and split where it crosses the antimeridian. Turning it off
-          draws the straight line between the two points, which in Mercator is not the route a plane
-          flies. <code>curvature</code> bulges the arc perpendicular to its chord: decorative, so it is
-          off by default and mutually exclusive with geodesic accuracy.
-        </p>
-        <pre>
+    <main class="wrap wrap--wide" style="padding-top: 40px">
+      <div class="stack-lg">
+        <section class="figure figure--night">
+          <p class="kicker">Arc series</p>
+          <div class="figure__head">
+            <div>
+              <h1 class="title title--lg">Every long-haul route out of Changi</h1>
+              <p class="dek">
+                Great circles, not lines on a rectangle. The Pacific routes are cut at the
+                antimeridian and re-enter on the left edge instead of streaking back across the
+                map, and the flight to São Paulo sweeps south of the Cape because that genuinely is
+                the shortest way there.
+              </p>
+            </div>
+            <div class="stats">
+              <div>
+                <div class="stat__value" id="stat-routes">&mdash;</div>
+                <div class="stat__label">Destinations</div>
+              </div>
+              <div>
+                <div class="stat__value" id="stat-longest">&mdash;</div>
+                <div class="stat__label">Longest, km</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="seg" id="path" role="group" aria-label="Path model">
+              <button data-mode="geodesic" aria-pressed="true">Great circle</button>
+              <button data-mode="straight" aria-pressed="false">Straight line</button>
+              <button data-mode="curved" aria-pressed="false">Decorative curve</button>
+            </div>
+            <select id="projection" aria-label="Projection">
+              <option value="equalEarth">Equal Earth</option>
+              <option value="mercator">Web Mercator</option>
+              <option value="orthographic">Orthographic</option>
+            </select>
+            <span class="readout" id="status"></span>
+          </div>
+
+          <div class="split">
+            <div class="plot" id="map"></div>
+            <div>
+              <p class="label" style="margin-bottom: 6px">
+                By distance from Singapore &middot; click to fly
+              </p>
+              <ol class="ranked" id="ranked"></ol>
+            </div>
+          </div>
+
+          <p class="source">
+            <span><b>Routes</b> Singapore Changi long-haul destinations</span>
+            <span><b>Distance</b> computed great-circle, WGS84 mean radius</span>
+            <span><b>Geometry</b> Natural Earth 1:110m</span>
+          </p>
+        </section>
+
+        <div class="two">
+          <section class="card">
+            <p class="kicker">Geodesic, or decorative</p>
+            <h2>Three models of the same pair of points</h2>
+            <p class="note">
+              <code>geodesic: true</code> is the default and follows the real great circle,
+              resampled densely enough to stay smooth at any zoom and split where it crosses the
+              antimeridian. Switch to a straight line and Mercator will draw you a route no aircraft
+              flies. <code>curvature</code> bulges the arc perpendicular to its chord: it looks
+              good, it is no longer the path, so it is off by default.
+            </p>
+            <pre>
 {
   type: 'arc',
-  name: 'Weekly flights',
-  data: [{ from: [103.99, 1.36], to: [-0.45, 51.47], value: 900 }],
+  name: 'Great-circle distance',
+  data: routes,                    // { from, to, value: km }
   geodesic: true,
-  width: { range: [0.6, 4] },
-  endpoints: { show: true, radius: 2.5 },
+  width: { range: [0.6, 3.4] },    // encodes distance
+  colorScale: { palette: NIGHT },  // five explicit stops
+  endpoints: { show: true, radius: 2 },
 }</pre
-        >
+            >
+          </section>
+
+          <section class="card">
+            <p class="kicker">Why this one is dark</p>
+            <h2>The background is a design decision</h2>
+            <p class="note">
+              A connection map is mostly ink over water, and thin bright lines resolve on dark far
+              better than on white: it is why every airline route map ever printed is dark.
+              <code>theme.mode: 'dark'</code> switches the map's own furniture, the legend, the
+              tooltip and the focus ring, and the page supplies the rest. A graticule at 20&deg; in
+              5% white gives the eye a frame without competing with the routes.
+            </p>
+            <pre>
+theme: { mode: 'dark' },
+geo: {
+  map: 'world/land@110m',
+  fill: '#1d2735',
+  sphere: { show: true, fill: '#0d121b' },
+  graticule: { show: true, step: 20,
+               color: 'rgba(255,255,255,0.055)' },
+}</pre
+            >
+          </section>
+        </div>
       </div>
-    </div>
+    </main>
 
     <script src="../dist/apexmaps.min.js"></script>
     <script src="_shared.js"></script>
     <script>
       const HUB = [103.99, 1.36] // Singapore Changi
       const DESTINATIONS = [
-        { name: 'London', to: [-0.45, 51.47], value: 900 },
-        { name: 'New York', to: [-73.78, 40.64], value: 780 },
-        { name: 'Los Angeles', to: [-118.41, 33.94], value: 640 },
-        { name: 'Tokyo', to: [140.39, 35.77], value: 820 },
-        { name: 'Sydney', to: [151.18, -33.95], value: 700 },
-        { name: 'Johannesburg', to: [28.24, -26.13], value: 380 },
-        { name: 'São Paulo', to: [-46.47, -23.43], value: 260 },
-        { name: 'Frankfurt', to: [8.57, 50.04], value: 720 },
-        { name: 'Dubai', to: [55.36, 25.25], value: 860 },
-        { name: 'Mumbai', to: [72.87, 19.09], value: 540 },
-        { name: 'Seoul', to: [126.45, 37.46], value: 610 },
-        { name: 'Auckland', to: [174.79, -37.01], value: 300 },
-        { name: 'Vancouver', to: [-123.18, 49.19], value: 240 },
-        { name: 'Cape Town', to: [18.6, -33.97], value: 190 },
+        { name: 'London Heathrow', to: [-0.45, 51.47] },
+        { name: 'New York JFK', to: [-73.78, 40.64] },
+        { name: 'Los Angeles', to: [-118.41, 33.94] },
+        { name: 'Tokyo Narita', to: [140.39, 35.77] },
+        { name: 'Sydney', to: [151.18, -33.95] },
+        { name: 'Johannesburg', to: [28.24, -26.13] },
+        { name: 'São Paulo', to: [-46.47, -23.43] },
+        { name: 'Frankfurt', to: [8.57, 50.04] },
+        { name: 'Dubai', to: [55.36, 25.25] },
+        { name: 'Mumbai', to: [72.87, 19.09] },
+        { name: 'Seoul Incheon', to: [126.45, 37.46] },
+        { name: 'Auckland', to: [174.79, -37.01] },
+        { name: 'Vancouver', to: [-123.18, 49.19] },
+        { name: 'Cape Town', to: [18.6, -33.97] },
       ]
+
+      /*
+       * The width encodes great-circle distance, computed here rather than
+       * invented. A connection map whose thickness means "a number we made up"
+       * teaches a reader to ignore thickness, and the honest version costs six
+       * lines: haversine on the WGS84 mean radius.
+       */
+      const distanceKm = ([lon1, lat1], [lon2, lat2]) => {
+        const R = 6371.0088
+        const rad = Math.PI / 180
+        const dLat = (lat2 - lat1) * rad
+        const dLon = (lon2 - lon1) * rad
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2
+        return Math.round(2 * R * Math.asin(Math.sqrt(a)))
+      }
+
       const ROUTES = DESTINATIONS.map((d) => ({
-        name: `SIN to ${d.name}`,
+        name: `Singapore to ${d.name}`,
+        short: d.name,
         from: HUB,
         to: d.to,
-        value: d.value,
-      }))
+        value: distanceKm(HUB, d.to),
+      })).sort((a, b) => b.value - a.value)
 
-      let geodesic = true
-      let curvature = 0
+      // Explicit stops rather than a registered palette: on a dark map the pale
+      // end of a sequential ramp disappears into the sphere, so the ramp has to
+      // run cool-to-warm at constant lightness instead of light-to-dark.
+      const NIGHT = ['#22d3ee', '#38bdf8', '#818cf8', '#c084fc', '#fbbf24']
+
+      let mode = 'geodesic'
       const status = document.getElementById('status')
 
       const series = () => ({
         type: 'arc',
-        name: 'Weekly flights',
+        name: 'Great-circle distance',
         data: ROUTES,
-        color: '#00E396',
-        geodesic,
-        curvature,
-        endpoints: { show: true, radius: 2.5 },
+        geodesic: mode === 'geodesic',
+        curvature: mode === 'curved' ? 0.35 : 0,
+        width: { range: [0.6, 3.4] },
+        colorScale: { palette: NIGHT, classes: 5 },
+        opacity: 0.9,
+        endpoints: { show: true, radius: 2, color: '#e8f4ff' },
       })
 
       const map = Demo.watch(
         'arcs',
         new ApexMaps(document.getElementById('map'), {
-          chart: { height: 460 },
-          geo: { map: 'world/countries@110m', sphere: { show: true } },
+          chart: {
+            height: 540,
+            fontFamily: '-apple-system, BlinkMacSystemFont, Inter, "Segoe UI", Roboto, sans-serif',
+          },
+          theme: { mode: 'dark' },
+          geo: {
+            // Land rather than countries: internal borders at 6% white are either
+            // invisible or clutter, and neither helps a route map.
+            map: 'world/land@110m',
+            fill: '#1d2735',
+            view: { fit: Demo.INHABITED, padding: 16 },
+            sphere: { show: true, fill: '#0d121b', stroke: 'rgba(255,255,255,0.08)' },
+            graticule: { show: true, step: 20, color: 'rgba(255,255,255,0.055)', width: 0.6 },
+          },
+          legend: {
+            title: 'Great-circle distance, km',
+            align: 'start',
+            formatter: (item) =>
+              `${Demo.fmt.int(Math.round(item.from))} to ${Demo.fmt.int(Math.round(item.to))}`,
+          },
+          tooltip: {
+            formatter: ({ name, value }) =>
+              `<div style="font-weight:640;margin-bottom:2px">${name}</div>` +
+              `<div style="font-size:15px;font-weight:600;font-variant-numeric:tabular-nums">${Demo.fmt.int(
+                value,
+              )} km</div>`,
+          },
           series: [series()],
         }),
       )
 
+      /* --- ranked list ------------------------------------------------------ */
+
+      document.getElementById('stat-routes').textContent = ROUTES.length
+      document.getElementById('stat-longest').textContent = Demo.fmt.int(ROUTES[0].value)
+
+      const list = document.getElementById('ranked')
+      list.innerHTML = ROUTES.slice(0, 10)
+        .map(
+          (route, i) => `
+            <li style="--w:${(route.value / ROUTES[0].value) * 100}%;--bar:#38bdf8"
+                data-i="${i}" tabindex="0" role="button">
+              <span class="ranked__name">${route.short}</span>
+              <span class="ranked__value">${Demo.fmt.int(route.value)} km</span>
+            </li>`,
+        )
+        .join('')
+
+      const flyTo = (index) => {
+        const route = ROUTES[index]
+        map.camera.flyTo({ center: route.to, zoom: 3 })
+        status.textContent = `flying to ${route.short}`
+      }
+      list.addEventListener('click', (event) => {
+        const row = event.target.closest('li')
+        if (row) flyTo(Number(row.dataset.i))
+      })
+      list.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        const row = event.target.closest('li')
+        if (row) {
+          event.preventDefault()
+          flyTo(Number(row.dataset.i))
+        }
+      })
+
+      /* --- controls -------------------------------------------------------- */
+
       const report = () => {
         const drawn = document.querySelectorAll('#map .apexmaps-arc').length
-        status.textContent = `${ROUTES.length} routes as ${drawn} paths, ${
-          geodesic ? 'great circles' : 'straight lines'
-        }${curvature ? `, curvature ${curvature}` : ''}`
+        const label = {
+          geodesic: 'great circles',
+          straight: 'straight lines',
+          curved: 'decorative curves',
+        }[mode]
+        status.textContent = `${ROUTES.length} routes as ${drawn} paths, ${label}`
       }
 
       Demo.ready(map.render().then(report))
 
-      document.getElementById('geodesic').addEventListener('click', () => {
-        geodesic = !geodesic
+      document.getElementById('path').addEventListener('click', (event) => {
+        const button = event.target.closest('button')
+        if (!button) return
+        mode = button.dataset.mode
+        for (const other of event.currentTarget.querySelectorAll('button')) {
+          other.setAttribute('aria-pressed', String(other === button))
+        }
         map.updateSeries([series()])
         report()
       })
-      document.getElementById('curvature').addEventListener('click', () => {
-        curvature = curvature > 0 ? 0 : 0.35
-        if (curvature > 0) geodesic = false
-        map.updateSeries([series()])
-        report()
-      })
+
       document.getElementById('projection').addEventListener('change', async (event) => {
-        await map.updateOptions({ geo: { projection: event.target.value } })
+        const projection = event.target.value
+        await map.updateOptions({
+          geo: {
+            projection,
+            // Orthographic shows one hemisphere, so the inhabited-world crop is
+            // meaningless there: let the globe fill the frame instead.
+            view: projection === 'orthographic' ? { fit: 'world' } : { fit: Demo.INHABITED },
+          },
+        })
         report()
       })
     </script>
