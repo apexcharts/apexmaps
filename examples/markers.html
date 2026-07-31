@@ -5,136 +5,400 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Markers and clustering · ApexMaps</title>
     <link rel="stylesheet" href="_shared.css" />
+    <style>
+      /*
+       * Two lines of page CSS, and the reason they work is worth knowing: the
+       * renderer sets `fill` and `stroke` as SVG presentation attributes, which
+       * any stylesheet rule beats without `!important`. So the cartography is
+       * yours from CSS, without an option for every paint decision.
+       */
+      #map .apexmaps-feature {
+        stroke: #ced5e0;
+        stroke-width: 0.7;
+      }
+
+      /* The coast reads as a coast when the water has some depth to it. One
+         drop-shadow on the region layer, not on 242 paths. */
+      #map .apexmaps-layer-regions {
+        filter: drop-shadow(0 0 7px rgba(37, 99, 235, 0.14));
+      }
+
+      .swatches {
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        font-size: 12.5px;
+        color: var(--ink-3);
+      }
+
+      .swatches span {
+        display: inline-flex;
+        gap: 7px;
+        align-items: center;
+      }
+
+      .swatches i {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        border: 1.3px solid #141a22;
+      }
+    </style>
   </head>
   <body>
-    <div class="grid">
-      <nav class="crumb"><a href="index.html">All demos</a> › Markers and clustering</nav>
-
-      <div class="card">
-        <h1>Marker series: shapes and clustering</h1>
-        <p class="note">
-          Markers say "something is here", so their size is fixed: the moment size varies a reader
-          starts decoding it as a quantity, and that is the bubble series. Clustering is an option on
-          the same series rather than a separate one, because the data is identical and only the drawing
-          changes. Clusters merge by real distance, not by grid cell, and sit at their members' centre of
-          mass. Click one to fly to what is inside it, or zoom in and watch them dissolve.
-        </p>
-        <div class="row">
-          <button id="toggle-cluster">Toggle clustering</button>
-          <select id="shape">
-            <option value="pin">Pin</option>
-            <option value="circle">Circle</option>
-            <option value="square">Square</option>
-            <option value="diamond">Diamond</option>
-            <option value="triangle">Triangle</option>
-            <option value="star">Star</option>
-            <option value="cross">Cross</option>
-          </select>
-          <span class="label" id="status"></span>
-        </div>
-        <div id="map"></div>
+    <header class="topbar">
+      <div class="topbar__inner">
+        <a class="brand" href="index.html"><span class="brand__mark"></span> ApexMaps</a>
+        <nav class="crumb"><span>/</span> <a href="index.html">Gallery</a> <span>/</span> Markers</nav>
+        <span class="spacer"></span>
+        <span class="chip chip--licensed">Clustering is licensed</span>
       </div>
+    </header>
 
-      <div class="card">
-        <h2 style="margin-top: 0">Three decisions you can see</h2>
-        <p class="note">
-          <strong>Distance, not cells.</strong> Bucketing points into grid cells is simpler, but it
-          separates two points a few pixels apart that straddle a boundary while merging two at opposite
-          corners of one cell. The grid here is only a neighbour index; the merge test is real distance.
-          <strong>World space, quantized zoom.</strong> Panning never reclusters, so counts never
-          renumber under the cursor, and a smooth pinch recomputes a handful of times instead of sixty
-          times a second. <strong>Centre of mass, square-root sizing.</strong> A cluster drawn on its
-          first member sits off to one side of the group it stands for.
-        </p>
-        <pre>
+    <main class="wrap wrap--wide" style="padding-top: 40px">
+      <div class="stack-lg">
+        <section class="figure figure--bleed">
+          <p class="kicker kicker--accent">Marker series</p>
+          <div class="figure__head">
+            <div>
+              <h1 class="title title--lg">Forty-one capitals, and clusters only where pins collide</h1>
+              <p class="dek">
+                A marker says "something is here", so its size never varies. What varies is whether a
+                place is drawn at all: where pins would overlap into a blob, they merge. Two groups
+                qualify at this frame and the other thirty-five capitals stay pins, which is the
+                point. Clustering that hides your data to tidy the picture answers a question nobody
+                asked, and one zoom step is enough to dissolve both.
+              </p>
+            </div>
+            <div class="stats">
+              <div>
+                <div class="stat__value" id="stat-pins">35</div>
+                <div class="stat__label">Pins drawn</div>
+              </div>
+              <div>
+                <div class="stat__value" id="stat-clusters">2</div>
+                <div class="stat__label">Clusters</div>
+              </div>
+              <div>
+                <div class="stat__value" id="stat-zoom">1.0&times;</div>
+                <div class="stat__label">Zoom</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="seg" id="mode" role="group" aria-label="Clustering">
+              <button data-mode="cluster" aria-pressed="true">Cluster the crowd</button>
+              <button data-mode="all" aria-pressed="false">Every pin</button>
+            </div>
+            <select id="shape" aria-label="Marker shape">
+              <option value="pin">Pin</option>
+              <option value="circle">Circle</option>
+              <option value="square">Square</option>
+              <option value="diamond">Diamond</option>
+              <option value="triangle">Triangle</option>
+              <option value="star">Star</option>
+              <option value="cross">Cross</option>
+            </select>
+            <button id="zoom-benelux">Zoom the Benelux</button>
+            <button id="reset">Reset</button>
+            <span class="readout" id="readout">Click a cluster to fly into it.</span>
+          </div>
+
+          <div class="plot" id="map"></div>
+
+          <div class="row" style="margin-top: 14px">
+            <div class="swatches">
+              <span><i style="background: #2f6fd0"></i> European Union</span>
+              <span><i style="background: #dd4d6a"></i> Outside the EU</span>
+            </div>
+          </div>
+
+          <p class="source">
+            <span><b>Capitals</b> 27 EU member states and 14 other European capitals</span>
+            <span><b>Geometry</b> Natural Earth 1:50m, built-in registry</span>
+            <span><b>Projection</b> Lambert azimuthal equal-area, centred 10&deg;E 52&deg;N</span>
+          </p>
+        </section>
+
+        <div class="two">
+          <section class="card">
+            <p class="kicker">What was passed</p>
+            <h2>One series, one cluster object</h2>
+            <p class="note">
+              Clustering is an option on the marker series rather than a series of its own, because
+              the data is identical either way and only the drawing changes. Turning it off is one
+              key, and the map redraws from the same array.
+            </p>
+            <pre>
 {
   type: 'marker',
-  name: 'Sites',
-  data: sites,               // { name, lon, lat, kind }
-  shape: 'pin',              // circle square diamond triangle star cross pin
-  size: 13,
-  colorBy: 'kind',           // ordinal scale plus a legend, automatically
-  cluster: { radius: 55, maxZoom: 6 },
+  data: capitals,          // { name, lon, lat, bloc }
+  shape: 'pin',            // anchored at its point, not its centre
+  size: 15,
+  colorBy: 'bloc',         // categorical colour and a legend, automatically
+  stroke: { color: '#141a22', width: 1.3 },
+  cluster: {
+    radius: 34,            // merge distance in screen pixels
+    minPoints: 3,          // a pair stays two pins
+  },
 }</pre
-        >
+            >
+          </section>
+
+          <section class="card">
+            <p class="kicker">Why it behaves</p>
+            <h2>Three decisions you can see</h2>
+            <p class="note">
+              <strong>Distance, not grid cells.</strong> Bucketing points into cells is simpler, but it
+              splits two points a few pixels apart that straddle a boundary while merging two at
+              opposite corners of one cell. The grid here is only a neighbour index and the merge test
+              is real distance, which is why the two groups that form are the two a reader would draw
+              by hand: Vienna with Bratislava and Budapest, and Brussels with Amsterdam and
+              Luxembourg. Reykjav&iacute;k joins nothing at any zoom.
+            </p>
+            <p class="note">
+              <strong>World space, quantized zoom.</strong> Panning never reclusters, so counts do not
+              renumber under the cursor, and a smooth pinch recomputes a handful of times instead of
+              sixty times a second. The merge distance is in screen pixels, so it follows the frame:
+              narrow this window to a phone and two more groups appear, the Baltic capitals and the
+              Balkans, because at that size those pins really would overlap.
+            </p>
+            <p class="note">
+              <strong>Centre of mass, square-root sizing.</strong> A cluster drawn on its first member
+              sits off to one side of the group it stands for, and one scaled by count makes a group of
+              nine look three times a group of three when it is three times as many.
+            </p>
+          </section>
+        </div>
       </div>
-    </div>
+    </main>
 
     <script src="../dist/apexmaps.min.js"></script>
     <script src="_shared.js"></script>
     <script>
-      // Deterministic scatter of "sites" over the populated world, dense enough in a
-      // few places that clustering has something to do.
-      const HUBS = [
-        [-74, 40.7],
-        [-0.1, 51.5],
-        [2.35, 48.9],
-        [13.4, 52.5],
-        [139.7, 35.7],
-        [103.8, 1.35],
-        [-118.2, 34.1],
-        [151.2, -33.9],
-        [55.3, 25.2],
-        [-46.6, -23.6],
+      /*
+       * Real capitals rather than a synthetic scatter, because a marker demo is a
+       * demo of recognition: a reader who knows where Lisbon is can tell at a glance
+       * whether the projection, the anchor and the join are right. A random cloud
+       * over the Atlantic proves none of that.
+       *
+       * `[name, lon, lat, inEU]`.
+       */
+      const CAPITALS = [
+        ['Vienna', 16.3738, 48.2082, 1],
+        ['Brussels', 4.3517, 50.8503, 1],
+        ['Sofia', 23.3219, 42.6977, 1],
+        ['Zagreb', 15.9819, 45.815, 1],
+        ['Nicosia', 33.3823, 35.1856, 1],
+        ['Prague', 14.4378, 50.0755, 1],
+        ['Copenhagen', 12.5683, 55.6761, 1],
+        ['Tallinn', 24.7536, 59.437, 1],
+        ['Helsinki', 24.9384, 60.1699, 1],
+        ['Paris', 2.3522, 48.8566, 1],
+        ['Berlin', 13.405, 52.52, 1],
+        ['Athens', 23.7275, 37.9838, 1],
+        ['Budapest', 19.0402, 47.4979, 1],
+        ['Dublin', -6.2603, 53.3498, 1],
+        ['Rome', 12.4964, 41.9028, 1],
+        ['Riga', 24.1052, 56.9496, 1],
+        ['Vilnius', 25.2797, 54.6872, 1],
+        ['Luxembourg', 6.1319, 49.6116, 1],
+        ['Valletta', 14.5146, 35.8989, 1],
+        ['Amsterdam', 4.9041, 52.3676, 1],
+        ['Warsaw', 21.0122, 52.2297, 1],
+        ['Lisbon', -9.1393, 38.7223, 1],
+        ['Bucharest', 26.1025, 44.4268, 1],
+        ['Bratislava', 17.1077, 48.1486, 1],
+        ['Ljubljana', 14.5058, 46.0569, 1],
+        ['Madrid', -3.7038, 40.4168, 1],
+        ['Stockholm', 18.0686, 59.3293, 1],
+        ['London', -0.1276, 51.5072, 0],
+        ['Oslo', 10.7522, 59.9139, 0],
+        ['Bern', 7.4474, 46.948, 0],
+        ['Reykjavík', -21.9426, 64.1466, 0],
+        ['Belgrade', 20.4489, 44.7866, 0],
+        ['Sarajevo', 18.4131, 43.8563, 0],
+        ['Podgorica', 19.2594, 42.4304, 0],
+        ['Skopje', 21.428, 41.9973, 0],
+        ['Tirana', 19.8187, 41.3275, 0],
+        ['Chișinău', 28.8638, 47.0105, 0],
+        ['Kyiv', 30.5234, 50.4501, 0],
+        ['Minsk', 27.559, 53.9006, 0],
+        ['Ankara', 32.8597, 39.9334, 0],
+        ['Moscow', 37.6173, 55.7558, 0],
       ]
-      const KINDS = ['Office', 'Depot', 'Partner']
-      const sites = []
-      for (let i = 0; i < 220; i++) {
-        const [hx, hy] = HUBS[i % HUBS.length]
-        const a = ((i * 2654435761) % 1000) / 1000
-        const b = ((i * 40503) % 997) / 997
-        sites.push({
-          name: `Site ${i + 1}`,
-          lon: hx + (a - 0.5) * 9,
-          lat: hy + (b - 0.5) * 6,
-          kind: KINDS[i % KINDS.length],
-        })
-      }
+
+      const capitals = CAPITALS.map(([name, lon, lat, eu]) => ({
+        name,
+        lon,
+        lat,
+        bloc: eu ? 'European Union' : 'Outside the EU',
+      }))
+
+      /*
+       * A categorical palette registered by the page, so the two blocs get exactly
+       * these two colours instead of the first two of a general ramp. Blue against
+       * red rather than a brand pair: the chrome carries the brand, the data does
+       * not.
+       */
+      ApexMaps.registerPalette('capitals', {
+        kind: 'categorical',
+        stops: ['#2f6fd0', '#dd4d6a'],
+      })
+
+      /** Europe, wide enough for Reykjavík and Ankara and no wider. */
+      const EUROPE = [-25, 33, 45, 71]
+      /** One of the two knots the opening view merges. Three pins come out of it. */
+      const BENELUX = [2.4, 48.5, 8.2, 53.3]
 
       let clustering = true
       let shape = 'pin'
-      const status = document.getElementById('status')
 
       const series = () => ({
         type: 'marker',
-        name: 'Sites',
-        data: sites,
+        name: 'Capitals',
+        data: capitals,
         shape,
-        size: 13,
-        colorBy: 'kind',
-        cluster: clustering ? { radius: 55, maxZoom: 6 } : { enabled: false },
+        size: 15,
+        colorBy: 'bloc',
+        palette: 'capitals',
+        // A dark hairline is what separates a marker from a coloured dot: it holds
+        // its shape over light land, over water, and over another pin.
+        stroke: { color: '#141a22', width: 1.3 },
+        labels: { show: false },
+        cluster: clustering
+          ? {
+              // Measured, not guessed. At this frame the only two knots where pins
+              // genuinely collide are Vienna, Bratislava and Budapest along the
+              // Danube, and Brussels, Amsterdam and Luxembourg in the Benelux.
+              // Everything else stays a pin, which is the whole point.
+              radius: 34,
+              // A pair is two pins. Merging two markers hides half the information
+              // to save nothing: they were already legible.
+              minPoints: 3,
+              size: [15, 26],
+              color: '#4a5568',
+            }
+          : { enabled: false },
       })
 
       const map = Demo.watch(
         'markers',
         new ApexMaps(document.getElementById('map'), {
-          chart: { height: 460 },
-          geo: { map: 'world/countries@110m' },
+          chart: {
+            height: 580,
+            fontFamily: '-apple-system, BlinkMacSystemFont, Inter, "Segoe UI", Roboto, sans-serif',
+          },
+          geo: {
+            map: 'world/countries@50m',
+            // Lambert azimuthal equal-area on 10E 52N: the projection the EU's own
+            // statistical maps use (EPSG:3035), and the reason this frame does not
+            // stretch Scandinavia the way a Mercator crop would.
+            projection: { name: 'azimuthalEqualArea', rotate: [-10, -52] },
+            view: { fit: EUROPE, padding: 12 },
+            // Land, not "no data". A marker map has no choropleth values, so the
+            // basemap is a surface for the pins to sit on and should recede.
+            fill: '#e9edf4',
+          },
           series: [series()],
+          // The blocs are in the swatches under the figure, in the tooltip, and in
+          // the pin colour. A third restatement in a legend is furniture.
+          legend: { show: false },
+          tooltip: {
+            // A cluster stands for a set of rows rather than one, so its `datum`
+            // is the array of members. That is the honest test for "is this a
+            // cluster", and it lets one formatter serve both.
+            formatter: ({ name, value, datum }) =>
+              Array.isArray(datum)
+                ? `<div style="font-weight:640;margin-bottom:2px">${value} capitals</div>` +
+                  `<div style="opacity:.62">${datum
+                    .slice(0, 3)
+                    .map((member) => member?.name)
+                    .filter(Boolean)
+                    .join(', ')}${value > 3 ? ` and ${value - 3} more` : ''}</div>`
+                : `<div style="font-weight:640;margin-bottom:2px">${name}</div>` +
+                  `<div style="opacity:.62">${datum?.bloc ?? ''}</div>`,
+          },
         }),
       )
 
-      const report = () => {
-        const drawn = document.querySelectorAll('#map .apexmaps-mark').length
-        const clusters = document.querySelectorAll('#map .apexmaps-cluster').length
-        status.textContent = `${sites.length} sites drawn as ${drawn} marks${clusters ? `, ${clusters} of them clusters` : ''}`
+      /*
+       * There is no camera event yet, so the readout listens to the interactions
+       * that move it. Demo plumbing, not library API: a `moveEnd` event would
+       * replace all of this.
+       */
+      const plot = document.getElementById('map')
+      const pinsOut = document.getElementById('stat-pins')
+      const clustersOut = document.getElementById('stat-clusters')
+      const zoomOut = document.getElementById('stat-zoom')
+      const readout = document.getElementById('readout')
+
+      const report = (message) => {
+        const clusters = plot.querySelectorAll('.apexmaps-cluster').length
+        const marks = plot.querySelectorAll('.apexmaps-mark').length
+        const inClusters = capitals.length - (marks - clusters)
+        pinsOut.textContent = String(marks - clusters)
+        clustersOut.textContent = String(clusters)
+        zoomOut.textContent = `${map.viewport.camera.k.toFixed(1)}×`
+        readout.textContent =
+          message ??
+          (clusters
+            ? `${clusters} cluster${clusters > 1 ? 's' : ''} holding ${inClusters} capitals. Zoom in and they dissolve.`
+            : 'Every capital is its own pin.')
       }
 
-      Demo.ready(map.render().then(report))
+      let pending = 0
+      const scheduleReport = () => {
+        clearTimeout(pending)
+        pending = setTimeout(() => report(), 260)
+      }
+      for (const event of ['wheel', 'pointerup', 'dblclick', 'keyup']) {
+        plot.addEventListener(event, scheduleReport, { passive: true })
+      }
 
-      document.getElementById('toggle-cluster').addEventListener('click', () => {
-        clustering = !clustering
+      Demo.ready(map.render().then(() => report()))
+
+      document.getElementById('mode').addEventListener('click', (event) => {
+        const button = event.target.closest('button')
+        if (!button) return
+        for (const other of event.currentTarget.querySelectorAll('button')) {
+          other.setAttribute('aria-pressed', String(other === button))
+        }
+        clustering = button.dataset.mode === 'cluster'
         map.updateSeries([series()])
-        report()
+        report(clustering ? undefined : 'Every capital is its own pin, overlaps and all.')
       })
+
       document.getElementById('shape').addEventListener('change', (event) => {
         shape = event.target.value
         map.updateSeries([series()])
+        report(
+          shape === 'pin'
+            ? undefined
+            : `${shape} marks are centred on the place; a pin points at it.`,
+        )
+      })
+
+      document.getElementById('zoom-benelux').addEventListener('click', async () => {
+        const [west, south, east, north] = BENELUX
+        const a = map.viewport.project([west, north])
+        const b = map.viewport.project([east, south])
+        await map.camera.fitBounds([
+          [Math.min(a[0], b[0]), Math.min(a[1], b[1])],
+          [Math.max(a[0], b[0]), Math.max(a[1], b[1])],
+        ])
         report()
       })
+
+      document.getElementById('reset').addEventListener('click', async () => {
+        await map.resetView()
+        report()
+      })
+
       map.on('clusterClick', ({ value }) => {
-        status.textContent = `cluster of ${value} sites, flying in`
-        setTimeout(report, 900)
+        report(`Cluster of ${value} capitals, flying in.`)
+        setTimeout(() => report(), 900)
       })
     </script>
   </body>
