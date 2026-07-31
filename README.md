@@ -37,11 +37,12 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Data | GeoJSON, TopoJSON, bare geometry, feature arrays; automatic winding repair; join-key auto-detection |
 | Joins | Explicit `joinBy`, mismatch diagnostics with suggestions, FIPS leading-zero repair, opt-in `fuzzyJoin` |
 | Scales | quantile, equal interval, Jenks, threshold, linear, log, sqrt, ordinal; OkLab-sampled ramps; 17 palettes; automatic diverging selection; square-root size scales with nested-circle legends |
+| Fills | Flat colour, or eight pattern tiles with automatic ink contrast and patterned legend swatches&nbsp;†, or an image per region clipped to its outline&nbsp;† |
 | Interaction | Anchored wheel zoom, inertial pan, pinch, double-click zoom, versor globe dragging on `orthographic`, hover states, click and box selection with dimming, cross-map linked selection&nbsp;†, legend class muting, drilldown with automatic parent detection and a breadcrumb&nbsp;† |
 | Camera | `flyTo` (Van Wijk zoom-and-pan path), `easeTo`, `jumpTo`, `fitBounds`, `frameFeature`, `resetView`, interruptible and retargeting; on azimuthal projections a move to a place turns the sphere (quaternion slerp) instead of panning |
 | Components | Classed, gradient and nested-circle legends with a hover marker that tracks the pointer along the bar, HTML tooltips with edge flipping, collision-avoiding labels with halos, editorial annotations&nbsp;† |
 | Accessibility | ARIA roles, auto-generated description, roving-tabindex keyboard navigation, live-region announcements, optional data table, `prefers-reduced-motion` |
-| Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 66 kB gzipped core |
+| Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 75 kB gzipped core |
 | Frameworks | [`react-apexmaps`](wrappers/react), [`vue-apexmaps`](wrappers/vue) and [`ngx-apexmaps`](wrappers/angular), typed against this package's own options |
 
 † Licensed feature. It works without a key so you can evaluate it, with a watermark on the map. See
@@ -261,6 +262,102 @@ Australia, the Indian Ocean Territories and Ashmore and Cartier Islands the same
 Howe Island carries `AU-NSW` alongside New South Wales, so a key maps to a list of features rather
 than to one. Keeping only the last would leave mainland Australia grey while colouring an uninhabited
 island.
+
+## Pattern and image fills
+
+> **Licensed:** `fill.pattern` and `fill.image`. Licensed features work without a key so you can
+> evaluate them, with a watermark on the map. See [Licensing](#licensing).
+
+A flat fill is one colour per feature. `fill` adds a second channel over the top of it, and there are
+three situations where it is not decoration:
+
+- **Print and photocopy.** A five-step ramp collapses to about three once it has been through a
+  photocopier or a mono laser printer. A tile per class survives both.
+- **Colour-vision deficiency.** Two classes of a diverging ramp can read as one. A different tile
+  keeps them apart without abandoning the ramp.
+- **Kinds rather than amounts.** When the classes are categories, a sequential ramp implies an order
+  that is not in the data. Texture carries the distinction and the colour stops doing work it should
+  not be doing.
+
+```js
+series: [{ data, fill: { pattern: { type: 'dots' } } }]
+```
+
+The tile background is the colour the scale already chose, so the pattern is *added* to the encoding
+rather than replacing it, and the ink defaults to whatever stays legible against that colour: white
+on a mid-tone or dark class, a darkened tint on a pale one. A whole ramp therefore reads without
+being configured class by class.
+
+Eight tiles: `dots`, `squares`, `checks`, `lines`, `grid`, `diagonal`, `crosshatch`, and `custom`
+with your own `path`. Each takes `size`, `color`, `background`, `strokeWidth`, `angle` and
+`opacity`.
+
+**`size` is the spacing between marks, not the size of one**, and the marks are deliberately small
+against it: 10px spacing by default, with a dot covering about a twelfth of its tile and a bar a
+fifth of its width. That ratio is the whole design. Tighten it and the ink starts averaging with the
+fill into a shade that is on no scale, neighbouring classes stop being separable, and the map reads
+as clogged rather than as drawn. The colour is still doing the work; the tile is a mark on it.
+
+For the qualitative case, the pattern is a function of the feature:
+
+```js
+const TILES = ['dots', 'diagonal', 'grid', 'crosshatch', 'lines']
+
+fill: {
+  pattern: ({ classIndex, color, value, datum, key }) => ({ type: TILES[classIndex], size: 7 }),
+}
+```
+
+**Legend swatches show the tile**, not a flat colour, off the same builder the map uses: a patterned
+map with plain swatches tells the reader the texture means nothing.
+
+**The tile holds its size on screen** as the reader zooms, on the same reasoning as the borders'
+`non-scaling-stroke`: texture that grows with the camera stops reading as a fill and starts reading
+as geometry.
+
+**No-data areas are never textured**, and nor is a class muted from the legend. An absence has to
+keep reading as an absence rather than as one more category.
+
+### A picture per region
+
+The same mechanism carries imagery. Each feature's own outline clips an image fitted to its bounding
+box, which is how a map of flags, satellite crops or portraits is built:
+
+```js
+series: [{
+  data,
+  fill: {
+    image: {
+      src: ({ key }) => `/flags/${key.toLowerCase()}.svg`,
+      fit: 'cover',   // 'contain' fits the whole image inside the box; 'fill' stretches
+    },
+  },
+}]
+```
+
+`src` runs per feature and may return `null` to decline, which leaves that feature on its flat
+colour. `background` (the feature's colour by default) shows through a `contain` fit and while the
+file is still loading, so a slow image degrades to the choropleth rather than to a hole. Unlike a
+texture tile, an image scales *with* the region: it is pinned to the ground it describes.
+
+Under the hood both are one `<pattern>` in `<defs>` per distinct appearance, referenced by `fill`.
+Five classes across three thousand features is five defs. Image fills are inherently per-feature,
+because the tile is positioned on that feature's box, so this is the wrong tool for three thousand
+counties.
+
+Two things to know before you ship image fills:
+
+- **PNG export and CORS.** Exporting to PNG rasterises through a canvas, and a browser refuses to
+  read back a canvas that an image from another origin has touched. Same-origin files, or a host
+  sending `Access-Control-Allow-Origin`, export cleanly. SVG export is unaffected either way.
+- **`fit: 'fill'` with an SVG source may not stretch.** A referenced SVG brings its own aspect
+  handling, and per spec it wins over the element referencing it. `'cover'` is handled: the crop is
+  computed from the source's measured aspect ratio rather than asked for with an attribute, precisely
+  so an SVG flag is not quietly letterboxed inside the region with the fill colour around it.
+  `'contain'` needs nothing. Only `'fill'` still depends on the file, which needs
+  `preserveAspectRatio="none"` of its own to distort. Raster sources are unaffected throughout.
+
+`examples/patterns.html` and `examples/image-fill.html` are the two demos.
 
 ## Bubbles and arcs
 
@@ -685,11 +782,22 @@ survives the next one.
 | Zoom, pan, pinch, hover, click and box selection, the camera API | `arc` and `line` route series |
 | Joins, including `fuzzyJoin`, and the join diagnostics | Linked selection across maps (`link: { group }`) |
 | Scales, palettes, size legends, responsive rules | Story mode (`chart: { context: 'story' }`) |
+| Flat fills, in every scale and palette | Pattern fills (`fill: { pattern }`) and image fills (`fill: { image }`) |
 | PNG and SVG export | Presentation mode, map-to-chart morphing, time playback, the WebGL tier *(not built yet)* |
 | The accessibility layer | |
 
 One of those free entries is deliberate rather than accidental. **`fuzzyJoin` is free** because
 cleaning up someone's data is not a premium experience, it is the cost of using real data.
+
+One licensed entry deserves the same directness, because it sits next to a commitment made below.
+Pattern fills help a reader with a colour-vision deficiency, and accessibility is never gated here.
+The line drawn is that the **accessibility layer** (ARIA, keyboard navigation, the generated
+description, the data table, reduced motion) is free permanently, and so is the free tier's answer to
+colour vision: the `okabeIto` palette, which is colourblind-safe by construction, and the automatic
+diverging-palette selection. Patterns are the *cartographic and print* form of the same idea, and
+they are priced with the rest of the authoring surface. If that reads as the wrong call for your
+audience, say so: it is a pricing decision, not a technical one, and it lives in
+[`src/core/premium.ts`](src/core/premium.ts) where it can be argued with.
 
 Without a valid key the licensed features **still work, in full, with a watermark on the map**. That
 is deliberate: evaluate the thing before paying for it, in your own app, with your own data. A valid

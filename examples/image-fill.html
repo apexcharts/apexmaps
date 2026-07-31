@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Image fills · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb">
+        <a href="index.html">All demos</a> › Image fills
+        <span class="chip chip--licensed">Licensed</span>
+      </nav>
+
+      <div class="card">
+        <h1>A picture per region, clipped to its own outline</h1>
+        <p class="note">
+          Each state is filled with the landscape it is known for: saguaro and mesa over Arizona,
+          wheat under a big sky over Kansas, snow peaks over Colorado, cypress and still water over
+          Louisiana, conifers over Oregon and Maine, a skyline over New York. The feature's own
+          border does the clipping, and the image is pinned to the ground rather than the screen, so
+          it scales with the state as you zoom in.
+        </p>
+        <div class="row">
+          <button data-fit="cover">Cover</button>
+          <button data-fit="contain">Contain</button>
+          <button data-fit="fill">Stretch</button>
+          <button id="labels">Toggle labels</button>
+          <button id="off">No imagery</button>
+          <span class="label" id="status"></span>
+        </div>
+        <div id="images"></div>
+        <p class="source">
+          <span
+            ><b>Illustrative imagery.</b> Drawn in the page as data URIs, so the gallery needs no
+            network and looks the same on every load. Nine scenes, assigned to states by
+            landscape.</span
+          >
+          <span><b>Geometry</b> US states 1:10m, built-in registry</span>
+        </p>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">The option</h2>
+        <p class="note">
+          <code>src</code> runs once per feature, which is the useful form: it is how each region gets
+          its own picture. Returning <code>null</code> declines, and a declined feature stays on its
+          flat colour, so a partial image set degrades to a choropleth instead of to holes.
+        </p>
+        <pre>
+series: [{
+  data,
+  fill: {
+    image: {
+      src: ({ key, name, value, datum }) => `/scenes/${key.toLowerCase()}.jpg`,
+      fit: 'cover',        // 'contain' fits it all in; 'fill' stretches
+      background: '#eef',  // shows under a 'contain' fit, and while loading
+    },
+  },
+}]</pre
+        >
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">What to know before shipping it</h2>
+        <p class="note">
+          <b>Fit.</b> <code>'cover'</code> fills the feature's bounding box and crops the overflow,
+          which is what a photograph wants. <code>'contain'</code> fits the whole image inside the
+          box and leaves the background colour visible around it, which is what a logo or a crest
+          wants. Try both above on Florida and Idaho, whose boxes are the least square on the map.
+        </p>
+        <p class="note">
+          <b>Labels stay legible.</b> A photograph is a busy backdrop, so the halo behind data labels
+          is doing real work here. Toggle the labels to see the difference, and note that the
+          collision pass still drops the names that would overlap.
+        </p>
+        <p class="note">
+          <b>PNG export and CORS.</b> Exporting to PNG rasterises the map through a canvas, and a
+          browser refuses to read back a canvas that an image from another origin has touched.
+          Same-origin files, or a host sending <code>Access-Control-Allow-Origin</code>, export
+          cleanly. SVG export is unaffected either way, and these data URIs are same-origin by
+          construction.
+        </p>
+        <p class="note">
+          <b>Cost.</b> Unlike a pattern, an image fill is inherently one
+          <code>&lt;pattern&gt;</code> per feature, because the tile is positioned on that feature's
+          own box. Fifty-one states is fifty-one defs. It is the wrong tool for three thousand
+          counties.
+        </p>
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      /*
+       * Nine landscapes, and which states get them.
+       *
+       * The real feature here is "point src at your own files", and the honest way to
+       * demonstrate it in a gallery that must work offline is to draw the pictures in
+       * the page. Flags would have been easier and would have proved less: half of
+       * them are a tricolour with a seal, so at the size a state occupies they read as
+       * coloured bands and the reader learns nothing about whether the fill is
+       * *recognisable*. A landscape does read at that size, which is the property
+       * worth showing.
+       *
+       * The assignment is editorial, by the terrain a state is known for, so a reader
+       * who knows the country can check it: cacti in the southwest, wheat on the
+       * plains, peaks in the Rockies, conifers in the Pacific northwest and northern
+       * New England, cypress swamp on the gulf, palms in Florida and Hawaii, skylines
+       * in the northeast corridor, lakes across the upper midwest.
+       */
+      const SCENES = {
+        desert: ['AZ', 'NM', 'NV', 'UT'],
+        plains: ['KS', 'NE', 'IA', 'ND', 'SD', 'OK', 'IL', 'IN', 'MO', 'TX'],
+        peaks: ['CO', 'MT', 'WY', 'ID', 'AK'],
+        conifer: ['OR', 'WA', 'ME', 'NH', 'VT'],
+        lakes: ['MN', 'WI', 'MI', 'NY'],
+        coast: ['CA', 'SC', 'NC', 'NJ', 'DE', 'MD', 'MA', 'RI', 'CT', 'VA'],
+        tropics: ['FL', 'HI'],
+        bayou: ['LA', 'MS', 'AL', 'AR', 'GA'],
+        skyline: ['PA', 'OH', 'DC'],
+        hills: ['KY', 'TN', 'WV'],
+      }
+
+      const SCENE_OF = new Map()
+      for (const [scene, keys] of Object.entries(SCENES)) {
+        for (const key of keys) SCENE_OF.set(key, scene)
+      }
+      const STATES = [...SCENE_OF.keys()]
+
+      /* Each scene is a 60x40 picture: a sky, a ground, and a motif on it. */
+      const PAINT = {
+        desert: `
+          <rect width="60" height="40" fill="#f6c98a"/>
+          <rect y="0" width="60" height="16" fill="#f3a86a"/>
+          <circle cx="46" cy="9" r="5" fill="#fde8c0"/>
+          <path d="M0 22 L10 14 L20 22 L34 12 L48 22 L60 17 L60 26 L0 26Z" fill="#c9744a"/>
+          <rect y="25" width="60" height="15" fill="#d99a63"/>
+          <g fill="#3f6b46">
+            <rect x="8" y="20" width="3.4" height="18" rx="1.7"/>
+            <rect x="3.5" y="26" width="5" height="2.6" rx="1.3"/>
+            <rect x="3.5" y="26" width="2.6" height="7" rx="1.3"/>
+            <rect x="11" y="23" width="5" height="2.6" rx="1.3"/>
+            <rect x="13.4" y="23" width="2.6" height="9" rx="1.3"/>
+            <rect x="29" y="22" width="3.4" height="16" rx="1.7"/>
+            <rect x="32" y="26" width="5" height="2.6" rx="1.3"/>
+            <rect x="34.4" y="26" width="2.6" height="8" rx="1.3"/>
+            <rect x="49" y="21" width="3.4" height="17" rx="1.7"/>
+            <rect x="44.5" y="27" width="5" height="2.6" rx="1.3"/>
+            <rect x="44.5" y="27" width="2.6" height="7" rx="1.3"/>
+          </g>`,
+        plains: `
+          <rect width="60" height="40" fill="#e7c766"/>
+          <rect width="60" height="19" fill="#9dd0ef"/>
+          <ellipse cx="18" cy="8" rx="9" ry="3.4" fill="#f2fbff"/>
+          <ellipse cx="42" cy="6" rx="7" ry="2.8" fill="#f2fbff"/>
+          <rect y="17" width="60" height="4" fill="#c9a94a"/>
+          <g stroke="#a8842f" stroke-width="1.1">
+            <path d="M4 40 L4 25 M11 40 L11 23 M18 40 L18 26 M25 40 L25 24 M32 40 L32 26
+                     M39 40 L39 23 M46 40 L46 25 M53 40 L53 24"/>
+          </g>`,
+        peaks: `
+          <rect width="60" height="40" fill="#6f8fb8"/>
+          <rect width="60" height="18" fill="#b9d8ef"/>
+          <path d="M0 40 L14 12 L26 28 L36 16 L50 40Z" fill="#4a6b8a"/>
+          <path d="M40 40 L52 20 L60 34 L60 40Z" fill="#3c5a76"/>
+          <path d="M14 12 L9 22 L13 20 L17 24 L20 20Z" fill="#f4fbff"/>
+          <path d="M36 16 L32 24 L36 22 L39 25 L41 21Z" fill="#f4fbff"/>
+          <rect y="36" width="60" height="4" fill="#2f4a63"/>`,
+        conifer: `
+          <rect width="60" height="40" fill="#25543f"/>
+          <rect width="60" height="15" fill="#cfe4dd"/>
+          <g fill="#123f2e">
+            <path d="M10 38 L4 38 L10 16 L16 38Z"/>
+            <path d="M24 38 L17 38 L24 12 L31 38Z"/>
+            <path d="M38 38 L32 38 L38 18 L44 38Z"/>
+            <path d="M52 38 L45 38 L52 14 L59 38Z"/>
+          </g>
+          <rect y="36" width="60" height="4" fill="#0d2c20"/>`,
+        lakes: `
+          <rect width="60" height="40" fill="#3d7fa8"/>
+          <rect width="60" height="17" fill="#cbe6f2"/>
+          <g fill="#2c6b52">
+            <path d="M0 20 L8 11 L16 20Z"/>
+            <path d="M14 20 L22 13 L30 20Z"/>
+            <path d="M44 20 L52 12 L60 20Z"/>
+          </g>
+          <rect y="19" width="60" height="21" fill="#4a92bd"/>
+          <g stroke="#dff0f8" stroke-width="1.1" fill="none" opacity="0.75">
+            <path d="M6 26 q4 -2 8 0 t8 0"/>
+            <path d="M28 31 q4 -2 8 0 t8 0"/>
+            <path d="M14 36 q4 -2 8 0 t8 0"/>
+          </g>`,
+        coast: `
+          <rect width="60" height="40" fill="#1f6f9c"/>
+          <rect width="60" height="14" fill="#ffd9a8"/>
+          <circle cx="14" cy="8" r="4.5" fill="#ff9d5c"/>
+          <rect y="13" width="60" height="27" fill="#2a86b8"/>
+          <g stroke="#e8f7ff" stroke-width="1.2" fill="none">
+            <path d="M2 20 q5 -2.5 10 0 t10 0 t10 0 t10 0 t10 0"/>
+            <path d="M-3 27 q5 -2.5 10 0 t10 0 t10 0 t10 0 t10 0"/>
+            <path d="M2 34 q5 -2.5 10 0 t10 0 t10 0 t10 0 t10 0"/>
+          </g>`,
+        tropics: `
+          <rect width="60" height="40" fill="#f2d9a6"/>
+          <rect width="60" height="18" fill="#8fd4e8"/>
+          <circle cx="47" cy="8" r="5" fill="#fff3cd"/>
+          <rect y="17" width="60" height="6" fill="#2f9fb5"/>
+          <g fill="#1f6b3c">
+            <rect x="11" y="16" width="2.6" height="22" rx="1.3"/>
+            <path d="M12 17 q-10 -3 -12 4 q7 -4 12 -1Z"/>
+            <path d="M12 17 q10 -3 12 4 q-7 -4 -12 -1Z"/>
+            <path d="M12 16 q-4 -8 -11 -9 q7 4 11 10Z"/>
+            <path d="M12 16 q4 -8 11 -9 q-7 4 -11 10Z"/>
+            <rect x="41" y="19" width="2.4" height="19" rx="1.2"/>
+            <path d="M42 20 q-9 -3 -11 4 q6 -4 11 -1Z"/>
+            <path d="M42 20 q9 -3 11 4 q-6 -4 -11 -1Z"/>
+            <path d="M42 19 q-4 -7 -10 -8 q6 3 10 9Z"/>
+            <path d="M42 19 q4 -7 10 -8 q-6 3 -10 9Z"/>
+          </g>`,
+        bayou: `
+          <rect width="60" height="40" fill="#5c7f52"/>
+          <rect width="60" height="16" fill="#dfe8c9"/>
+          <g fill="#33502f">
+            <rect x="7" y="6" width="3" height="26"/>
+            <path d="M8.5 6 q-8 4 -9 12 q5 -8 9 -6Z"/>
+            <path d="M8.5 6 q8 4 9 12 q-5 -8 -9 -6Z"/>
+            <rect x="27" y="10" width="2.6" height="22"/>
+            <path d="M28 10 q-7 4 -8 11 q4 -7 8 -5Z"/>
+            <path d="M28 10 q7 4 8 11 q-4 -7 -8 -5Z"/>
+            <rect x="47" y="7" width="2.8" height="25"/>
+            <path d="M48 7 q-8 4 -9 12 q5 -8 9 -6Z"/>
+            <path d="M48 7 q8 4 9 12 q-5 -8 -9 -6Z"/>
+          </g>
+          <rect y="28" width="60" height="12" fill="#6d8f61"/>
+          <g stroke="#c5d8a8" stroke-width="1" fill="none" opacity="0.8">
+            <path d="M4 33 q5 -2 10 0 t10 0 t10 0"/>
+            <path d="M30 37 q5 -2 10 0 t10 0"/>
+          </g>`,
+        skyline: `
+          <rect width="60" height="40" fill="#2b3550"/>
+          <rect width="60" height="20" fill="#6a7ba8"/>
+          <circle cx="12" cy="8" r="3.6" fill="#ffe9a8"/>
+          <g fill="#1b2338">
+            <rect x="2" y="22" width="7" height="18"/>
+            <rect x="11" y="14" width="6" height="26"/>
+            <rect x="19" y="19" width="8" height="21"/>
+            <rect x="29" y="9" width="6" height="31"/>
+            <rect x="37" y="17" width="7" height="23"/>
+            <rect x="46" y="12" width="6" height="28"/>
+            <rect x="54" y="21" width="6" height="19"/>
+          </g>
+          <g fill="#ffdf94">
+            <rect x="13" y="18" width="1.6" height="1.6"/>
+            <rect x="31" y="14" width="1.6" height="1.6"/>
+            <rect x="39" y="22" width="1.6" height="1.6"/>
+            <rect x="48" y="17" width="1.6" height="1.6"/>
+            <rect x="21" y="25" width="1.6" height="1.6"/>
+          </g>`,
+        hills: `
+          <rect width="60" height="40" fill="#7ba85c"/>
+          <rect width="60" height="16" fill="#cfe3ef"/>
+          <path d="M0 22 q12 -10 24 0 q12 -9 24 -1 q6 4 12 1 L60 40 L0 40Z" fill="#5f9147"/>
+          <path d="M0 30 q15 -7 30 1 q15 7 30 -1 L60 40 L0 40Z" fill="#4d7c3a"/>
+          <g fill="#8c4a3c">
+            <path d="M6 29 L13 25.5 L20 29 L20 34 L6 34Z"/>
+            <path d="M38 27 L46 23 L54 27 L54 34 L38 34Z"/>
+          </g>
+          <g fill="#f0e2c8">
+            <rect x="12" y="30" width="2.6" height="4"/>
+            <rect x="45" y="28.5" width="3" height="5.5"/>
+          </g>`,
+      }
+
+      const scene = (key) => {
+        const inner = PAINT[SCENE_OF.get(key)] ?? PAINT.plains
+        const markup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 40">${inner}</svg>`
+        return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`
+      }
+
+      const status = document.getElementById('status')
+      let fit = 'cover'
+      let imagery = true
+      let labels = true
+
+      const series = () => ({
+        name: 'Landscape',
+        joinBy: { data: 'key' },
+        data: Demo.rows(STATES),
+        stroke: { color: '#ffffff', width: 1 },
+        scale: { palette: 'greys' },
+        fill: imagery
+          ? {
+              image: {
+                src: ({ key }) => scene(key),
+                fit,
+                // Overrides the default (the feature's own scale colour) because
+                // this is what shows under a 'contain' fit and for the moment
+                // before a picture has loaded, and paper reads better there than a
+                // dark class colour does.
+                background: '#eef1f6',
+              },
+            }
+          : {},
+      })
+
+      const map = Demo.watch(
+        'image-fill',
+        new ApexMaps(document.getElementById('images'), {
+          chart: { height: 520 },
+          geo: { map: 'us' },
+          legend: { show: false },
+          // A photograph is a busy backdrop, so the halo is not decoration here.
+          dataLabels: {
+            enabled: true,
+            minFeatureArea: 700,
+            style: { fontWeight: 700, halo: true, haloWidth: 3 },
+          },
+          series: [series()],
+        }),
+      )
+
+      const report = () => {
+        const defs = document.querySelectorAll('#images .apexmaps-svg > defs > pattern').length
+        status.textContent = imagery
+          ? `fit: '${fit}' · ${defs} image fills, one per region`
+          : 'Flat fills, no imagery'
+      }
+
+      const update = () => {
+        map.updateSeries([series()])
+        report()
+      }
+
+      Demo.ready(map.render().then(report))
+
+      for (const button of document.querySelectorAll('[data-fit]')) {
+        button.addEventListener('click', () => {
+          fit = button.dataset.fit
+          imagery = true
+          update()
+        })
+      }
+      document.getElementById('off').addEventListener('click', () => {
+        imagery = !imagery
+        update()
+      })
+      document.getElementById('labels').addEventListener('click', async () => {
+        labels = !labels
+        await map.updateOptions({ dataLabels: { enabled: labels } })
+        report()
+      })
+    </script>
+  </body>
+</html>

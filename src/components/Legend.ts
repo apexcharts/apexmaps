@@ -15,8 +15,12 @@
  */
 
 import { html, svg, remove, empty } from '../utils/dom'
+import { patternSwatch } from '../renderers/Paint'
 import { formatNumber } from '../scales/Scale'
 import type { LegendItem, LegendOptions, SizeLegendEntry } from '../types'
+
+/** Matches `.apexmaps-legend-swatch` in the stylesheet, less its 1px border. */
+const SWATCH_SIZE = 12
 
 export interface LegendSection {
   title?: string
@@ -134,6 +138,21 @@ export class Legend {
     return wrap
   }
 
+  /**
+   * The colour chip for a class, which is a patch of the map rather than a
+   * decoration: a textured series puts its actual tile here, so what the reader
+   * matches against the map is what the map drew.
+   */
+  private swatch(item: LegendItem): HTMLElement {
+    const el = html('span', {
+      class: `apexmaps-legend-swatch${item.pattern ? ' is-patterned' : ''}`,
+      style: item.pattern ? undefined : { background: item.color },
+      'aria-hidden': 'true',
+    })
+    if (item.pattern) el.appendChild(patternSwatch(item.pattern, SWATCH_SIZE))
+    return el
+  }
+
   private classList(items: LegendItem[], seriesIndex: number): HTMLElement {
     const list = html('div', { class: 'apexmaps-legend-items', role: 'list' })
     const mutedSet = this.mutedFor(seriesIndex)
@@ -155,14 +174,7 @@ export class Legend {
               ? `${item.label} (${item.count} ${item.count === 1 ? 'feature' : 'features'})`
               : item.label,
         },
-        [
-          html('span', {
-            class: 'apexmaps-legend-swatch',
-            style: { background: item.color },
-            'aria-hidden': 'true',
-          }),
-          html('span', { class: 'apexmaps-legend-label', text: label }),
-        ],
+        [this.swatch(item), html('span', { class: 'apexmaps-legend-label', text: label })],
       )
 
       if (interactive) {

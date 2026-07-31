@@ -31,6 +31,8 @@
  */
 
 import { svg, setAttrs, empty, remove } from '../utils/dom'
+import { PaintRegistry } from './Paint'
+import type { FeaturePaint } from './Paint'
 import type { Viewport } from '../geo/Viewport'
 import type { NormalizedFeature, StrokeOptions, WorldPoint } from '../types'
 
@@ -171,6 +173,8 @@ export class SvgRenderer {
   symbolLayer: SVGGElement | null = null
   overlayLayer: SVGGElement | null = null
   defs: SVGDefsElement | null = null
+  /** Pattern and image fills, which are document resources rather than attributes. */
+  paints: PaintRegistry | null = null
 
   private readonly pathsByKey = new Map<string, SVGPathElement>()
   /** Calibrated geometry of live flow paths, so a camera change can rescale them. */
@@ -218,6 +222,7 @@ export class SvgRenderer {
     })
 
     this.defs = svg('defs')
+    this.paints = new PaintRegistry(this.defs)
     this.world = svg('g', { class: 'apexmaps-world' })
     this.baseLayer = svg('g', { class: 'apexmaps-layer-base' })
     this.marksLayer = svg('g', { class: 'apexmaps-layer-marks' })
@@ -252,6 +257,9 @@ export class SvgRenderer {
     if (this.world) this.world.setAttribute('transform', this.viewport.transform())
     this.positionSymbols()
     this.applyFlowScale()
+    // Texture tiles resolve in world space, so without this they grow with the
+    // zoom. Image fills are meant to, and are left alone. See `renderers/Paint`.
+    this.paints?.applyScale(this.viewport.camera.k)
   }
 
   /**
@@ -284,16 +292,23 @@ export class SvgRenderer {
    * Paths are keyed and reused across renders so a data update tweens fills
    * instead of tearing down the DOM, which is what makes `updateSeries` feel like
    * a chart update rather than a page reload.
+   *
+   * `paint` is the licensed path: a pattern or an image instead of the flat fill.
+   * The flat colour is still written, to `data-fill`, because a paint is a
+   * document reference and the places that need to *reason* about the colour
+   * (darkening on hover, seeding a drilldown) cannot read one out of `url(#id)`.
    */
   drawFeatures({
     features,
     fill,
+    paint,
     stroke = {},
     opacity = 1,
     seriesId = 's0',
   }: {
     features: NormalizedFeature[]
     fill: (feature: NormalizedFeature) => string
+    paint?: (feature: NormalizedFeature) => FeaturePaint | null
     stroke?: StrokeOptions
     opacity?: number
     seriesId?: string
@@ -301,6 +316,7 @@ export class SvgRenderer {
     if (!this.marksLayer) return
     const group = this.ensureGroup(this.marksLayer, seriesId, 'apexmaps-series')
     const seen = new Set<string>()
+    const paintsSeen = new Set<string>()
 
     for (const feature of features) {
       const d = this.viewport.pathFor(feature)
@@ -324,8 +340,25 @@ export class SvgRenderer {
         group.appendChild(path)
       }
 
+      const color = fill(feature)
+      const spec = paint?.(feature) ?? null
+      const ref = spec
+        ? (this.paints?.resolve(spec, {
+            seriesId,
+            bounds: spec.kind === 'image' ? this.viewport.measure(feature.geometry) : null,
+            seen: paintsSeen,
+          }) ?? null)
+        : null
+
       path.setAttribute('d', d)
-      path.setAttribute('fill', fill(feature))
+      path.setAttribute('fill', ref ?? color)
+      if (ref) {
+        path.setAttribute('data-paint', ref)
+        path.setAttribute('data-fill', color)
+      } else {
+        path.removeAttribute('data-paint')
+        path.removeAttribute('data-fill')
+      }
       path.setAttribute('stroke', stroke.color || 'none')
       path.setAttribute('stroke-width', String(stroke.width ?? 0.5))
       path.setAttribute('vector-effect', 'non-scaling-stroke')
@@ -333,6 +366,9 @@ export class SvgRenderer {
     }
 
     this.prune(this.pathsByKey, seriesId, seen)
+    // Unconditional: a series that *stops* painting has to have its defs cleared,
+    // and that is exactly the pass where `paint` is absent.
+    this.paints?.pruneSeries(seriesId, paintsSeen)
   }
 
   /**
@@ -805,9 +841,12 @@ export class SvgRenderer {
     }
     remove(this.marksLayer?.querySelector(`g[data-series="${seriesId}"]`) ?? null)
     remove(this.symbolLayer?.querySelector(`g[data-series="${seriesId}"]`) ?? null)
+    this.paints?.clearSeries(seriesId)
   }
 
   destroy(): void {
+    this.paints?.clear()
+    this.paints = null
     remove(this.root)
     this.root = null
     this.world = null

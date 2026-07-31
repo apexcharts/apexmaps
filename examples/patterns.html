@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pattern fills · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <nav class="crumb">
+        <a href="index.html">All demos</a> › Pattern fills
+        <span class="chip chip--licensed">Licensed</span>
+      </nav>
+
+      <div class="card">
+        <h1>A tile per region, and the colour still leads</h1>
+        <p class="note">
+          One colour and one tile per continent, which is the case patterns are actually for: the
+          classes here are kinds, not amounts, so a sequential ramp would imply an order that is not
+          in the data. The tile background is the colour the scale chose, so texture is added to the
+          encoding rather than replacing it, and the ink is picked for contrast against that colour
+          so every class stays legible without being configured one at a time.
+        </p>
+        <div class="row">
+          <button data-tile="mixed">One per continent</button>
+          <button data-tile="dots">All dots</button>
+          <button data-tile="lines">All lines</button>
+          <button data-tile="diagonal">All diagonal</button>
+          <button data-tile="crosshatch">All crosshatch</button>
+          <button data-tile="grid">All grid</button>
+          <button data-tile="squares">All squares</button>
+          <button data-tile="checks">All checks</button>
+          <button data-tile="off">No texture</button>
+          <span class="label" id="tile-status"></span>
+        </div>
+        <div id="map"></div>
+        <p class="source">
+          <span
+            ><b>Grouping.</b> Natural Earth's own <code>continent</code> property, joined directly:
+            one data row colours every country in its continent.</span
+          >
+          <span
+            ><b>Colour</b> Okabe-Ito, the built-in <code>okabeIto</code> palette, which is engineered
+            to survive the common colour-vision deficiencies</span
+          >
+          <span><b>Geometry</b> Natural Earth 1:110m, built-in registry</span>
+        </p>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Spacing is the whole design</h2>
+        <p class="note">
+          <code>size</code> is the distance from one mark to the next, and the marks are deliberately
+          small against it: a dot covers about a twelfth of its tile, a bar a fifth of its width.
+          Tightening that is how a patterned map turns muddy, because the ink starts averaging with
+          the fill into a shade that is on no scale, and neighbouring classes stop being separable,
+          which is the job the texture was added to do. Defaults are 10px spacing and a fifth of that
+          for line weight; the slider below is the same option.
+        </p>
+        <div class="row">
+          <label class="label" for="size">Spacing</label>
+          <input id="size" type="range" min="4" max="22" step="1" value="10" />
+          <span class="label" id="size-readout">10px</span>
+        </div>
+        <pre>
+series: [{ data, fill: { pattern: { type: 'dots', size: 10 } } }]
+
+// Eight tiles: dots, squares, checks, lines, grid, diagonal, crosshatch,
+// and custom with your own path. Per feature, for the qualitative case:
+fill: {
+  pattern: ({ classIndex, color, value, datum, key }) => ({ type: TILES[classIndex] }),
+}</pre
+        >
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Two things the tile does on its own</h2>
+        <p class="note">
+          <b>It holds its size on screen.</b> Zoom in: the dots stay dots. A pattern resolves in the
+          user space of the shape referencing it, and shapes ride the camera, so an untouched tile
+          would grow with the zoom, on exactly the reasoning that gives borders
+          <code>non-scaling-stroke</code>. Texture that grows stops reading as a fill and starts
+          reading as geometry.
+        </p>
+        <p class="note">
+          <b>Legend swatches draw the real tile</b>, off the same builder as the map, scaled to show
+          two repeats. A patterned map with plain colour swatches tells the reader the texture means
+          nothing, which is the opposite of the point when the tile is what separates two classes on
+          a photocopy. Areas with no data are never textured, because an absence has to keep reading
+          as an absence rather than as one more category.
+        </p>
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      /*
+       * Continents, in the order the scale will class them, each with the tile and
+       * colour it gets in the mixed view.
+       *
+       * Ordered so no two adjacent continents share a tile direction: dots against
+       * lines reads at a glance, lines against diagonal does not.
+       *
+       * The colours are the first six of the built-in `okabeIto` palette, written out
+       * because a six-class scale samples a named palette rather than taking its
+       * entries whole, and a qualitative set must not be interpolated: a blend of two
+       * categories is a colour that means nothing. Okabe-Ito rather than any other
+       * qualitative set because it is engineered to survive the common colour-vision
+       * deficiencies, which is the same reader the tiles are for. Belt and braces on
+       * purpose: this page's argument is that neither channel should have to carry the
+       * distinction alone.
+       */
+      const CONTINENTS = [
+        { name: 'North America', tile: 'dots', color: '#0072b2' },
+        { name: 'South America', tile: 'lines', color: '#009e73', angle: 90 },
+        { name: 'Europe', tile: 'diagonal', color: '#cc79a7' },
+        { name: 'Africa', tile: 'dots', color: '#e69f00' },
+        { name: 'Asia', tile: 'squares', color: '#56b4e9' },
+        { name: 'Oceania', tile: 'lines', color: '#d55e00' },
+      ]
+
+      // Antarctica and Seven seas (open ocean) carry no row, so they render no-data,
+      // which is the honest answer for a continent this demo is not colouring.
+      const data = CONTINENTS.map((c, i) => ({ continent: c.name, value: i + 1 }))
+
+      const status = document.getElementById('tile-status')
+      const readout = document.getElementById('size-readout')
+      let tile = 'mixed'
+      let size = 10
+
+      const series = () => ({
+        name: 'Continent',
+        joinBy: { geo: 'continent', data: 'continent' },
+        data,
+        // No country borders. The unit here is the continent, and outlining the
+        // countries inside one cuts the texture into 50 pieces and invites the
+        // reader to compare things this map is not about. Where two continents
+        // meet, the colour change is the border.
+        stroke: { width: 0 },
+        scale: {
+          // One class per continent, with the breaks between the integers so each
+          // lands in its own. An explicit palette, because a qualitative set is not
+          // a ramp.
+          type: 'threshold',
+          breaks: [1.5, 2.5, 3.5, 4.5, 5.5],
+          palette: CONTINENTS.map((c) => c.color),
+        },
+        fill:
+          tile === 'off'
+            ? {}
+            : tile === 'mixed'
+              ? {
+                  pattern: ({ classIndex }) => ({
+                    type: CONTINENTS[classIndex]?.tile ?? 'dots',
+                    angle: CONTINENTS[classIndex]?.angle,
+                    size,
+                  }),
+                }
+              : { pattern: { type: tile, size } },
+      })
+
+      const map = Demo.watch(
+        'patterns',
+        new ApexMaps(document.getElementById('map'), {
+          chart: { height: 480 },
+          geo: {
+            map: 'world/countries@110m',
+            projection: 'naturalEarth',
+            view: { fit: [-180, -58, 180, 84] },
+          },
+          legend: {
+            title: 'Continent',
+            // The scale classes numbers; the reader wants the name that number stood
+            // for, which is what a formatter is for.
+            formatter: (item, i) => CONTINENTS[i]?.name ?? item.label,
+          },
+          series: [series()],
+        }),
+      )
+
+      const report = () => {
+        const tiles = document.querySelectorAll('#map .apexmaps-svg > defs > pattern').length
+        readout.textContent = `${size}px`
+        status.textContent =
+          tile === 'off'
+            ? 'Flat fills, no defs'
+            : `${tiles} tile${tiles === 1 ? '' : 's'} in <defs>, shared across ${
+                map.geo.features.length
+              } countries`
+      }
+
+      const update = () => {
+        map.updateSeries([series()])
+        report()
+      }
+
+      Demo.ready(map.render().then(report))
+
+      for (const button of document.querySelectorAll('[data-tile]')) {
+        button.addEventListener('click', () => {
+          tile = button.dataset.tile
+          update()
+        })
+      }
+      document.getElementById('size').addEventListener('input', (event) => {
+        size = Number(event.target.value)
+        update()
+      })
+    </script>
+  </body>
+</html>

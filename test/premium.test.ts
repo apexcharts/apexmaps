@@ -94,7 +94,25 @@ const ACTIVATES: Partial<Record<PremiumFeature, Record<string, unknown>>> = {
       },
     ],
   },
+  imageFill: {
+    series: [
+      {
+        type: 'choropleth',
+        data: [{ key: 'AAA', value: 1 }],
+        fill: { image: { src: 'flag.png' } },
+      },
+    ],
+  },
   linkGroup: { link: { group: 'group-1' } },
+  patternFill: {
+    series: [
+      {
+        type: 'choropleth',
+        data: [{ key: 'AAA', value: 1 }],
+        fill: { pattern: { type: 'dots' } },
+      },
+    ],
+  },
   routes: {
     series: [{ type: 'arc', data: [{ from: [0, 0], to: [8, 8] }] }],
   },
@@ -112,7 +130,9 @@ const TURNS_OFF: Partial<Record<PremiumFeature, Record<string, unknown>>> = {
   clustering: { series: BASE.series },
   customProjection: { geo: { projection: 'mercator' } },
   drilldown: { series: BASE.series },
+  imageFill: { series: BASE.series },
   linkGroup: { link: { group: '' } },
+  patternFill: { series: BASE.series },
   routes: { series: BASE.series },
   story: { chart: { context: 'dashboard' } },
 }

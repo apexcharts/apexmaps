@@ -13,8 +13,9 @@
  * tooltips, a legend, labels, zoom and pan, scales, export and accessibility, is
  * the free tier and renders clean. Depth of interaction (drilling into a level,
  * linking views, playing time), authoring on top of the map (annotations, routes),
- * summarising points into clusters, and cartography beyond the built-in
- * projections are the licensed tier.
+ * summarising points into clusters, cartography beyond the built-in
+ * projections, and texture in place of a flat fill (patterns, imagery) are the
+ * licensed tier.
  *
  * One member of the free tier is there deliberately rather than by omission.
  * Accessibility is never gated: a watermark
@@ -35,8 +36,10 @@ export const PREMIUM_FEATURES = [
   'clustering',
   'customProjection',
   'drilldown',
+  'imageFill',
   'linkGroup',
   'morph',
+  'patternFill',
   'presentation',
   'routes',
   'story',

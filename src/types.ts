@@ -173,6 +173,12 @@ export interface LegendItem {
   to?: number
   count?: number
   isNull?: boolean
+  /**
+   * The tile this class is painted with, when the series has a pattern fill, so
+   * the swatch shows what the map shows. Filled in by the series; there is nothing
+   * to set here.
+   */
+  pattern?: ResolvedPattern
 }
 
 export interface SizeLegendEntry {
@@ -266,6 +272,120 @@ export interface DrilldownOptions {
   breadcrumb?: boolean | { rootLabel?: string }
 }
 
+/**
+ * What a per-feature fill decision gets told about the feature it is deciding
+ * for. `color` is the colour the scale already resolved, so a pattern can tint
+ * itself from the data rather than being told a colour twice.
+ */
+export interface FillContext {
+  key: string
+  name?: string
+  value: number | null
+  datum: unknown
+  properties?: Record<string, unknown>
+  /** What the feature would have been filled with, flat. */
+  color: string
+  /** Class index on the scale, or -1 on a continuous scale. */
+  classIndex: number
+}
+
+/**
+ * Built-in pattern tiles. `'custom'` takes `path` instead.
+ *
+ * Shape tiles (`dots`, `squares`, `checks`) are filled; line tiles (`lines`,
+ * `grid`, `diagonal`, `crosshatch`) are stroked at `strokeWidth`.
+ */
+export type PatternType =
+  'dots' | 'squares' | 'checks' | 'lines' | 'grid' | 'diagonal' | 'crosshatch' | 'custom'
+
+export interface PatternFillOptions {
+  /** Default `'dots'`. */
+  type?: PatternType
+  /** Tile geometry for `type: 'custom'`, drawn in a `size` by `size` box. */
+  path?: string
+  /**
+   * Spacing between one mark and the next, in screen pixels. Default 10.
+   *
+   * Screen pixels, not world: the tile is rescaled as the reader zooms so the
+   * texture holds its size, on the same reasoning as `non-scaling-stroke`. A
+   * texture that grows with the camera stops reading as a texture and starts
+   * reading as geometry.
+   *
+   * The marks are deliberately small against it (a dot covers about a twelfth of
+   * its tile), because the fill is still the colour and the tile is a mark on it.
+   * Tightening the spacing is how a patterned map turns muddy: the ink averages
+   * with the colour into a shade that is on no scale.
+   */
+  size?: number
+  /**
+   * Ink colour. Defaults to white on a background dark enough to carry it, and to
+   * a darkened tint of the background otherwise, so the texture stays legible
+   * across a whole sequential ramp without being configured per class.
+   */
+  color?: string
+  /** Tile background. Defaults to the colour the scale resolved for the feature. */
+  background?: string
+  /** Ink weight for line tiles. Default a fifth of `size`, so gaps dominate. */
+  strokeWidth?: number
+  /** Rotate the tile, in degrees. Default 0. */
+  angle?: number
+  /** Ink opacity. Default 1. */
+  opacity?: number
+}
+
+/**
+ * A pattern with every default applied: what the renderer draws, and what a legend
+ * swatch is handed so it can draw the same tile. `resolvePattern` produces it.
+ */
+export interface ResolvedPattern {
+  type: PatternType
+  path?: string
+  size: number
+  color: string
+  background: string
+  strokeWidth: number
+  angle: number
+  opacity: number
+}
+
+export interface ImageFillOptions {
+  /**
+   * Image URL. The function form runs per feature, which is the useful one: it is
+   * how each region gets its own picture (a flag, a satellite tile, a portrait).
+   * Returning `null` leaves that feature on its flat colour.
+   */
+  src: string | ((context: FillContext) => string | null | undefined)
+  /**
+   * How the image sits in the feature's bounding box. `'cover'` (default) fills
+   * the box and crops the overflow, `'contain'` fits the whole image inside it,
+   * `'fill'` stretches. The feature's own outline does the clipping either way.
+   */
+  fit?: 'cover' | 'contain' | 'fill'
+  /**
+   * Painted under the image. Defaults to the feature's flat colour, which is what
+   * shows through a `'contain'` fit and while the image is still loading.
+   */
+  background?: string
+  /** Image opacity. Default 1. */
+  opacity?: number
+}
+
+/**
+ * Texture instead of, or over, a flat fill.
+ *
+ * Both are licensed features: they work without a key for evaluation, with a
+ * watermark.
+ *
+ * `image` wins where both are set. No-data features are never textured: an
+ * absence has to keep reading as an absence, and a pattern over it reads as one
+ * more category.
+ */
+export interface SeriesFillOptions {
+  /** One pattern for the series, or a decision per feature. */
+  pattern?: PatternFillOptions | ((context: FillContext) => PatternFillOptions | null | undefined)
+  image?: ImageFillOptions
+}
+
 export interface ChoroplethSeriesOptions extends SeriesCommon {
   type?: 'choropleth'
   joinBy?: JoinSpec
@@ -273,6 +393,12 @@ export interface ChoroplethSeriesOptions extends SeriesCommon {
   /** Apply normalised and alias matches, reporting each substitution. */
   fuzzyJoin?: boolean
   scale?: ScaleOptions
+  /**
+   * Pattern or image fills, on top of what `scale` decided.
+   *
+   * Licensed feature: works without a key for evaluation, with a watermark.
+   */
+  fill?: SeriesFillOptions
   /**
    * Divide the value by another field before mapping, e.g. `'population'`. The
    * legend retitles itself, because a choropleth of counts across unequal areas

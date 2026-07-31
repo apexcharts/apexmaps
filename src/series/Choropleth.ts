@@ -15,11 +15,14 @@
  */
 
 import { resolveJoin } from '../data/Join'
+import { resolvePattern } from '../renderers/Paint'
 import { createScale, DARK_NULL_COLOR, Scale } from '../scales/Scale'
 import { readNumber } from './accessors'
 import type { JoinResult } from '../data/Join'
+import type { FeaturePaint } from '../renderers/Paint'
 import type {
   ChoroplethSeriesOptions,
+  FillContext,
   LegendItem,
   NormalizedFeature,
   NormalizedGeo,
@@ -152,6 +155,59 @@ export class ChoroplethSeries {
     return this.scale.color(value)
   }
 
+  /**
+   * Texture for a feature, or null to leave it on its flat fill.
+   *
+   * No-data and legend-muted features are never textured. Both are absences, and
+   * a pattern over an absence reads as one more category: the reader would see
+   * six things on a five-class map.
+   */
+  paintFor(feature: NormalizedFeature): FeaturePaint | null {
+    const fill = this.config.fill
+    if (!fill?.pattern && !fill?.image) return null
+
+    const value = this.valueFor(feature)
+    if (value == null) return null
+    if (this.mutedClasses.size && this.mutedClasses.has(this.scale.classIndex(value))) return null
+
+    const color = this.scale.color(value)
+    const context: FillContext = {
+      key: feature.key,
+      name: feature.name,
+      value,
+      datum: this.datumFor(feature),
+      properties: feature.properties,
+      color,
+      classIndex: this.scale.continuous ? -1 : this.scale.classIndex(value),
+    }
+
+    // Image before pattern: a picture and a texture in the same area fight, and
+    // the picture is the more specific request.
+    if (fill.image) {
+      const { src, fit = 'cover', background, opacity = 1 } = fill.image
+      const resolved = typeof src === 'function' ? src(context) : src
+      if (resolved) {
+        return {
+          kind: 'image',
+          color,
+          image: { src: resolved, fit, background: background ?? color, opacity },
+        }
+      }
+    }
+
+    if (fill.pattern) {
+      const options = typeof fill.pattern === 'function' ? fill.pattern(context) : fill.pattern
+      if (options) return { kind: 'pattern', color, pattern: resolvePattern(options, color) }
+    }
+
+    return null
+  }
+
+  /** Whether any feature could be textured, which decides how cheap a redraw can be. */
+  get painted(): boolean {
+    return !!(this.config.fill?.pattern || this.config.fill?.image)
+  }
+
   /** Returns the new muted state. */
   toggleClass(classIndex: number): boolean {
     if (this.mutedClasses.has(classIndex)) {
@@ -177,7 +233,39 @@ export class ChoroplethSeries {
 
   legendItems(options?: { includeNull?: boolean; format?: (v: number) => string }): LegendItem[] {
     const hasNull = [...this.values.values()].some((v) => v == null)
-    return this.scale.legendItems({ includeNull: hasNull, ...options })
+    const items = this.scale.legendItems({ includeNull: hasNull, ...options })
+    return this.config.fill?.pattern ? items.map((item, i) => this._patternedItem(item, i)) : items
+  }
+
+  /**
+   * Put the class's own tile on its swatch.
+   *
+   * A patterned map with flat swatches tells the reader the texture is decoration,
+   * which is the opposite of the point when the tile is what distinguishes two
+   * classes on a photocopy. Skipped for the no-data entry, which is never textured,
+   * and for a continuous scale, whose legend is a bar rather than swatches.
+   */
+  private _patternedItem(item: LegendItem, index: number): LegendItem {
+    const pattern = this.config.fill?.pattern
+    if (!pattern || item.isNull || this.scale.continuous) return item
+
+    // The value the class stands for. A function form asks about a feature, and the
+    // honest answer for a swatch is the middle of the range it covers.
+    const value =
+      item.from != null && item.to != null ? (item.from + item.to) / 2 : (item.from ?? 0)
+    const options =
+      typeof pattern === 'function'
+        ? pattern({
+            key: '',
+            value,
+            datum: undefined,
+            color: item.color,
+            classIndex: index,
+          })
+        : pattern
+    if (!options) return item
+
+    return { ...item, pattern: resolvePattern(options, item.color) }
   }
 
   /**

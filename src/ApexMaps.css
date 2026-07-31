@@ -399,6 +399,13 @@
   flex: 0 0 auto;
 }
 
+/* Holds a 12px inline tile rather than a background colour, so the radius has to
+   clip it and the border must not push it off centre. */
+.apexmaps-legend-swatch.is-patterned {
+  overflow: hidden;
+  line-height: 0;
+}
+
 .apexmaps-legend-label {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

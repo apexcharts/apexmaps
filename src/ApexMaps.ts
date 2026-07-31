@@ -729,6 +729,7 @@ class ApexMaps extends BaseChart {
           this.renderer.drawFeatures({
             features: this.geo.features,
             fill: (f) => series.fillFor(f),
+            paint: series.painted ? (f) => series.paintFor(f) : undefined,
             stroke: series.config.stroke,
             opacity: series.config.opacity ?? 1,
             seriesId: series.id,
@@ -1815,10 +1816,14 @@ class ApexMaps extends BaseChart {
       // fill written to the mark. The series is the fallback, and is also the
       // answer whenever there is no mark to read.
       const parentSeriesId = series.id
+      const parentPath = this.renderer.pathFor(parentSeriesId, feature.key || feature.index)
+      // `data-fill` first: a textured feature's `fill` is `url(#id)`, which is not
+      // a colour a reveal can develop out of. The flat colour it was painted over
+      // is, and it is the one the reader read the value off.
       const parentFill = animate
-        ? (this.renderer
-            .pathFor(parentSeriesId, feature.key || feature.index)
-            ?.getAttribute('fill') ?? series.fillFor(feature))
+        ? (parentPath?.getAttribute('data-fill') ??
+          parentPath?.getAttribute('fill') ??
+          series.fillFor(feature))
         : null
       if (animate) this._captureLevel()
 
@@ -2127,6 +2132,15 @@ class ApexMaps extends BaseChart {
       if (mark.series.kind === 'paths') {
         // Darkening a thin line barely registers; raising its opacity does.
         el.setAttribute('opacity', '1')
+      } else if (el.getAttribute('data-paint')) {
+        // A textured feature has no colour to darken: its fill is `url(#id)`, and
+        // the def behind it is shared by every feature in the class, so rewriting
+        // it would highlight all of them. `brightness` dims the painted result
+        // instead, which is the same amount of feedback for one feature.
+        const amount = states?.brightness ?? 0.08
+        el.style.filter = `brightness(${(1 - amount).toFixed(3)})`
+        if (states?.stroke) el.setAttribute('stroke', states.stroke)
+        if (states?.strokeWidth != null) el.setAttribute('stroke-width', String(states.strokeWidth))
       } else {
         const base = el.getAttribute('fill')
         if (base) el.setAttribute('fill', darken(base, states?.brightness ?? 0.08))
@@ -2173,8 +2187,13 @@ class ApexMaps extends BaseChart {
         if (series.kind === 'paths') {
           el.setAttribute('opacity', String(series.config.opacity ?? 0.75))
         } else if (series.kind === 'features') {
-          const feature = this.geo?.features.find((f) => (f.key || f.index) === markKey)
-          if (feature) el.setAttribute('fill', series.fillFor(feature))
+          const painted = el.getAttribute('data-paint')
+          if (painted) {
+            el.style.filter = ''
+          } else {
+            const feature = this.geo?.features.find((f) => (f.key || f.index) === markKey)
+            if (feature) el.setAttribute('fill', series.fillFor(feature))
+          }
         } else {
           const bubble = series as BubbleSeries
           const item = bubble.items.find((b) => b.key === markKey)
@@ -2330,6 +2349,10 @@ class ApexMaps extends BaseChart {
       // `_redrawFills` only ever visits feature series, so before this the swatch
       // dimmed itself and the map did not move.
       if (series.kind !== 'features') marks = true
+      // A textured series is in the same position: draining the colour out of a
+      // class changes which paint each feature references, and only the draw knows
+      // how to build and reference paints.
+      else if (series.painted) marks = true
     }
     if (marks) this._drawGeometry()
     else this._redrawFills()
@@ -3173,6 +3196,13 @@ class ApexMaps extends BaseChart {
       // Configured counts as used: the reader can drill whether or not they have
       // clicked yet, exactly as with a link group.
       if ('drilldown' in series && series.drilldown) this._requirePremium('drilldown')
+      // Gated per kind rather than as one "fill" feature, because they are priced
+      // apart: patterns are a legibility and print concern, imagery is a different
+      // product (flags, satellite, portraits) with its own support surface.
+      if ('fill' in series && series.fill) {
+        if (series.fill.pattern) this._requirePremium('patternFill')
+        if (series.fill.image) this._requirePremium('imageFill')
+      }
     }
   }
 

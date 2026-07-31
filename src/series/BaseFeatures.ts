@@ -87,6 +87,17 @@ export class BaseFeatures {
     return darken(color, 0.08)
   }
 
+  /**
+   * No texture on the basemap: it is a backdrop, and it carries no value to
+   * encode. Takes the feature it ignores so the two feature series stay callable
+   * through the same union.
+   */
+  paintFor(_feature?: NormalizedFeature): null {
+    return null
+  }
+
+  readonly painted = false
+
   toggleClass(): boolean {
     return false
   }
