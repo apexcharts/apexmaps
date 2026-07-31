@@ -20,8 +20,9 @@
  */
 
 import { geoPath, geoBounds, geoCentroid } from 'd3-geo'
-import { createProjection, isComposite } from './Projections'
+import { createProjection, isAzimuthal, isComposite, isGlobe } from './Projections'
 import type { GeoProjection } from './Projections'
+import type { Rotation } from './Versor'
 import type {
   CameraState,
   LonLat,
@@ -50,6 +51,14 @@ export class Viewport {
   camera: CameraState = { k: 1, x: 0, y: 0 }
   /** World-space bounds of the fitted content. */
   worldBounds: WorldBounds | null = null
+  /**
+   * The projection's `[lambda, phi, gamma]`, mirrored here so callers have one
+   * place to read it and so it survives the projection being rebuilt by a
+   * resize. Unlike the camera this is *not* a view transform: changing it moves
+   * the sphere under the projection, so every projected coordinate on the map is
+   * stale afterwards and has to be recomputed.
+   */
+  rotation: Rotation = [0, 0, 0]
 
   constructor({ width = 0, height = 0 }: { width?: number; height?: number } = {}) {
     this.width = width
@@ -64,10 +73,55 @@ export class Viewport {
   setProjection(spec: ProjectionName | ProjectionSpec): void {
     this.projection = createProjection(spec)
     this.projectionName = typeof spec === 'string' ? spec : spec?.name || 'equalEarth'
+    // Read back rather than copy the spec: composite projections ignore `rotate`
+    // and several projections carry a non-zero default, so the projection itself
+    // is the only honest source.
+    const angles = typeof this.projection.rotate === 'function' ? this.projection.rotate() : null
+    this.rotation = angles ? [angles[0] ?? 0, angles[1] ?? 0, angles[2] ?? 0] : [0, 0, 0]
     // `geoPath` with no context returns SVG path strings. A Canvas renderer
     // reuses the same generator with a context, which is why the path lives on
     // the viewport rather than inside the SVG renderer.
     this.path = geoPath(this.projection as never) as unknown as GeoPathLike
+  }
+
+  /**
+   * Whether the projection can be spun at all: it has to rotate, and it has to
+   * invert, because grabbing a point on the sphere is how a drag decides what to
+   * rotate by.
+   */
+  get rotatable(): boolean {
+    return (
+      !!this.projection &&
+      typeof this.projection.rotate === 'function' &&
+      typeof this.projection.invert === 'function' &&
+      !isComposite(this.projectionName)
+    )
+  }
+
+  /** Whether this projection is a globe, so a drag should spin it by default. */
+  get isGlobeView(): boolean {
+    return this.rotatable && isGlobe(this.projectionName)
+  }
+
+  /**
+   * Turn the sphere. Longitude is wrapped rather than clamped, so a globe spins
+   * through 360 degrees and keeps going instead of stopping at the antimeridian.
+   *
+   * The projection's scale and translate are untouched, so world coordinates stay
+   * in the same space and the camera survives: rotating never refits, which is
+   * what keeps a spin from breathing in and out as different continents come into
+   * view.
+   */
+  setRotation(angles: Rotation): void {
+    if (!this.projection || typeof this.projection.rotate !== 'function') return
+    if (isComposite(this.projectionName)) return
+    const next: Rotation = [wrapDegrees(angles[0]), angles[1] ?? 0, angles[2] ?? 0]
+    if (!next.every(Number.isFinite)) return
+    this.rotation = next
+    this.projection.rotate(next)
+    // `geoPath` reads `projection.stream` on every call and d3-geo invalidates
+    // its stream cache inside `rotate`, so the existing generator already emits
+    // the new geometry. Nothing to rebuild.
   }
 
   /**
@@ -282,11 +336,61 @@ export class Viewport {
   }
 
   /**
-   * Whether the current projection supports being re-centred and rotated.
-   * Composite projections such as Albers USA must not be.
+   * Whether re-centring this projection means **turning the sphere** rather
+   * than panning the plane.
    *
+   * True for the azimuthal family, false for everything laid out flat and for
+   * composite projections such as Albers USA, which translate their insets
+   * internally and break under any rotation. The camera consults this to decide
+   * whether a `center` target is a pan or a rotation: on a globe it has to be a
+   * rotation, because no amount of screen-space panning can bring the far
+   * hemisphere into view.
    */
   supportsRecentre(): boolean {
-    return !isComposite(this.projectionName)
+    return this.rotatable && isAzimuthal(this.projectionName)
   }
+
+  /**
+   * Run `fn` with the sphere temporarily turned to `rotation`, then put it back.
+   *
+   * This is how a camera move works out where it is going: the destination
+   * camera has to be measured against the sphere as it will be *after* the
+   * move, or the move pans across the screen to chase a point the rotation was
+   * about to bring home anyway. Nothing renders inside the callback, so the
+   * projection's momentary state is never observable; `finally` guarantees that
+   * stays true even if `fn` throws.
+   */
+  underRotation<T>(rotation: Rotation, fn: () => T): T {
+    if (!this.projection || typeof this.projection.rotate !== 'function') return fn()
+    const current = this.rotation
+    try {
+      this.projection.rotate(rotation)
+      return fn()
+    } finally {
+      this.projection.rotate(current)
+    }
+  }
+
+  /**
+   * The rotation that brings a place to the sub-observer point: the centre of an
+   * azimuthal projection, and on a globe the point facing the viewer.
+   *
+   * Any roll the reader has applied by dragging is preserved, because a camera
+   * move was asked to go somewhere, not to level the horizon.
+   */
+  rotationFor([lon, lat]: LonLat): Rotation {
+    return [-lon, -lat, this.rotation[2]]
+  }
+
+  /** The place currently at the sub-observer point. */
+  subObserver(): LonLat {
+    return [-this.rotation[0], -this.rotation[1]]
+  }
+}
+
+/** Fold a longitude into (-180, 180], so a spin never accumulates unbounded. */
+function wrapDegrees(value: number): number {
+  if (!Number.isFinite(value)) return 0
+  const wrapped = ((value + 180) % 360 + 360) % 360 - 180
+  return wrapped === -180 ? 180 : wrapped
 }

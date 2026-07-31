@@ -11,12 +11,21 @@
  * current interpolated state rather than queueing or snapping, because in a
  * scroll-driven story the reader can outrun the animation at any moment.
  *
+ * On an azimuthal projection a move to a `center` is a **rotation**, not a pan.
+ * The camera is a screen-space transform and cannot reach the far side of a
+ * globe by any amount of translating, so where `viewport.supportsRecentre()`
+ * says so, the same `flyTo({ center })` turns the sphere instead. See
+ * `_resolveMove`.
+ *
  * @module geo/Camera
  */
 
+import { geoDistance } from 'd3-geo'
 import { prefersReducedMotion } from '../utils/motion'
 import { resolveEase } from '../utils/easing'
 import type { EasingFn } from '../utils/easing'
+import { rotation as anglesOf, slerp, versor } from './Versor'
+import type { Rotation } from './Versor'
 import type { Viewport } from './Viewport'
 import type { CameraState, LonLat, Padding, ScreenPoint, WorldBounds } from '../types'
 
@@ -58,7 +67,36 @@ export type ZoomInterpolator = ((t: number) => [number, number, number]) & {
   duration: number
 }
 
+/** Where a move ends up: a camera state, and on a globe a rotation too. */
+interface ResolvedMove {
+  camera: CameraState | null
+  /** Null when the projection is not re-centred by rotating. */
+  rotation: Rotation | null
+}
+
 const RHO_DEFAULT = Math.SQRT2
+
+/**
+ * Natural duration of a rotation, in ms per radian of great-circle travel.
+ *
+ * The rotation analogue of the Van Wijk path length: a nudge across a country
+ * should not take as long as a flip to the other side of the planet, and the
+ * caller should not have to work out which is which. Calibrated so a half-turn
+ * (pi radians, the longest move there is) lands near 1.3 seconds at the default
+ * speed, and short hops fall under the 240 ms floor every move already has.
+ */
+const ROTATE_MS_PER_RADIAN = 500
+
+/**
+ * The unhurried duration for turning from one place to another, before `speed`
+ * and the floor are applied. Exported because it is the one number in a globe
+ * move a caller might reasonably want to reason about, and because a duration
+ * curve is far easier to pin in a test than a wall clock.
+ */
+export function rotationDuration(from: LonLat, to: LonLat): number {
+  const radians = geoDistance(from, to)
+  return Number.isFinite(radians) ? radians * ROTATE_MS_PER_RADIAN : 0
+}
 
 const cosh = (x: number) => ((x = Math.exp(x)) + 1 / x) / 2
 const sinh = (x: number) => ((x = Math.exp(x)) - 1 / x) / 2
@@ -120,6 +158,7 @@ export function interpolateZoom(
 export class Camera {
   readonly viewport: Viewport
   readonly onChange: () => void
+  readonly onRotate: () => void
   options: Required<CameraOptions>
   private _raf: number | null = null
   private _resolve: (() => void) | null = null
@@ -127,15 +166,23 @@ export class Camera {
   constructor({
     viewport,
     onChange,
+    onRotate,
     options = {},
   }: {
     viewport: Viewport
     /** Called on every frame, after the camera has been mutated. */
     onChange: () => void
+    /**
+     * Called after the sphere has been turned, which unlike a camera change
+     * invalidates every projected coordinate. Optional: a camera with no host
+     * to redraw still computes the right rotation, it just draws nothing.
+     */
+    onRotate?: () => void
     options?: CameraOptions
   }) {
     this.viewport = viewport
     this.onChange = onChange
+    this.onRotate = onRotate ?? (() => {})
     this.options = {
       minZoom: 0.5,
       maxZoom: 4096,
@@ -184,23 +231,43 @@ export class Camera {
   }
 
   /**
+   * Turn the sphere and tell the host to reproject.
+   *
+   * Separate from `set` because the two are different kinds of change: a camera
+   * write is a transform on already-projected geometry, while this invalidates
+   * the geometry itself.
+   */
+  private _rotate(angles: Rotation): void {
+    this.viewport.setRotation(angles)
+    this.onRotate()
+  }
+
+  /**
    * Jump with no animation.
    *
    */
   jumpTo(target: CameraTarget): void {
     this.stop()
-    const next = this._resolveTarget(target)
-    if (next) this.set(next)
+    const move = this._resolveMove(target)
+    // The rotation goes first: the camera state was resolved against the sphere
+    // in its destination orientation, so applying it to the old one would put
+    // the map somewhere neither state describes, if only for an instant.
+    if (move.rotation) this._rotate(move.rotation)
+    if (move.camera) this.set(move.camera)
   }
 
   /**
    * Animate with a fixed duration and easing. Use for short, mechanical moves
    * (a legend filter re-fit, a drilldown) where an arc would be theatrical.
    *
+   * Fixed is the contract, rotation included: unlike `flyTo` this does not
+   * stretch its duration to suit a half-turn, because a caller who asked for
+   * 400 ms asked for 400 ms.
    */
   easeTo(target: CameraTarget & TransitionOptions): Promise<void> {
-    const next = this._resolveTarget(target)
-    if (!next) return Promise.resolve()
+    const move = this._resolveMove(target)
+    const next = move.camera
+    if (!next && !move.rotation) return Promise.resolve()
 
     const duration = target.duration ?? 400
     if (duration <= 0 || prefersReducedMotion()) {
@@ -209,14 +276,18 @@ export class Camera {
     }
 
     const from = { ...this.state }
+    const turn = this._turn(move.rotation)
     const ease = resolveEase(target.ease)
     return this._run(duration, (t) => {
       const e = ease(t)
-      this.set({
-        k: from.k + (next.k - from.k) * e,
-        x: from.x + (next.x - from.x) * e,
-        y: from.y + (next.y - from.y) * e,
-      })
+      turn?.(e)
+      if (next) {
+        this.set({
+          k: from.k + (next.k - from.k) * e,
+          x: from.x + (next.x - from.x) * e,
+          y: from.y + (next.y - from.y) * e,
+        })
+      }
     })
   }
 
@@ -225,14 +296,18 @@ export class Camera {
    *
    * Duration is derived from the path length unless overridden, so crossing a
    * continent takes longer than nudging to a neighbouring county without the
-   * author having to hand-tune anything.
+   * author having to hand-tune anything. On a globe the same is true of the
+   * turn: the angular distance between the place facing the viewer now and the
+   * one that will be sets the pace, and whichever of the two motions needs
+   * longer decides, so the zoom and the rotation land together.
    *
    */
   flyTo(
     target: CameraTarget & TransitionOptions & { speed?: number; curve?: number },
   ): Promise<void> {
-    const next = this._resolveTarget(target)
-    if (!next) return Promise.resolve()
+    const move = this._resolveMove(target)
+    const next = move.camera
+    if (!next && !move.rotation) return Promise.resolve()
     if (prefersReducedMotion()) {
       this.jumpTo(target)
       return Promise.resolve()
@@ -241,6 +316,7 @@ export class Camera {
     const vp = this.viewport
     const from = { ...this.state }
     const w = vp.width || 1
+    const landing = next ?? from
 
     // Convert camera states to Van Wijk space: centre in world coords, plus the
     // world-space width currently visible.
@@ -250,19 +326,25 @@ export class Camera {
       w / from.k,
     ]
     const p1: [number, number, number] = [
-      (vp.width / 2 - next.x) / next.k,
-      (vp.height / 2 - next.y) / next.k,
-      w / next.k,
+      (vp.width / 2 - landing.x) / landing.k,
+      (vp.height / 2 - landing.y) / landing.k,
+      w / landing.k,
     ]
+
+    const spin = move.rotation ? rotationDuration(vp.subObserver(), invertRotation(move.rotation)) : 0
+    const turn = this._turn(move.rotation)
 
     const curve = target.curve ?? this.options.curve
     const interp = interpolateZoom(p0, p1, curve)
     const speed = target.speed ?? this.options.speed
-    const duration = target.duration ?? Math.max(240, interp.duration / speed)
+    const natural = Math.max(interp.duration, spin)
+    const duration = target.duration ?? Math.max(240, natural / speed)
     const ease = resolveEase(target.ease ?? 'cubicInOut')
 
     return this._run(duration, (t) => {
-      const [cx, cy, width] = interp(ease(t))
+      const e = ease(t)
+      turn?.(e)
+      const [cx, cy, width] = interp(e)
       const k = w / width
       this.set({ k, x: vp.width / 2 - cx * k, y: vp.height / 2 - cy * k })
     })
@@ -312,6 +394,57 @@ export class Camera {
   panBy(dx: number, dy: number): void {
     const cam = this.state
     this.set({ x: cam.x + dx, y: cam.y + dy })
+  }
+
+  /**
+   * Resolve a target into where the sphere ends up and where the camera ends up.
+   *
+   * The whole of the pan-or-rotate decision lives here, and it is one question:
+   * does re-centring this projection mean turning the sphere? On anything laid
+   * out flat the answer is no, `rotation` comes back null, and every number
+   * below is what it has always been. On an azimuthal one a `center` becomes a
+   * rotation, and the camera state is then resolved **against the sphere in its
+   * destination orientation** rather than its current one. That second part is
+   * what stops the move counting the same distance twice: measured against the
+   * old sphere, the target still reads as being off on the far side, and the
+   * camera would dutifully pan the screen there on top of a rotation that had
+   * already brought it home.
+   */
+  private _resolveMove(target: CameraTarget): ResolvedMove {
+    const rotation = this._rotationFor(target)
+    if (!rotation) return { camera: this._resolveTarget(target), rotation: null }
+    return {
+      camera: this.viewport.underRotation(rotation, () => this._resolveTarget(target)),
+      rotation,
+    }
+  }
+
+  /** The destination rotation, or null when this move does not turn the sphere. */
+  private _rotationFor(target: CameraTarget): Rotation | null {
+    if (!target.center || !this.viewport.supportsRecentre()) return null
+    const [lon, lat] = target.center
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null
+    return this.viewport.rotationFor(target.center)
+  }
+
+  /**
+   * A stepper that slerps from the current rotation to `to`, or null if there is
+   * nothing to turn.
+   *
+   * The starting orientation is captured here, at call time, which is what makes
+   * a rotation interruptible on the same terms as everything else: a second
+   * `flyTo` arriving mid-turn reads the half-turned sphere as its origin and
+   * takes the short way from *there*, rather than snapping back or queueing.
+   */
+  private _turn(to: Rotation | null): ((t: number) => void) | null {
+    if (!to) return null
+    const q0 = versor(this.viewport.rotation)
+    const q1 = versor(to)
+    return (t: number) => {
+      // Exact at the end: slerp is numerically excellent but not bit-exact, and
+      // a move to a named place should land on it, not next to it.
+      this._rotate(t >= 1 ? to : anglesOf(slerp(q0, q1, t)))
+    }
   }
 
   /**
@@ -385,4 +518,9 @@ export class Camera {
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v
+}
+
+/** The place a rotation puts at the sub-observer point. */
+function invertRotation([lambda, phi]: Rotation): LonLat {
+  return [-lambda, -phi]
 }

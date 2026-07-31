@@ -139,6 +139,51 @@ export function isComposite(name: string): boolean {
 }
 
 /**
+ * Projections a drag should spin rather than pan.
+ *
+ * Only the globe. Every azimuthal projection is technically rotatable, but on a
+ * hemispheric view such as the Europe-centred `azimuthalEqualArea` in the map
+ * catalogue a drag means "move the map", and taking that gesture away would be a
+ * regression dressed up as a feature. On an orthographic the opposite holds:
+ * panning slides a picture of a globe around inside its box, which is never what
+ * the reader meant. Callers can force either answer with
+ * `interaction.rotate.enabled`.
+ */
+const GLOBE = new Set(['orthographic'])
+
+export function isGlobe(name: string): boolean {
+  return GLOBE.has(name)
+}
+
+/**
+ * Projections defined by a point of tangency, where "centre on this place" means
+ * turning the sphere rather than sliding the plane.
+ *
+ * The distinction decides what a camera move does. On a cylindrical or
+ * pseudo-cylindrical projection the whole world is laid out at once, so
+ * centring on Delhi is a pan and nothing needs reprojecting. On an azimuthal
+ * one the projection has a single point it is honest about, and the far side of
+ * the sphere is either wildly distorted (gnomonic, stereographic) or not drawn
+ * at all (orthographic). Panning there slides the map away from the one point
+ * it was accurate at, and on a globe it cannot reach the target at all.
+ *
+ * The conics are deliberately absent. They are defined by standard parallels
+ * rather than a centre, they are used for a fixed region, and rotating one to
+ * follow the camera would re-skew the whole map under the reader.
+ */
+const AZIMUTHAL = new Set([
+  'orthographic',
+  'stereographic',
+  'gnomonic',
+  'azimuthalEqualArea',
+  'azimuthalEquidistant',
+])
+
+export function isAzimuthal(name: string): boolean {
+  return AZIMUTHAL.has(name)
+}
+
+/**
  * Build a configured projection from a spec.
  *
  * Accepts a bare name (`'mercator'`) or a spec object. Unknown names throw

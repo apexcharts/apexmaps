@@ -112,6 +112,8 @@ export class ApexMapsComponent {
   readonly legendToggle = output<ApexMapsEventMap['legendToggle']>()
   readonly zoom = output<ApexMapsEventMap['zoom']>()
   readonly panEnd = output<ApexMapsEventMap['panEnd']>()
+  readonly rotate = output<ApexMapsEventMap['rotate']>()
+  readonly rotateEnd = output<ApexMapsEventMap['rotateEnd']>()
 
   /**
    * The live instance, for the imperative API (`drillTo`, `exportPNG`,
@@ -163,6 +165,8 @@ export class ApexMapsComponent {
         legendToggle: this.legendToggle,
         zoom: this.zoom,
         panEnd: this.panEnd,
+        rotate: this.rotate,
+        rotateEnd: this.rotateEnd,
       }
       for (const event of Object.keys(outputs) as ApexMapsEventName[]) {
         map.on(event, ((payload: never) => {

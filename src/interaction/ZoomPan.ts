@@ -12,6 +12,9 @@
  *
  * A drag means pan, and a drag with a modifier means "select what is in this box",
  * because a map has one drag gesture and panning has the stronger claim on it.
+ * On a globe the drag is handed to `GlobeRotation` instead, which spins the
+ * sphere; everything else here (the click slop, the pinch, the marquee) is
+ * unchanged by that, because only the meaning of the movement differs.
  *
  * @module interaction/ZoomPan
  */
@@ -19,6 +22,7 @@
 import { pointerPosition } from '../utils/dom'
 import { prefersReducedMotion } from '../utils/motion'
 import type { Camera } from '../geo/Camera'
+import type { GlobeRotation } from './GlobeRotation'
 import type { InteractionOptions, ScreenPoint } from '../types'
 
 /** A screen-space selection box, `[[x0, y0], [x1, y1]]`, already normalised. */
@@ -37,7 +41,11 @@ export class ZoomPan {
   readonly options: InteractionOptions
   readonly emit: (event: string, payload?: unknown) => void
   readonly onSelectBox: (box: SelectBox | null, phase: SelectBoxPhase, additive: boolean) => void
+  /** Present on every map; it decides for itself whether this projection spins. */
+  readonly globe: GlobeRotation | null
 
+  /** Whether the drag in progress (or about to start) turns the globe. */
+  private _rotating = false
   private _dragging = false
   private _moved = 0
   private _last: ScreenPoint = [0, 0]
@@ -68,6 +76,7 @@ export class ZoomPan {
     options,
     emit,
     onSelectBox,
+    globe,
   }: {
     container: HTMLElement
     camera: Camera
@@ -75,12 +84,14 @@ export class ZoomPan {
     emit?: (event: string, payload?: unknown) => void
     /** Called as a selection box is dragged, and once when it is released. */
     onSelectBox?: (box: SelectBox | null, phase: SelectBoxPhase, additive: boolean) => void
+    globe?: GlobeRotation | null
   }) {
     this.container = container
     this.camera = camera
     this.options = options
     this.emit = emit ?? (() => {})
     this.onSelectBox = onSelectBox ?? (() => {})
+    this.globe = globe ?? null
 
     this._onPointerDown = this._handlePointerDown.bind(this)
     this._onPointerMove = this._handlePointerMove.bind(this)
@@ -101,7 +112,7 @@ export class ZoomPan {
     if (zoom?.doubleClick !== false && zoom?.enabled !== false) {
       this.container.addEventListener('dblclick', this._onDblClick)
     }
-    if (pan?.enabled !== false || zoom?.enabled !== false) {
+    if (pan?.enabled !== false || zoom?.enabled !== false || this.globe?.enabled) {
       this.container.style.cursor = 'grab'
     }
   }
@@ -121,7 +132,12 @@ export class ZoomPan {
   private _handlePointerDown(event: PointerEvent): void {
     this._swallowClick = false
     const marquee = this._marqueeWanted(event)
-    if (!marquee && this.options.pan?.enabled === false && this.options.zoom?.enabled === false) {
+    if (
+      !marquee &&
+      !this.globe?.enabled &&
+      this.options.pan?.enabled === false &&
+      this.options.zoom?.enabled === false
+    ) {
       return
     }
     if (event.button !== 0 && event.pointerType === 'mouse') return
@@ -148,12 +164,18 @@ export class ZoomPan {
     if (this._pointers.size === 2) {
       this._pinchDistance = this._currentPinchDistance()
       this._dragging = false
+      this._rotating = false
     } else {
       this._dragging = true
       this._moved = 0
       this._last = pointerPosition(this.container, event)
       this._velocity = [0, 0]
       this.container.style.cursor = 'grabbing'
+      // Decided once per gesture, not once per move: a projection change
+      // mid-drag is not a thing, and re-asking every frame would let a drag
+      // switch meaning underneath the reader's hand.
+      this._rotating = this.globe?.enabled ?? false
+      if (this._rotating) this.globe?.start(this._last)
     }
 
     window.addEventListener('pointermove', this._onPointerMove)
@@ -181,14 +203,16 @@ export class ZoomPan {
       return
     }
 
-    if (!this._dragging || this.options.pan?.enabled === false) return
+    if (!this._dragging) return
+    if (!this._rotating && this.options.pan?.enabled === false) return
 
     const dx = point[0] - this._last[0]
     const dy = point[1] - this._last[1]
     this._moved += Math.abs(dx) + Math.abs(dy)
     this._velocity = [dx, dy]
     this._last = point
-    this.camera.panBy(dx, dy)
+    if (this._rotating) this.globe?.move(point)
+    else this.camera.panBy(dx, dy)
   }
 
   private _handlePointerUp(event: PointerEvent): void {
@@ -211,13 +235,23 @@ export class ZoomPan {
     if (this._pointers.size > 0) return
 
     const wasDragging = this._dragging
+    const wasRotating = this._rotating
     this._dragging = false
+    this._rotating = false
     this.container.style.cursor = 'grab'
     this._detachWindowListeners()
 
-    if (wasDragging && this._moved > CLICK_SLOP) {
+    if (!wasDragging) return
+
+    if (wasRotating) {
+      // Released regardless of distance, so a grab that never moved still tidies
+      // up the anchor it took.
+      this.globe?.release()
+    }
+    if (this._moved > CLICK_SLOP) {
       // A pan that ends over a feature must not also count as a click on it.
       this._swallowClick = true
+      if (wasRotating) return
       if (this.options.pan?.inertia !== false && !prefersReducedMotion()) this._startInertia()
       this.emit('panEnd')
     }
@@ -357,6 +391,9 @@ export class ZoomPan {
   }
 
   private _stopInertia(): void {
+    // The globe's glide is momentum too, and every caller of this means "stop
+    // whatever is still moving before I start something new".
+    this.globe?.stop()
     if (this._inertiaRaf !== null) {
       cancelAnimationFrame(this._inertiaRaf)
       this._inertiaRaf = null

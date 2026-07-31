@@ -37,9 +37,9 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Data | GeoJSON, TopoJSON, bare geometry, feature arrays; automatic winding repair; join-key auto-detection |
 | Joins | Explicit `joinBy`, mismatch diagnostics with suggestions, FIPS leading-zero repair, opt-in `fuzzyJoin` |
 | Scales | quantile, equal interval, Jenks, threshold, linear, log, sqrt, ordinal; OkLab-sampled ramps; 17 palettes; automatic diverging selection; square-root size scales with nested-circle legends |
-| Interaction | Anchored wheel zoom, inertial pan, pinch, double-click zoom, hover states, click and box selection with dimming, cross-map linked selection&nbsp;†, legend class muting, drilldown with automatic parent detection and a breadcrumb&nbsp;† |
-| Camera | `flyTo` (Van Wijk zoom-and-pan path), `easeTo`, `jumpTo`, `fitBounds`, `frameFeature`, `resetView`, interruptible and retargeting |
 | Components | Classed, gradient and nested-circle legends, HTML tooltips with edge flipping, collision-avoiding labels with halos, editorial annotations&nbsp;† |
+| Interaction | Anchored wheel zoom, inertial pan, pinch, double-click zoom, versor globe dragging on `orthographic`, hover states, click and box selection with dimming, cross-map linked selection&nbsp;†, legend class muting, drilldown with automatic parent detection and a breadcrumb&nbsp;† |
+| Camera | `flyTo` (Van Wijk zoom-and-pan path), `easeTo`, `jumpTo`, `fitBounds`, `frameFeature`, `resetView`, interruptible and retargeting; on azimuthal projections a move to a place turns the sphere (quaternion slerp) instead of panning |
 | Accessibility | ARIA roles, auto-generated description, roving-tabindex keyboard navigation, live-region announcements, optional data table, `prefers-reduced-motion` |
 | Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 66 kB gzipped core |
 | Frameworks | [`react-apexmaps`](wrappers/react), [`vue-apexmaps`](wrappers/vue) and [`ngx-apexmaps`](wrappers/angular), typed against this package's own options |
@@ -126,7 +126,7 @@ broken by an unrelated one:
 | [joins](examples/joins.html) | A failing join explained, then repaired |
 | [drilldown](examples/drilldown.html) | States into counties, and back out |
 | [selection](examples/selection.html) | Box selection brushing a linked pair of maps |
-| [camera](examples/camera.html) | flyTo, easeTo, fitBounds, interruption |
+| [camera](examples/camera.html) | flyTo, easeTo, fitBounds, interruption, flying across a globe |
 | [a11y](examples/a11y.html) | Keyboard navigation, generated description, data table |
 | [theming](examples/theming.html) | Dark mode, CSS custom properties, responsive rules |
 | [extending](examples/extending.html) | registerMap with a floor plan, registerPalette, a loader function |
@@ -469,6 +469,68 @@ click on whatever it landed on**. The browser fires `click` after any drag that 
 same element, so without suppressing it, panning the map would select the country under the release,
 and dragging a box across a feature with a drilldown would drill into it.
 
+## Spinning the globe
+
+On `orthographic` a drag turns the sphere. It has to: panning a globe slides a picture of the earth
+around inside its box and leaves the far hemisphere permanently unreachable, which reads as a broken
+map rather than a choice. Wheel zoom, pinch and double-click still belong to the camera, so the two
+gestures compose: zoom into the Mediterranean, then spin to the Pacific.
+
+```js
+interaction: {
+  rotate: {
+    enabled: 'auto',   // default: globes spin, flat maps pan. true forces it on any
+                       // projection that can rotate and invert; false gives the drag back
+    inertia: true,     // defaults to pan.inertia
+  },
+},
+```
+
+```js
+map.rotateTo([-25, -18])   // absolute [lambda, phi, gamma], as a drag would leave it
+map.rotation               // where it is now
+map.on('rotate', ({ rotate }) => {})     // while turning
+map.on('rotateEnd', ({ rotate }) => {})  // once the glide settles
+await map.resetView()      // the camera *and* the rotation the map opened at
+```
+
+The rotation is **versor-based** (Bostock and Davies): the point under the cursor stays under the
+cursor for the whole drag, at any latitude, however far the globe has already turned. Accumulating
+Euler angles instead is a dozen lines shorter and immediately recognisable as the cheap version,
+because near the poles a horizontal drag whips the sphere around. Dragging past the edge of the disc
+keeps turning rather than freezing, and longitude wraps, so the spin runs through 360 degrees and out
+the other side.
+
+Rotation is a projection change, not a camera transform, so unlike a pan it reprojects every
+coordinate on the map. The work is coalesced to one pass per animation frame, and it is the reason
+this is opt-out on flat maps: on a Mercator a drag should move the map, and it still does.
+
+### Flying to a place on a globe
+
+The camera moves know this too. On an **azimuthal** projection (`orthographic`, `stereographic`,
+`gnomonic`, both `azimuthal*`) a `center` target is a rotation rather than a pan, because the camera
+is a screen-space transform and no amount of translating it reaches the far side of a sphere:
+
+```js
+// Facing Brazil. India is behind the planet, and this turns the globe to it.
+await map.camera.flyTo({ center: [79, 22] })
+await map.camera.easeTo({ center: [79, 22], duration: 600 })
+map.camera.jumpTo({ center: [79, 22] })
+await map.frameFeature('Australia')   // turns first, then frames what it finds
+```
+
+The turn interpolates as a **quaternion slerp**, so it takes the short way round (a move across the
+antimeridian goes 20 degrees, not 340), holds a steady angular pace, and does not swing out sideways
+crossing a pole the way interpolating `[lambda, phi]` component-wise does. `flyTo` derives its
+duration from the angle covered, the rotation analogue of the Van Wijk path length, and when a move
+both turns and zooms the longer of the two sets the pace so they land together. `easeTo` keeps its
+fixed duration, rotation included, because a caller who asked for 400 ms asked for 400 ms.
+
+Everything laid out flat is untouched: on Equal Earth, Mercator, the conics and Albers USA a
+`center` is the same pan it has always been, to the pixel. `viewport.supportsRecentre()` is the
+switch, and the conics are deliberately on the flat side of it: they are defined by their standard
+parallels rather than by a centre, so turning one would re-skew the whole map under the reader.
+
 ## Opinionated defaults, and why
 
 - **Equal Earth, not Web Mercator.** Most developers never choose a projection, so the default has to
@@ -536,6 +598,7 @@ const map = new ApexMaps(element, {
   interaction: {
     zoom: { enabled: true, wheel: true },
     pan: { enabled: true, inertia: true },
+    rotate: { enabled: 'auto' },    // a drag spins a globe instead of panning it
     selection: { multiple: true, rectangle: true, modifier: 'shift' },
   },
   link: { group: 'dashboard' },   // brush this map, brush the others (licensed)
@@ -546,7 +609,8 @@ const map = new ApexMaps(element, {
 
 await map.render()
 
-map.camera.flyTo({ center: [2.35, 48.85], zoom: 8 })
+map.camera.flyTo({ center: [2.35, 48.85], zoom: 8 })   // a pan here, a rotation on a globe
+map.rotateTo([-25, -18])       // turns the sphere, on a projection that can be turned
 await map.frameFeature('FRA', { padding: 40 })
 await map.drillTo('FRA')       // as a click would; drillUp() / drillUp(Infinity) climb back
 map.setSelection(['FRA', 'DEU'])

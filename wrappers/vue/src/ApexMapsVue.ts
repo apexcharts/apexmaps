@@ -45,6 +45,8 @@ const EVENTS = [
   'legendToggle',
   'zoom',
   'panEnd',
+  'rotate',
+  'rotateEnd',
 ] as const satisfies readonly ApexMapsEventName[]
 
 /**

@@ -647,6 +647,19 @@ export interface InteractionOptions {
     step?: number
   }
   pan?: { enabled?: boolean; inertia?: boolean }
+  /**
+   * Spin the sphere on drag instead of panning the plane.
+   *
+   * `'auto'` (the default) turns it on for globe projections (`orthographic`)
+   * and leaves every other projection panning, since on a flat map a drag means
+   * "move the map". `true` forces it on for any projection that can rotate and
+   * invert, which is how a stereographic or azimuthal view opts in; `false`
+   * gives the drag back to panning.
+   *
+   * `inertia` defaults to `pan.inertia`, so a map that opted out of momentum
+   * once does not have to opt out twice.
+   */
+  rotate?: { enabled?: boolean | 'auto'; inertia?: boolean }
   selection?: SelectionOptions
   /**
    * Proximity hit assistance for point marks (bubbles, markers, clusters): a
@@ -851,6 +864,10 @@ export interface ApexMapsEventMap {
   legendToggle: { classIndex: number; instance: unknown }
   zoom: { k: number }
   panEnd: undefined
+  /** The globe turned. `rotate` is the projection's `[lambda, phi, gamma]`. */
+  rotate: { rotate: [number, number, number] }
+  /** The globe came to rest, after any inertial glide. */
+  rotateEnd: { rotate: [number, number, number] }
 }
 
 export type ApexMapsEventName = keyof ApexMapsEventMap

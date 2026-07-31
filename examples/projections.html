@@ -18,6 +18,11 @@
           default because a world thematic map in Web Mercator overstates high-latitude area by an
           order of magnitude, and most callers never choose a projection at all.
         </p>
+        <p class="note">
+          Pick the globe and <strong>drag it</strong>. On an orthographic a drag turns the sphere
+          rather than panning it, and the point you grabbed stays under the cursor at any latitude.
+          Wheel zoom still belongs to the camera, so the two compose.
+        </p>
         <div class="row">
           <select id="projection">
             <option value="equalEarth">Equal Earth (equal-area)</option>
@@ -89,6 +94,16 @@ geo: { projection: { name: 'conicEqualArea', rotate: [-100, 0], parallels: [50, 
               .then(() => {
                 status.textContent = `${map.viewport.projectionName}${rotation ? `, rotated ${rotation}°` : ''}`
               })
+
+          // A drag on the globe is the same rotation the button applies, so the
+          // two have to agree: the button continues from wherever the drag left
+          // the sphere rather than snapping back to its own tally.
+          map.on('rotate', ({ rotate }) => {
+            status.textContent = `${map.viewport.projectionName}, rotated ${Math.round(rotate[0])}°`
+          })
+          map.on('rotateEnd', ({ rotate }) => {
+            rotation = Math.round(rotate[0])
+          })
 
           document.getElementById('projection').addEventListener('change', (event) => {
             projection = event.target.value

@@ -157,6 +157,8 @@ export function defaults(): ResolvedOptions {
         step: 1.6,
       },
       pan: { enabled: true, inertia: true },
+      /** `'auto'`: a drag spins the globe projections and pans everything else. */
+      rotate: { enabled: 'auto' },
       selection: { enabled: true, multiple: true },
       /** Nearest point mark within this many px catches the pointer. */
       nearest: { enabled: true, radius: 20 },

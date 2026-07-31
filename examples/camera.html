@@ -37,6 +37,27 @@
       </div>
 
       <div class="card">
+        <h2 style="margin-top: 0">On a globe, a move to a place is a rotation</h2>
+        <p class="note">
+          The camera is a screen-space transform, and no amount of translating it can reach the far side
+          of a sphere. So on an azimuthal projection the same <code>flyTo({ center })</code> turns the
+          globe instead of panning it: this one opens facing Brazil, and India is behind the planet.
+          The rotation interpolates as a quaternion slerp, which is what makes it take the short way
+          round and hold a steady angular pace rather than wobbling, and its duration comes from the
+          angle covered, so a hop to Iceland does not take as long as a flip to the antipodes. Drag it
+          too: the gestures and the camera agree about where the globe is.
+        </p>
+        <div class="row">
+          <button data-globe="79,22">flyTo India</button>
+          <button data-globe="139.69,35.69">flyTo Japan</button>
+          <button data-globe="-149.5,64.2">flyTo Alaska</button>
+          <button id="globe-frame">frameFeature('Australia')</button>
+          <span class="label" id="globe-status"></span>
+        </div>
+        <div id="globe"></div>
+      </div>
+
+      <div class="card">
         <h2 style="margin-top: 0">Interruptible, and retargeting</h2>
         <p class="note">
           Click two flights in quick succession. The second does not queue behind the first and does not
@@ -51,7 +72,10 @@ map.camera.easeTo({ center: [2.35, 48.86], zoom: 8, duration: 400, ease: 'cubicI
 map.camera.jumpTo({ zoom: 4 })
 map.camera.fitBounds(worldBounds, { padding: 40, maxZoom: 12 })
 await map.frameFeature('France', { padding: 40 })
-await map.resetView()</pre
+await map.resetView()
+
+// Same call, orthographic projection: turns the sphere rather than panning it.
+await globe.camera.flyTo({ center: [79, 22] })</pre
         >
         <p class="note" style="margin-top: 10px">
           Every one of these honours <code>prefers-reduced-motion</code> by jumping instead of animating,
@@ -91,7 +115,61 @@ await map.resetView()</pre
         status.textContent = `${what} · k ${k.toFixed(2)}, x ${Math.round(x)}, y ${Math.round(y)}`
       }
 
-      Demo.ready(map.render().then(() => report('initial fit')))
+      // A second map, so the flat case above stays the reference for what a
+      // pan-based move looks like and this one shows what changes on a sphere.
+      const globeStatus = document.getElementById('globe-status')
+      const globe = Demo.watch(
+        'camera-globe',
+        new ApexMaps(document.getElementById('globe'), {
+          chart: { height: 460 },
+          geo: {
+            map: 'world/countries@110m',
+            // Facing Brazil. India, on the other side of the planet, is not on
+            // screen at all until the globe turns.
+            projection: { name: 'orthographic', rotate: [53, 10], clipAngle: 90 },
+            view: { fit: 'world' },
+            sphere: { show: true },
+            graticule: { show: true },
+          },
+          legend: { show: false },
+          series: [
+            {
+              name: 'Index',
+              joinBy: 'name',
+              data: Demo.rows(['India', 'Japan', 'Brazil', 'Australia', 'Kenya', 'Canada']).map(
+                ({ key, value }) => ({ name: key, value }),
+              ),
+              scale: { palette: 'teal' },
+            },
+          ],
+        }),
+      )
+
+      const facing = () => {
+        const [lon, lat] = globe.viewport.subObserver()
+        return `facing ${lon.toFixed(1)}°, ${lat.toFixed(1)}°`
+      }
+
+      Demo.ready(
+        Promise.all([
+          map.render().then(() => report('initial fit')),
+          globe.render().then(() => (globeStatus.textContent = facing())),
+        ]),
+      )
+
+      for (const button of document.querySelectorAll('[data-globe]')) {
+        button.addEventListener('click', async () => {
+          const [lon, lat] = button.dataset.globe.split(',').map(Number)
+          globeStatus.textContent = `turning to ${button.textContent.replace('flyTo ', '')}…`
+          await globe.camera.flyTo({ center: [lon, lat] })
+          globeStatus.textContent = facing()
+        })
+      }
+      document.getElementById('globe-frame').addEventListener('click', async () => {
+        await globe.frameFeature('Australia', { padding: 60 })
+        globeStatus.textContent = `${facing()}, framed 'Australia'`
+      })
+      globe.on('rotateEnd', () => (globeStatus.textContent = facing()))
 
       for (const button of document.querySelectorAll('[data-fly]')) {
         button.addEventListener('click', async () => {

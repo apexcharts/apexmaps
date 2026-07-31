@@ -29,6 +29,7 @@ import type { MapMeta } from './core/MapRegistry'
 import { normalizeGeo } from './geo/GeoData'
 import { Viewport } from './geo/Viewport'
 import { Camera } from './geo/Camera'
+import type { Rotation } from './geo/Versor'
 import { registerProjection, listProjections, isCustomProjection } from './geo/Projections'
 import type { ProjectionFactory } from './geo/Projections'
 import { SvgRenderer } from './renderers/SvgRenderer'
@@ -63,6 +64,7 @@ import type { Crumb } from './components/Breadcrumb'
 import { scopeToParent } from './data/Hierarchy'
 import { ZoomPan } from './interaction/ZoomPan'
 import type { SelectBox, SelectBoxPhase } from './interaction/ZoomPan'
+import { GlobeRotation } from './interaction/GlobeRotation'
 import { registerPalette, listPalettes, getPalette } from './scales/Palettes'
 import type { Palette } from './scales/Palettes'
 import { html, remove, resolveSize, pointerPosition, hasDom } from './utils/dom'
@@ -245,6 +247,7 @@ class ApexMaps extends BaseChart {
   annotations: Annotations | null = null
   a11y: A11y | null = null
   zoomPan: ZoomPan | null = null
+  globe: GlobeRotation | null = null
   breadcrumb: Breadcrumb | null = null
 
   private _listeners: Partial<Record<string, ((payload: never) => void)[]>> = {}
@@ -270,6 +273,9 @@ class ApexMaps extends BaseChart {
   private _resizeObserver: ResizeObserver | null = null
   private _renderRaf: number | null = null
   private _resizeRaf: number | null = null
+  private _rotateRaf: number | null = null
+  /** The rotation the map opened at, which `resetView` returns a globe to. */
+  private _initialRotation: Rotation = [0, 0, 0]
   private _enterTimer: ReturnType<typeof setTimeout> | null = null
   private _attribution: HTMLElement | null = null
   private _a11yMounted = false
@@ -441,7 +447,12 @@ class ApexMaps extends BaseChart {
     }
   }
 
-  private _buildViewport(): void {
+  /**
+   * @param keepRotation Restore a spin the reader had applied. Passed by the
+   *   resize path only: a *projection* change is a new starting point and takes
+   *   the rotation the new spec asked for.
+   */
+  private _buildViewport(keepRotation?: Rotation): void {
     if (!this.geo) return
     const { geo } = this.config
 
@@ -464,6 +475,13 @@ class ApexMaps extends BaseChart {
     this.viewport.setProjection(
       asked.projection ?? recommended.projection ?? geo.projection ?? 'equalEarth',
     )
+    // What `resetView` returns a spun globe to. Read after `setProjection`, so it
+    // reflects what the projection actually took rather than what the spec said.
+    this._initialRotation = this.viewport.rotation
+    // Before the fit, not after: the fit measures projected geometry, so a
+    // rotation applied afterwards would leave the map framed for a sphere in a
+    // different orientation.
+    if (keepRotation) this.viewport.setRotation(keepRotation)
 
     const fit = asked.view?.fit ?? recommended.bounds ?? geo.view?.fit ?? 'data'
     const padding = (geo.view?.padding ?? 16) as Padding
@@ -475,15 +493,7 @@ class ApexMaps extends BaseChart {
       this.viewport.fit(this.geo.collection, padding)
     }
 
-    // Anchors live in a side map keyed by feature index rather than on the feature
-    // objects, which hold the caller's properties and geometry. They are
-    // world-space, so they survive camera changes and only need recomputing when
-    // the projection changes.
-    this.anchors = new Map()
-    for (const feature of this.geo.features) {
-      const anchor = labelAnchor(this.viewport, feature)
-      if (anchor) this.anchors.set(feature.index, anchor)
-    }
+    this._rebuildAnchors()
 
     if (!this.renderer) {
       this.renderer = new SvgRenderer({ viewport: this.viewport })
@@ -501,6 +511,11 @@ class ApexMaps extends BaseChart {
       this.camera = new Camera({
         viewport: this.viewport,
         onChange: () => this._onCameraChange(),
+        // Redraws in the same frame rather than the next one. A camera move is
+        // already driven by `requestAnimationFrame`, so there is no burst to
+        // coalesce, and deferring would leave the affine transform one frame
+        // ahead of the geometry it is transforming.
+        onRotate: () => this._onRotate(true),
         options: {
           minZoom: this.config.interaction.zoom?.min ?? 0.8,
           maxZoom: this.config.interaction.zoom?.max ?? 4096,
@@ -716,6 +731,26 @@ class ApexMaps extends BaseChart {
     this._selectRenderer()
     this._applyMotionVars()
     this._drawBaseLayers()
+    this._drawGeometry()
+
+    this._bindMarkEvents()
+    this._drawOverlay()
+    this._drawLegend()
+    this._drawAttribution()
+    this._setupA11y()
+  }
+
+  /**
+   * Draw the world-space layers: features, symbols, marks and paths.
+   *
+   * Split out of `_draw` because it is also the whole of what a globe rotation
+   * has to redo. A spin changes every projected coordinate on the map, but it
+   * changes nothing about the legend, the attribution or the accessible
+   * description, and rebuilding those sixty times a second is how a smooth
+   * gesture turns into a janky one.
+   */
+  private _drawGeometry(): void {
+    if (!this.renderer || !this.geo) return
 
     // Whichever tier is active owns the world-space geometry layers, and the
     // other must be left holding nothing: two live copies of 3,231 counties
@@ -790,12 +825,6 @@ class ApexMaps extends BaseChart {
     // Nothing is on screen until the first paint: unlike SVG, appending to the
     // canvas layer list draws nothing by itself.
     canvas?.repaint()
-
-    this._bindMarkEvents()
-    this._drawOverlay()
-    this._drawLegend()
-    this._drawAttribution()
-    this._setupA11y()
   }
 
   private _drawBaseLayers(): void {
@@ -1118,12 +1147,23 @@ class ApexMaps extends BaseChart {
       )
     }
 
+    // Rebuilt alongside ZoomPan so it reads the live interaction options, and
+    // stopped first so a glide from the previous configuration cannot outlive it.
+    this.globe?.stop()
+    this.globe = new GlobeRotation({
+      viewport: this.viewport,
+      options: this.config.interaction,
+      onChange: () => this._onRotate(),
+      onEnd: () => this.emit('rotateEnd', { rotate: this.viewport.rotation }),
+    })
+
     this.zoomPan = new ZoomPan({
       container: this.plot,
       camera: this.camera,
       options: this.config.interaction,
       emit: (event, payload) => this.emit(event as ApexMapsEventName, payload as never),
       onSelectBox: (box, phase, additive) => this._handleSelectBox(box, phase, additive),
+      globe: this.globe,
     })
     this.zoomPan.attach()
   }
@@ -2443,13 +2483,16 @@ class ApexMaps extends BaseChart {
     if (!this.rendered) return
     const previousCenter = this.viewport.center()
     const previousZoom = this.viewport.camera.k
+    // A resize must not un-spin the globe, for the same reason it must not
+    // discard where the reader had navigated to.
+    const previousRotation = this.viewport.rotatable ? this.viewport.rotation : undefined
 
     this._measure()
     this.renderer?.resize(this.viewport.width, this.viewport.height)
     this.canvas?.resize(this.viewport.width, this.viewport.height)
     this.labels?.destroy()
     this.annotations?.destroy()
-    this._buildViewport()
+    this._buildViewport(previousRotation)
     this._reprojectSeries()
 
     // Preserve the reader's position across a resize: refitting to the data would
@@ -2466,6 +2509,72 @@ class ApexMaps extends BaseChart {
       width: this.viewport.width,
       height: this.viewport.height,
     })
+  }
+
+  /**
+   * Recompute every feature's label anchor.
+   *
+   * Anchors live in a side map keyed by feature index rather than on the feature
+   * objects, which hold the caller's properties and geometry. They are
+   * world-space, so they survive camera changes and only need recomputing when
+   * the projection changes, which includes the globe turning.
+   */
+  private _rebuildAnchors(): void {
+    this.anchors = new Map()
+    if (!this.geo) return
+    for (const feature of this.geo.features) {
+      const anchor = labelAnchor(this.viewport, feature)
+      if (anchor) this.anchors.set(feature.index, anchor)
+    }
+  }
+
+  /**
+   * Redraw after the sphere has turned.
+   *
+   * A rotation is a projection change, so unlike a pan or a zoom it invalidates
+   * every projected coordinate: paths, arc geometry, bubble positions, label
+   * anchors and the canvas hit index all have to be rebuilt. That is the price
+   * of the gesture and there is no cheaper correct version, so the work is
+   * coalesced to one pass per frame instead: a 120 Hz mouse delivers pointer
+   * moves faster than the display can show them, and reprojecting twice for one
+   * painted frame is pure waste.
+   *
+   * @param immediate Redraw now rather than on the next frame. For a camera
+   *   move, which is already once per frame and has to stay in step with the
+   *   affine transform applied straight after it.
+   */
+  private _onRotate(immediate = false): void {
+    if (this._destroyed || !this.rendered) return
+    this.emit('rotate', { rotate: this.viewport.rotation })
+
+    if (immediate || typeof requestAnimationFrame === 'undefined') {
+      // A deferred pass would only repeat this one against the same rotation.
+      if (this._rotateRaf !== null) {
+        cancelAnimationFrame(this._rotateRaf)
+        this._rotateRaf = null
+      }
+      this._redrawRotated()
+      return
+    }
+
+    if (this._rotateRaf !== null) return
+    this._rotateRaf = requestAnimationFrame(() => {
+      this._rotateRaf = null
+      if (this._destroyed) return
+      this._redrawRotated()
+    })
+  }
+
+  private _redrawRotated(): void {
+    this._reprojectSeries()
+    this._rebuildAnchors()
+    this._drawBaseLayers()
+    this._drawGeometry()
+    // Marks and symbols may have been created or pruned as geography crossed the
+    // limb, and the delegated listeners live on the layer, so this is a no-op
+    // whenever the layers already exist.
+    this._bindMarkEvents()
+    this._drawOverlay()
   }
 
   /** Rebuild projection-dependent geometry after a projection or size change. */
@@ -2811,19 +2920,71 @@ class ApexMaps extends BaseChart {
     } = {},
   ): Promise<void> {
     const feature = this.geo?.features.find((f) => f.key === key)
-    if (!feature || !this.camera) return
+    if (!feature?.geometry || !this.camera) return
     // Measure the normalized geometry, never `raw`: raw may carry unrepaired
     // winding, which d3-geo reads as the inverse of the intended polygon.
-    const bounds = this.viewport.measure({
-      type: 'Feature',
-      geometry: feature.geometry,
-      properties: {},
-    })
+    const geo = { type: 'Feature' as const, geometry: feature.geometry, properties: {} }
+
+    if (this.viewport.supportsRecentre()) {
+      // On a globe the feature may be behind the planet, where it projects to
+      // nothing and there is no box to fit. So the turn is decided first, from
+      // geography rather than pixels, and the framing is measured against the
+      // sphere as it will be once the turn lands.
+      const center = Viewport.centroid(geo)
+      if (!center.every(Number.isFinite)) return
+      const rotation = this.viewport.rotationFor(center)
+      const bounds = this.viewport.underRotation(rotation, () => this.viewport.measure(geo))
+      if (!bounds) return
+      const next = this.viewport.underRotation(rotation, () =>
+        this.viewport.cameraForBounds(bounds, {
+          padding: options.padding ?? 24,
+          maxZoom: this.camera?.options.maxZoom,
+        }),
+      )
+      const { transition = 'fly', duration } = options
+      const move = { center, zoom: next.k, duration }
+      if (transition === 'jump') return void this.camera.jumpTo(move)
+      if (transition === 'ease') return this.camera.easeTo(move)
+      return this.camera.flyTo(move)
+    }
+
+    const bounds = this.viewport.measure(geo)
     if (!bounds) return
     await this.camera.fitBounds(bounds, options)
   }
 
-  /** Reset the camera to the initial fit. */
+  /**
+   * The projection's rotation, `[lambda, phi, gamma]` in degrees. `[0, 0, 0]`
+   * on a projection that cannot rotate.
+   */
+  get rotation(): [number, number, number] {
+    const [lambda, phi, gamma] = this.viewport.rotation
+    return [lambda, phi, gamma]
+  }
+
+  /**
+   * Turn the globe to an absolute rotation, as a drag would.
+   *
+   * Note that this is not the camera: it moves the sphere under the projection
+   * rather than the viewer over the map, so it reprojects rather than
+   * transforms. On a projection that cannot rotate it does nothing.
+   */
+  rotateTo(angles: readonly [number, number, number?]): this {
+    if (!this.viewport.rotatable) return this
+    this.globe?.stop()
+    this.viewport.setRotation([angles[0] ?? 0, angles[1] ?? 0, angles[2] ?? 0])
+    if (this.rendered) {
+      this._redrawRotated()
+      this.emit('rotate', { rotate: this.viewport.rotation })
+    }
+    return this
+  }
+
+  /**
+   * Reset the camera to the initial fit, and a spun globe to the rotation it
+   * opened at: on an orthographic the spin *is* where the reader has navigated
+   * to, so resetting the camera alone would leave the map where they left it.
+   */
   async resetView(
     options: {
       padding?: Padding
@@ -2832,6 +2993,9 @@ class ApexMaps extends BaseChart {
     } = {},
   ): Promise<void> {
     if (!this.camera || !this.geo) return
+    if (this.viewport.rotatable && !sameRotation(this.viewport.rotation, this._initialRotation)) {
+      this.rotateTo(this._initialRotation)
+    }
     const bounds = this.viewport.measure(this.geo.collection)
     if (!bounds) return
     await this.camera.fitBounds(bounds, {
@@ -3242,8 +3406,12 @@ class ApexMaps extends BaseChart {
     this._destroyed = true
     if (this._renderRaf !== null) cancelAnimationFrame(this._renderRaf)
     if (this._resizeRaf !== null) cancelAnimationFrame(this._resizeRaf)
+    if (this._rotateRaf !== null) cancelAnimationFrame(this._rotateRaf)
     if (this._enterTimer !== null) clearTimeout(this._enterTimer)
     this.camera?.stop()
+    // Before `detach`, which stops it too: a glide holds a frame callback that
+    // would otherwise redraw a map that no longer exists.
+    this.globe?.stop()
     this.zoomPan?.detach()
     this._resizeObserver?.disconnect()
     this.element.removeEventListener('keydown', this._onKeyDown, true)
@@ -3460,6 +3628,11 @@ function bboxToPolygon([west, south, east, north]: [number, number, number, numb
       ],
     ],
   }
+}
+
+/** Rotations equal to within a hundredth of a degree, which is invisible. */
+function sameRotation(a: Rotation, b: Rotation): boolean {
+  return a.every((angle, i) => Math.abs(angle - b[i]) < 0.01)
 }
 
 // Default-only on purpose. This module is the entry for the IIFE and UMD builds,
