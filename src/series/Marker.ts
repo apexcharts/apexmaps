@@ -71,6 +71,16 @@ export class MarkerSeries {
   readonly items: MarkerItem[] = []
   readonly colorScale: Scale | null = null
   readonly join: JoinResult | null = null
+  /**
+   * Categories switched off from the legend, by name rather than by legend index.
+   *
+   * A marker legend is categorical, so what a click means is "hide this kind", and
+   * a kind is a string on the datum. Holding the index instead would cost a lookup
+   * through `colorScale.categories` for every marker on every draw, and would go
+   * wrong the moment the category set changes under an `updateSeries` while the
+   * legend's own muted state survives it.
+   */
+  readonly mutedCategories = new Set<string>()
 
   /**
    * Clusters for the level they were computed at, so a pan never recomputes.
@@ -245,17 +255,23 @@ export class MarkerSeries {
     const level = this.levelFor(zoom)
     if (this.cachedValid && level === this.cachedLevel) return this.cached
 
+    // A marker the legend has switched off is not clustered, not merely not
+    // drawn: it must not be counted into a circle, and it must not pull that
+    // circle's centre of mass towards itself either. Indices stay the item's own,
+    // so `members` keeps resolving to data.
     if (level === null) {
       this.cached = this.items
         .map((item, i) =>
-          item.world
+          item.world && !this.isMuted(item)
             ? { world: item.world, members: [i], count: 1, bounds: [item.world, item.world] }
             : null,
         )
         .filter(Boolean) as Cluster[]
     } else {
       const points = this.items
-        .map((item, i) => (item.world ? { index: i, world: item.world } : null))
+        .map((item, i) =>
+          item.world && !this.isMuted(item) ? { index: i, world: item.world } : null,
+        )
         .filter(Boolean) as { index: number; world: WorldPoint }[]
 
       this.cached = clusterPoints(points, {
@@ -345,8 +361,35 @@ export class MarkerSeries {
       .map((entry) => ({ label: String(entry.label), color: entry.color }))
   }
 
-  toggleClass(): boolean {
-    return false
+  /** Whether the legend has switched off the category this marker belongs to. */
+  isMuted(item: MarkerItem): boolean {
+    if (!this.mutedCategories.size || item.category == null) return false
+    return this.mutedCategories.has(item.category)
+  }
+
+  /**
+   * Switch a legend category off, or back on. Returns the new muted state.
+   *
+   * The cluster cache goes with it, and that is the whole substance of this
+   * method. Clusters are computed from `items` and cached per level, so filtering
+   * only at the drawing stage would leave a cluster of twelve still saying twelve
+   * with five of its members hidden. A wrong number on the map is worse than a
+   * legend that does nothing, which is what this used to be.
+   */
+  toggleClass(classIndex: number): boolean {
+    const category = this.colorScale?.categories[classIndex]
+    if (category == null) return false
+
+    let muted: boolean
+    if (this.mutedCategories.has(category)) {
+      this.mutedCategories.delete(category)
+      muted = false
+    } else {
+      this.mutedCategories.add(category)
+      muted = true
+    }
+    this.cachedValid = false
+    return muted
   }
 
   describe(item: MarkerItem): string {

@@ -290,6 +290,115 @@ describe('marker series', () => {
   })
 })
 
+/*
+ * A marker legend is categorical: `colorBy` runs an ordinal scale and the legend
+ * draws one `<button aria-pressed>` per category. Clicking one used to dim the
+ * swatch and leave the map alone, because `toggleClass` returned false.
+ *
+ * The substance here is the count. Clusters are computed from `items` and cached
+ * per level, so a mute that filtered only at the drawing stage would leave a
+ * cluster of twelve saying twelve with five of its members gone, and a wrong
+ * number on the map is worse than an inert button.
+ */
+describe('legend categories switch markers off', () => {
+  /** Twenty points in one dense group, alternating between two kinds. */
+  const mixed = Array.from({ length: 20 }, (_, i) => ({
+    name: `p${i}`,
+    lon: -30 + (i % 5) * 0.2,
+    lat: 10 + Math.floor(i / 5) * 0.2,
+    kind: i % 2 === 0 ? 'depot' : 'shop',
+  }))
+
+  const swatches = () => [...el.querySelectorAll<HTMLButtonElement>('button.apexmaps-legend-item')]
+  const counts = () =>
+    [...el.querySelectorAll('text.apexmaps-mark-label')].map((t) => Number(t.textContent))
+
+  it('hides one category and leaves the other, then puts it back', async () => {
+    await render({
+      series: [{ type: 'marker', data: mixed, colorBy: 'kind' }],
+      legend: { show: true },
+    })
+    expect(swatches()).toHaveLength(2)
+    expect(markGroups()).toHaveLength(20)
+
+    swatches()[0].click()
+    expect(markGroups()).toHaveLength(10)
+    expect(swatches()[0].getAttribute('aria-pressed')).toBe('false')
+
+    swatches()[0].click()
+    expect(markGroups()).toHaveLength(20)
+  })
+
+  it('recounts the clusters instead of leaving a number that is now a lie', async () => {
+    await render({
+      series: [{ type: 'marker', data: mixed, colorBy: 'kind', cluster: {} }],
+      legend: { show: true },
+    })
+    const before = counts()
+    expect(before.length).toBeGreaterThan(0)
+    const total = before.reduce((a, b) => a + b, 0)
+    expect(total).toBe(20)
+
+    swatches()[0].click()
+    // Ten of the twenty are gone, so the circles must add up to ten. Filtering at
+    // the drawing stage alone would leave this at twenty.
+    expect(counts().reduce((a, b) => a + b, 0)).toBe(10)
+
+    swatches()[0].click()
+    expect(counts().reduce((a, b) => a + b, 0)).toBe(20)
+  })
+
+  it('keeps a muted member out of the centre of mass, not just out of the count', async () => {
+    // One kind sits well east of the other, so a cluster that still weighed the
+    // hidden points would sit visibly to the right of where it belongs.
+    const split = [
+      ...Array.from({ length: 6 }, (_, i) => ({
+        name: `w${i}`,
+        lon: -30 + i * 0.1,
+        lat: 10,
+        kind: 'west',
+      })),
+      ...Array.from({ length: 6 }, (_, i) => ({
+        name: `e${i}`,
+        lon: -28 + i * 0.1,
+        lat: 10,
+        kind: 'east',
+      })),
+    ]
+    const m = await render({
+      series: [{ type: 'marker', data: split, colorBy: 'kind', cluster: { radius: 400 } }],
+      legend: { show: true },
+    })
+    const series = m.series[0] as MarkerSeries
+    const all = series.clusters(m.viewport.camera.k)
+    // One circle holding all twelve, or the comparison below would be between two
+    // different clusters rather than the same one recomputed.
+    expect(all).toHaveLength(1)
+    expect(all[0].count).toBe(12)
+
+    const centreOf = () => series.clusters(m.viewport.camera.k)[0].world[0]
+    const both = centreOf()
+
+    // Mute whichever category the first swatch names, then check the remaining
+    // cluster has moved away from it rather than staying put.
+    const muted = series.colorScale!.categories[0]
+    swatches()[0].click()
+    const one = centreOf()
+    expect(one).not.toBeCloseTo(both, 3)
+    expect(series.mutedCategories.has(muted)).toBe(true)
+  })
+
+  it('has nothing to toggle without colorBy', async () => {
+    const m = await render({
+      series: [{ type: 'marker', data: mixed }],
+      legend: { show: true },
+    })
+    expect(swatches()).toHaveLength(0)
+    expect((m.series[0] as MarkerSeries).toggleClass(0)).toBe(false)
+    expect(markGroups()).toHaveLength(20)
+  })
+})
+
 describe('clustered markers', () => {
   const cluster20 = Array.from({ length: 20 }, (_, i) => ({
     name: `p${i}`,
