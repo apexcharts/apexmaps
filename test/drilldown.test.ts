@@ -235,6 +235,45 @@ function once(instance, event) {
   return new Promise((resolve) => instance.on(event, resolve))
 }
 
+/** The screen box a GeoJSON object occupies, as `[x0, y0, x1, y1]`. */
+function screenBox(instance, object) {
+  const bounds = instance.viewport.measure(object)
+  const [ax, ay] = instance.viewport.worldToScreen(bounds[0])
+  const [bx, by] = instance.viewport.worldToScreen(bounds[1])
+  return [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)]
+}
+
+const centre = ([x0, y0, x1, y1]) => [(x0 + x1) / 2, (y0 + y1) / 2]
+const size = ([x0, y0, x1, y1]) => [x1 - x0, y1 - y0]
+
+const featureObject = (instance, key) => {
+  const feature = instance.geo.features.find((f) => f.key === key)
+  return { type: 'Feature', geometry: feature.geometry, properties: {} }
+}
+
+/**
+ * Observe the state a level change hands over.
+ *
+ * The camera settle is the last move either direction makes, so whatever `look`
+ * reads when it starts is the frame the reader actually sees the swap in. The
+ * spy is how a test gets at it: the transition is awaited by the call, so by the
+ * time `drillTo` resolves the handoff has already been eased away.
+ */
+function onSettle(instance, look) {
+  const easeTo = instance.camera.easeTo.bind(instance.camera)
+  const seen = []
+  instance.camera.easeTo = (target) => {
+    seen.push(look())
+    return easeTo(target)
+  }
+  return () => seen[seen.length - 1]
+}
+
+const featurePaths = () => [...el.querySelectorAll('path.apexmaps-feature')]
+/** Marks still waiting for the ripple: the seed is the only thing that writes this. */
+const seeded = () => featurePaths().filter((p) => p.getAttribute('stroke-opacity') === '0')
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
 describe('drilldown', () => {
   it('replaces the map with the clicked feature’s children', async () => {
     await render()
@@ -276,6 +315,139 @@ describe('drilldown', () => {
     expect(map.viewport.camera.k).toBe(1)
     const bounds = map.viewport.worldBounds
     expect(bounds[1][0] - bounds[0][0]).toBeGreaterThan(200)
+  })
+
+  it('lands the child level on the place the parent feature had on screen', async () => {
+    await render()
+
+    // The framing the drilldown itself does, measured up front: this is the box
+    // California occupies at the moment the swap happens.
+    await map.frameFeature('CA', { padding: 24, transition: 'jump' })
+    const parent = screenBox(map, featureObject(map, 'CA'))
+    await map.resetView({ transition: 'jump' })
+
+    const handoff = onSettle(map, () =>
+      map.mapId === 'test/counties' ? screenBox(map, map.geo.collection) : null,
+    )
+    await map.drillTo('CA')
+
+    // Same place, same size: the counties arrive where the state was rather than
+    // at their own fit, so nothing about the geography jumps across the swap. The
+    // child fills the box on its constraining axis and is centred on the other,
+    // which is what fitting one box inside another means.
+    const child = handoff()
+    expect(centre(child)[0]).toBeCloseTo(centre(parent)[0], 1)
+    expect(centre(child)[1]).toBeCloseTo(centre(parent)[1], 1)
+    expect(size(child)[0]).toBeLessThanOrEqual(size(parent)[0] + 0.5)
+    expect(size(child)[1]).toBeLessThanOrEqual(size(parent)[1] + 0.5)
+    expect(
+      Math.max(size(child)[0] / size(parent)[0], size(child)[1] / size(parent)[1]),
+    ).toBeCloseTo(1, 2)
+
+    // And it settles onto its own fit afterwards, so the reader ends where the
+    // level means to be read.
+    expect(map.viewport.camera.k).toBe(1)
+  })
+
+  it('climbs out of wherever the reader had moved to in the child', async () => {
+    await render()
+    await map.drillTo('CA')
+
+    // Deep inside one county, so the child level is nowhere near its own fit and
+    // a fixed padding would have nothing to do with what is on screen.
+    map.camera.jumpTo({ zoom: 4 })
+    const left = screenBox(map, map.geo.collection)
+
+    const handoff = onSettle(map, () =>
+      map.mapId === 'test/states' ? screenBox(map, featureObject(map, 'CA')) : null,
+    )
+    await map.drillUp()
+
+    // The state starts the climb occupying the box its counties just had.
+    const entry = handoff()
+    expect(centre(entry)[0]).toBeCloseTo(centre(left)[0], 1)
+    expect(centre(entry)[1]).toBeCloseTo(centre(left)[1], 1)
+    expect(Math.max(size(entry)[0] / size(left)[0], size(entry)[1] / size(left)[1])).toBeCloseTo(
+      1,
+      2,
+    )
+  })
+
+  it('fades the level it leaves out over the one that replaces it', async () => {
+    await render()
+
+    const during = onSettle(map, () => ({
+      copies: el.querySelectorAll('.apexmaps-ghost').length,
+      keys: keysOnScreen(),
+    }))
+    await map.drillTo('CA')
+
+    // One copy of the outgoing level, over the incoming one, for the length of
+    // the settle.
+    expect(during().copies).toBe(1)
+    // And it answers nothing: a copy that still looked like a feature would have
+    // the map reporting both levels to a query, a hit test or an export while it
+    // faded.
+    expect(during().keys).toEqual(['06001', '06037', '06075'])
+    // Gone by the time the call resolves, so the DOM is settled whenever the
+    // promise is.
+    expect(el.querySelector('.apexmaps-ghost')).toBe(null)
+  })
+
+  it('develops the child level out of the colour the parent was', async () => {
+    await render()
+    const parentFill = el.querySelector('path.apexmaps-feature[data-key="CA"]').getAttribute('fill')
+
+    await map.drillTo('CA')
+
+    // Marks the ripple has not reached yet are still the parent's flat colour with
+    // no boundary of their own, which is what makes the level start as a copy of
+    // the shape it came from rather than as an already-divided map.
+    const waiting = seeded()
+    expect(waiting.length).toBeGreaterThan(0)
+    for (const path of waiting) expect(path.getAttribute('fill')).toBe(parentFill)
+
+    // And once it has reached all of them, nothing is left holding either the
+    // borrowed colour or the attribute that hid its boundary.
+    await wait(320)
+    expect(seeded()).toEqual([])
+    for (const path of featurePaths()) expect(path.hasAttribute('stroke-opacity')).toBe(false)
+  })
+
+  it('puts the marks back if the map goes away mid-ripple', async () => {
+    await render()
+    await map.drillTo('CA')
+    const paths = featurePaths()
+    expect(seeded().length).toBeGreaterThan(0)
+
+    map.destroy()
+
+    // Detached, but not left holding a colour they borrowed from a level that no
+    // longer exists: a reveal cut short still finishes what it started.
+    for (const path of paths) expect(path.hasAttribute('stroke-opacity')).toBe(false)
+  })
+
+  it('cuts straight to the child level when asked not to animate', async () => {
+    await render({
+      series: [
+        {
+          name: 'Sales',
+          joinBy: { data: 'key' },
+          data: BOTH_LEVELS,
+          drilldown: { map: 'test/counties', animate: 'none' },
+        },
+      ],
+    })
+
+    const during = onSettle(map, () => el.querySelectorAll('.apexmaps-ghost').length)
+    await map.drillTo('CA')
+
+    // No zoom, no copy, no ripple, no settle: the child is simply there, at its
+    // own fit, drawn as it will stay.
+    expect(during()).toBe(undefined)
+    expect(map.viewport.camera).toEqual({ k: 1, x: 0, y: 0 })
+    expect(keysOnScreen()).toEqual(['06001', '06037', '06075'])
+    expect(seeded()).toEqual([])
   })
 
   it('drills on click, and does not also select', async () => {

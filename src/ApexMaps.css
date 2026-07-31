@@ -67,9 +67,15 @@
    written per frame while panning, and a transition there would fight every
    one of those frames. */
 
+/* `stroke-opacity` is here for one caller: a drilldown developing the level it
+   arrived at brings each feature's boundary up with its fill, so that the parent
+   shape reads as dividing rather than as being replaced by an already-divided
+   one. See `renderers/LevelReveal`. Nothing else writes it, so it costs nothing
+   the rest of the time. */
 .apexmaps-feature {
   transition:
     fill var(--apexmaps-anim, 220ms) ease-out,
+    stroke-opacity var(--apexmaps-anim, 220ms) ease-out,
     opacity 150ms ease-out;
 }
 
@@ -124,6 +130,15 @@
 .apexmaps-feature.is-muted,
 .apexmaps-bubble.is-muted,
 .apexmaps-mark.is-muted {
+  opacity: var(--apexmaps-muted-opacity, 0.25);
+}
+
+/* The level a drilldown is fading out. Its marks gave up their `apexmaps-*`
+   classes so that nothing resolves a hit test, a query or an export to a copy
+   (see `renderers/LevelGhost`), which takes the rule above with them. This is
+   the same step-back, keyed on what the copy still carries: without it a
+   legend-filtered level flashes back to full opacity as the fade begins. */
+.apexmaps-ghost .is-muted {
   opacity: var(--apexmaps-muted-opacity, 0.25);
 }
 

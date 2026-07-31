@@ -33,6 +33,9 @@ import { registerProjection, listProjections, isCustomProjection } from './geo/P
 import type { ProjectionFactory } from './geo/Projections'
 import { SvgRenderer } from './renderers/SvgRenderer'
 import { CanvasRenderer } from './renderers/CanvasRenderer'
+import { LevelGhost } from './renderers/LevelGhost'
+import { LevelReveal, orderFromPoint } from './renderers/LevelReveal'
+import type { RevealMark } from './renderers/LevelReveal'
 import { RendererController } from './renderers/RendererController'
 import type { ActiveRendererKind } from './renderers/Renderer'
 import {
@@ -63,7 +66,7 @@ import type { SelectBox, SelectBoxPhase } from './interaction/ZoomPan'
 import { registerPalette, listPalettes, getPalette } from './scales/Palettes'
 import type { Palette } from './scales/Palettes'
 import { html, remove, resolveSize, pointerPosition, hasDom } from './utils/dom'
-import { motionBudget, resolveSpeed } from './utils/motion'
+import { motionBudget, prefersReducedMotion, resolveSpeed } from './utils/motion'
 import { darken } from './scales/Color'
 import type { JoinResult } from './data/Join'
 import type { Cluster } from './geo/Cluster'
@@ -86,12 +89,36 @@ import type {
   ResolvedOptions,
   ScreenPoint,
   Series,
+  WorldBounds,
   WorldPoint,
 } from './types'
 
 const VERSION = '0.2.0'
 
+/**
+ * How long a level change takes to settle, in ms.
+ *
+ * One number for both halves on purpose: the camera settling onto the new
+ * level's fit and the outgoing level fading out are the same event seen twice, so
+ * they have to start together and end together or the reader sees a copy linger
+ * over a map that has already stopped moving.
+ */
+const LEVEL_TRANSITION = 280
+
+/**
+ * How long the incoming level's ripple takes to reach its outermost mark, in ms.
+ *
+ * Deliberately shorter than `LEVEL_TRANSITION`, so the division is well underway
+ * by the time the copy of the old level has gone: the two beats overlap at the
+ * edges rather than running one strictly after the other, which reads as one
+ * movement instead of two.
+ */
+const LEVEL_REVEAL_SPREAD = 180
+
 /** The licensed feature set, and why each member is on it, lives in `core/premium`. */
+
+/** A screen-space box, as `[[x0, y0], [x1, y1]]`. */
+type ScreenRect = [ScreenPoint, ScreenPoint]
 
 /** Anything the renderer can draw. */
 type AnySeries =
@@ -250,6 +277,10 @@ class ApexMaps extends BaseChart {
   private readonly _drillStack: DrillFrame[] = []
   /** Guards against a second click landing while a level is still loading. */
   private _drilling = false
+  /** The level being faded out, live only for the length of a level change. */
+  private _ghost: LevelGhost | null = null
+  /** The level being developed, which outlives the level change by its own tail. */
+  private _reveal: LevelReveal | null = null
 
   private readonly _onMarkPointerOver: (event: Event) => void
   private readonly _onMarkPointerMove: (event: Event) => void
@@ -1619,27 +1650,36 @@ class ApexMaps extends BaseChart {
       }
       this.drillPath.pop()
 
-      const animate = this._drillAnimation() !== 'none'
+      const animate = this._animateLevels()
       const cameFrom = frame.key
+
+      // The rect the level being left occupies right now, measured before its
+      // projection goes away. Wherever the reader had moved to inside the child
+      // level, that is where the climb out starts from.
+      const leftRect = animate ? this._screenRectOf(this.geo?.collection) : null
+      if (animate) this._captureLevel()
 
       this._restoreLevel(frame)
 
       // Frame where the reader just was, then pull back out to where they left
       // the camera: the reverse of the move that brought them in, so the two
-      // levels stay visually connected.
-      if (animate && this.camera) {
+      // levels stay visually connected. Onto the rect rather than a fixed
+      // padding, because the child was not necessarily sitting at its own fit.
+      if (leftRect) {
         const feature = this.geo?.features.find((f) => f.key === cameFrom)
-        const bounds = feature
-          ? this.viewport.measure({
-              type: 'Feature',
-              geometry: feature.geometry,
-              properties: {},
-            })
+        const entry = feature
+          ? this._cameraForRect(
+              this.viewport.measure({
+                type: 'Feature',
+                geometry: feature.geometry,
+                properties: {},
+              }),
+              leftRect,
+            )
           : null
-        if (bounds) {
-          this.viewport.camera = this.viewport.cameraForBounds(bounds, { padding: 24 })
-        }
+        if (entry) this.viewport.camera = entry
       }
+      this._ghost?.anchor(this.viewport.camera)
 
       this._buildSeries()
       this._draw()
@@ -1649,7 +1689,12 @@ class ApexMaps extends BaseChart {
       this._reportDiagnostics()
 
       if (animate && this.camera) {
-        await this.camera.easeTo({ ...frame.camera, duration: 320 })
+        this._ghost?.fade(LEVEL_TRANSITION)
+        await this.camera.easeTo({
+          ...frame.camera,
+          duration: LEVEL_TRANSITION,
+          ease: 'cubicOut',
+        })
         // The map can be torn down while the camera eases; announcing or
         // emitting for it then would hand listeners a destroyed instance.
         if (this._destroyed) return false
@@ -1663,6 +1708,7 @@ class ApexMaps extends BaseChart {
       })
       return true
     } finally {
+      this._releaseLevel()
       this._drilling = false
     }
   }
@@ -1748,6 +1794,28 @@ class ApexMaps extends BaseChart {
         return false
       }
 
+      const animate = this._animateLevels()
+
+      // Where the parent feature sits on screen, measured while its projection is
+      // still the live one. The child level covers the same geography, so this
+      // rect is what the swap hands over: the child lands exactly on it instead
+      // of on its own fit, and eases to the fit from there.
+      const parentRect = animate
+        ? this._screenRectOf({ type: 'Feature', geometry: feature.geometry, properties: {} })
+        : null
+      // The colour the child level develops out of. Taken off the rendered mark
+      // rather than from the series, so it is what the reader is actually looking
+      // at: they clicked the feature they were hovering, and hover is a darkened
+      // fill written to the mark. The series is the fallback, and is also the
+      // answer whenever there is no mark to read (the canvas tier).
+      const parentSeriesId = series.id
+      const parentFill = animate
+        ? (this.renderer
+            .pathFor(parentSeriesId, feature.key || feature.index)
+            ?.getAttribute('fill') ?? series.fillFor(feature))
+        : null
+      if (animate) this._captureLevel()
+
       this._drillStack.push({
         mapSource: this.userOptions.geo?.map,
         mapId: this.mapId,
@@ -1765,11 +1833,16 @@ class ApexMaps extends BaseChart {
       this._enterLevel({ mapSource: target, mapId: resolved.id, mapMeta: meta, geo: scoped.geo })
       this.warnings.push(...ingested.warnings, `drilldown: ${scoped.note}`)
 
-      // The child level is fitted to its own extent, so the camera starts neutral.
-      // Whatever zoom brought the reader here describes the parent projection and
-      // is meaningless under the new fit.
+      // The child level is fitted to its own extent, so the camera it settles at
+      // is neutral. Whatever zoom brought the reader here describes the parent
+      // projection and is meaningless under the new fit.
+      const settled: CameraState = { k: 1, x: 0, y: 0 }
+      const handoff = parentRect
+        ? this._cameraForRect(this.viewport.measure(this.geo.collection), parentRect)
+        : null
       this.camera?.stop()
-      this.viewport.camera = { k: 1, x: 0, y: 0 }
+      this.viewport.camera = handoff ?? settled
+      this._ghost?.anchor(this.viewport.camera)
 
       this._buildSeries()
       this._draw()
@@ -1778,6 +1851,10 @@ class ApexMaps extends BaseChart {
       this._renderBreadcrumb()
       this._reportDiagnostics()
 
+      // Announced and emitted before the settle rather than after it: the
+      // documented way to fetch a level's data is this event, and a handler that
+      // only gets its turn once the motion has finished means the reader watches
+      // the level arrive unstyled and colour itself in afterwards.
       this.a11y?.announce(this._drillAnnouncement())
       this.emit('drilldown', {
         key: feature.key,
@@ -1788,8 +1865,20 @@ class ApexMaps extends BaseChart {
         featureCount: scoped.count,
         instance: this,
       })
+
+      // After the event, not before: a handler that fills in this level's data
+      // redraws it, and a redraw rewrites exactly the fills the reveal seeds. This
+      // way it seeds whatever the level ended up being drawn as, whether that came
+      // from the declarative data or from the handler.
+      if (parentFill) this._revealLevel(parentSeriesId, parentFill)
+
+      if (handoff && this.camera) {
+        this._ghost?.fade(LEVEL_TRANSITION)
+        await this.camera.easeTo({ ...settled, duration: LEVEL_TRANSITION, ease: 'cubicOut' })
+      }
       return true
     } finally {
+      this._releaseLevel()
       this._drilling = false
     }
   }
@@ -1823,6 +1912,12 @@ class ApexMaps extends BaseChart {
     this.selection.clear()
     if (this.a11y) this.a11y.cursor = -1
     this.warnings = []
+    // A reveal still running belongs to the level being left, whose marks are
+    // about to be pruned. Ending it here puts them back to what they were drawn
+    // as first, so nothing is removed while holding a borrowed colour and nothing
+    // survives holding an inline delay.
+    this._reveal?.destroy()
+    this._reveal = null
     this.labels?.destroy()
     this.annotations?.destroy()
     this._buildViewport()
@@ -1863,6 +1958,117 @@ class ApexMaps extends BaseChart {
 
   private _drillAnimation(): 'zoom' | 'none' {
     return this._drilldownOptions()?.animate ?? 'zoom'
+  }
+
+  /** Whether a level change animates: the author's option and the reader's setting. */
+  private _animateLevels(): boolean {
+    return this._drillAnimation() !== 'none' && !prefersReducedMotion()
+  }
+
+  /**
+   * The screen rect a GeoJSON object occupies under the live projection and
+   * camera. Null when the object projects to nothing, which is a clipped feature
+   * on a globe or an empty collection.
+   */
+  private _screenRectOf(object: unknown): ScreenRect | null {
+    const bounds = object ? this.viewport.measure(object) : null
+    if (!bounds) return null
+    const [ax, ay] = this.viewport.worldToScreen(bounds[0])
+    const [bx, by] = this.viewport.worldToScreen(bounds[1])
+    return [
+      [Math.min(ax, bx), Math.min(ay, by)],
+      [Math.max(ax, bx), Math.max(ay, by)],
+    ]
+  }
+
+  /**
+   * The camera that lands a world-space box on a given screen rect.
+   *
+   * Expressed as padding because that is exactly what it is: "fit this box into
+   * that rect" is `cameraForBounds` with the rect's insets as the padding, which
+   * keeps one implementation of the fit arithmetic rather than a second one that
+   * can disagree with it.
+   */
+  private _cameraForRect(bounds: WorldBounds | null, rect: ScreenRect): CameraState | null {
+    if (!bounds) return null
+    return this.viewport.cameraForBounds(bounds, {
+      padding: {
+        left: rect[0][0],
+        top: rect[0][1],
+        right: this.viewport.width - rect[1][0],
+        bottom: this.viewport.height - rect[1][1],
+      },
+    })
+  }
+
+  /**
+   * Copy the level about to be replaced, so it can fade out over the one
+   * replacing it. See `renderers/LevelGhost` for why a camera move alone cannot
+   * cover the swap.
+   */
+  private _captureLevel(): void {
+    this._releaseLevel()
+    // An SVG clone is DOM proportional to the outgoing mark count, held for the
+    // length of the transition, which is the cost the canvas tier exists to
+    // avoid. Past the full motion budget the bitmap copy carries the fade alone;
+    // when SVG is the active tier that means no fade, which is the same trade
+    // the budget already makes for every other animation on the map.
+    const budget = motionBudget(this._markCount())
+    this._ghost = LevelGhost.capture({
+      plot: this.plot,
+      svg: this.renderer?.root ?? null,
+      canvas: this.canvas?.el ?? null,
+      cloneSvg: budget.properties === 'all',
+    })
+  }
+
+  /**
+   * Drop the copy. Called from the `finally` of both level changes, so the DOM is
+   * back to one level per map by the time either promise resolves and a caller
+   * counting marks never sees two.
+   */
+  private _releaseLevel(): void {
+    this._ghost?.destroy()
+    this._ghost = null
+  }
+
+  /**
+   * Develop the level just drawn out of the shape it replaced: see
+   * `renderers/LevelReveal`.
+   *
+   * The ripple starts at the middle of the level, which is the middle of the
+   * feature that was clicked, because the child covers that feature's geography
+   * and nothing else. Ordering runs off the label anchors, which are already
+   * projected for this level and are the one position per feature the map keeps.
+   */
+  private _revealLevel(seriesId: string, seed: string): void {
+    // Canvas draws no elements, so there is nothing to seed. The tier's whole
+    // point is trading per-mark work for scale, and a per-mark colour ripple is
+    // exactly the work it removes: it would have to leave the merged paths the
+    // tier batches by fill and repaint every feature separately for a third of a
+    // second. The same budget that decides the copy decides this.
+    const budget = motionBudget(this._markCount())
+    const features = this.geo?.features
+    if (this.canvas || !this.renderer || !features?.length || budget.properties !== 'all') return
+    // The ripple is those transitions and nothing else, so with no duration to
+    // run there is nothing to do but the flash of flat colour on the way.
+    if (this._markAnimationMs() <= 0) return
+
+    const bounds = this.viewport.measure(this.geo?.collection)
+    if (!bounds) return
+    const origin: WorldPoint = [
+      (bounds[0][0] + bounds[1][0]) / 2,
+      (bounds[0][1] + bounds[1][1]) / 2,
+    ]
+
+    const ordered = orderFromPoint(features, origin, (f) => this.anchors.get(f.index)?.world)
+    const marks: RevealMark[] = []
+    for (const { item, order } of ordered) {
+      const el = this.renderer.pathFor(seriesId, item.key || item.index)
+      if (el) marks.push({ el, order })
+    }
+
+    this._reveal = LevelReveal.run({ marks, seed, spread: LEVEL_REVEAL_SPREAD })
   }
 
   private _renderBreadcrumb(): void {
@@ -2179,6 +2385,9 @@ class ApexMaps extends BaseChart {
     // one matrix, then a re-fill of paths that were built at draw time. It must
     // never reproject or rebuild a Path2D; `test/canvas.test.ts` pins that.
     this.canvas?.applyCamera()
+    // Null except during a level change, where it is the outgoing level being
+    // carried along by the same move that settles the incoming one.
+    this._ghost?.track(this.viewport.camera)
 
     // Clustered markers depend on the camera scale, but only in steps: the level
     // is quantized, so panning never reclusters and a smooth zoom crosses a
@@ -2966,10 +3175,23 @@ class ApexMaps extends BaseChart {
     const anim = this.config.chart.animations ?? {}
     const speed = anim.enabled === false ? 0 : resolveSpeed(anim.speed)
     const budget = motionBudget(this._markCount())
-    const cheap = budget.animate ? speed : 0
     const geometry = budget.animate && budget.properties === 'all' ? speed : 0
-    this.element.style.setProperty('--apexmaps-anim', `${cheap}ms`)
+    this.element.style.setProperty('--apexmaps-anim', `${this._markAnimationMs()}ms`)
     this.element.style.setProperty('--apexmaps-anim-geom', `${geometry}ms`)
+  }
+
+  /**
+   * The duration a mark's cheap properties (fill, stroke) will actually
+   * transition for, in ms, which is what `--apexmaps-anim` is set to.
+   *
+   * Read as well as written, because an effect built out of those transitions has
+   * to know whether they are going to run at all: at zero the level reveal would
+   * be a single frame of flat colour rather than a ripple, so it declines instead.
+   */
+  private _markAnimationMs(): number {
+    const anim = this.config.chart.animations ?? {}
+    const speed = anim.enabled === false ? 0 : resolveSpeed(anim.speed)
+    return motionBudget(this._markCount()).animate ? speed : 0
   }
 
   /** Marks this draw will produce, for the motion budget. */
@@ -3039,6 +3261,11 @@ class ApexMaps extends BaseChart {
       this.renderer.root.removeEventListener('click', this._onSurfaceClick, true)
     }
 
+    this._releaseLevel()
+    // The reveal outlives the call that started it, so unlike the copy it can
+    // still be holding marks at a borrowed colour when the map is torn down.
+    this._reveal?.destroy()
+    this._reveal = null
     this.labels?.destroy()
     this.annotations?.destroy()
     this.legend?.destroy()

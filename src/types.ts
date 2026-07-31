@@ -253,8 +253,13 @@ export interface DrilldownOptions {
   /** Child property holding the parent's key. Skips detection. */
   parentField?: string
   /**
-   * `'zoom'` (default) frames the clicked feature before the child level appears,
-   * so the two views line up and the swap reads as a zoom rather than a cut.
+   * `'zoom'` (default) frames the clicked feature, hands the child level the exact
+   * place on screen that feature had, dissolves the level being left out over it,
+   * and develops the child out of the parent's own colour from the middle
+   * outwards. So the geography never moves across the swap and the child is never
+   * simply *there*: what the reader sees is the parent shape dividing into its
+   * children. `'none'` swaps with no motion, which is also what a reader who has
+   * asked for reduced motion gets either way.
    */
   animate?: 'zoom' | 'none'
   /** Trail above the map, with a way back up. Default true. */

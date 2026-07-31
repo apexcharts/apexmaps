@@ -385,7 +385,7 @@ declines:
 ```js
 drilldown: {
   map: (context) => (context.depth === 1 ? 'eu/nuts2' : 'eu/nuts3'),
-  animate: 'zoom',              // frames the parent before the swap. 'none' cuts
+  animate: 'zoom',              // zoom, hand over, dissolve, divide. 'none' cuts
   breadcrumb: { rootLabel: 'Europe' },
 }
 ```
@@ -408,10 +408,17 @@ the breadcrumb above the map (real buttons, keyboard reachable), Escape, or `dri
 synchronous. `drillTo(key)` drills programmatically, and `drillDepth` says where you are. The way in
 works from the keyboard too: Enter on a focused feature drills exactly where a click would.
 
-Two details worth knowing. The camera frames the clicked feature *before* the geometry swaps, so the
-two levels line up and the change reads as a zoom instead of a cut, and the reverse runs on the way
-back. And the selection does not survive a level change, because those keys belong to the level you
-left.
+Two details worth knowing. The level change is continuous rather than a cut, in four steps: the camera
+frames the clicked feature; the child level is handed **the exact box on screen that feature
+occupied** instead of its own fit; the level being left dissolves out over it; and the child develops
+out of the parent's own colour, each county's fill and boundary arriving together in a ripple from the
+middle outwards. Because the child covers the same geography, nothing about the map moves across the
+swap, and because it starts as a flat copy of the parent, it is never simply *there*: what the reader
+sees is California dividing into its counties while its neighbours fade. Climbing back runs the camera
+half in reverse, from wherever inside the child level the reader had moved to. Everything above is one
+`transition` per mark on `--apexmaps-anim`, so it follows `chart.animations.speed`, degrades with the
+motion budget, and turns into a plain swap under `prefers-reduced-motion`. And the selection does not
+survive a level change, because those keys belong to the level you left.
 
 ## Selection, and linked maps
 
