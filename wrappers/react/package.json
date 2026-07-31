@@ -1,6 +1,6 @@
 {
   "name": "react-apexmaps",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "React component for ApexMaps",
   "main": "dist/react-apexmaps.cjs",
@@ -20,7 +20,7 @@
     "dist"
   ],
   "peerDependencies": {
-    "apexmaps": "^0.2.0",
+    "apexmaps": "^0.3.0",
     "react": ">=18.0.0"
   },
   "scripts": {

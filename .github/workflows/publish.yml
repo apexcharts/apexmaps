@@ -17,12 +17,18 @@
 #
 # Releasing the whole set:
 #
-#   npm version 0.2.0 --no-git-tag-version
-#   npm version 0.2.0 --no-git-tag-version --workspaces
-#   # then widen each wrapper's peerDependencies.apexmaps to ^0.2.0, which
+#   npm version 0.3.0 --no-git-tag-version
+#   npm version 0.3.0 --no-git-tag-version --workspaces
+#   # then widen each wrapper's peerDependencies.apexmaps to ^0.3.0, which
 #   # `npm version` does not touch and which the core job refuses to publish
 #   # without
-#   git commit -am "release: 0.2.0"
+#   npm install --package-lock-only
+#   # ^ and only now, because the lockfile records those peer ranges too and
+#   #   nothing above updates them. 0.2.0 released with the lockfile still saying
+#   #   ^0.1.0 for all three wrappers. Nothing failed, and no lockfile ships in a
+#   #   tarball, but `npm ci` below installs from it, so that release was built
+#   #   against a manifest the repository itself contradicted.
+#   git commit -am "release: 0.3.0"
 #   git push
 #
 # Why a core release also sweeps up the wrappers, which apexstock's equivalent

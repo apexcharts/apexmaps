@@ -2,10 +2,10 @@
 
 Interactive geographic data visualization and storytelling for the ApexCharts ecosystem.
 
-> **Status: phase 1, pre-alpha (0.2.0).** Written in TypeScript. The engine, five series
-> (choropleth, bubble, marker, arc, line), projections, joins, scales, legend, tooltip, labels,
-> annotations, camera, geometry registry, drilldown, clustering, selection and accessibility layer
-> are working and tested. The story engine and tiles are not built yet.
+> **Status: phase 1, pre-alpha (0.3.0).** Written in TypeScript. The engine, five series
+> (choropleth, bubble, marker, arc, line), projections, joins, scales, pattern and image fills,
+> legend, tooltip, labels, annotations, camera, geometry registry, drilldown, clustering, selection
+> and accessibility layer are working and tested. The story engine and tiles are not built yet.
 
 ```js
 import ApexMaps from 'apexmaps'
@@ -120,6 +120,8 @@ broken by an unrelated one:
 | [normalize](examples/normalize.html) | Counts versus rates, side by side |
 | [projections](examples/projections.html) | Eight projections, spec objects, rotation |
 | [basemap](examples/basemap.html) | Geometry with no data, and label collision |
+| [patterns](examples/patterns.html) | A tile per region, with the colour still leading |
+| [image-fill](examples/image-fill.html) | A picture per region, clipped to its own outline |
 | [bubbles](examples/bubbles.html) | Square-root versus linear sizing, second colour encoding |
 | [markers](examples/markers.html) | Seven shapes, categorical colour, clustering |
 | [arcs](examples/arcs.html) | Great circles, antimeridian cutting, curvature, travelling flow |

@@ -1,6 +1,6 @@
 {
   "name": "vue-apexmaps",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Vue 3 component for ApexMaps",
   "main": "dist/vue-apexmaps.cjs",
@@ -20,7 +20,7 @@
     "dist"
   ],
   "peerDependencies": {
-    "apexmaps": "^0.2.0",
+    "apexmaps": "^0.3.0",
     "vue": ">=3.3.0"
   },
   "scripts": {
