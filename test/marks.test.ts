@@ -320,6 +320,37 @@ describe('bubble series', () => {
   })
 })
 
+/** The points of a path's `d`, which for an arc is only ever moves and lines. */
+function polyline(d: string): [number, number][] {
+  return [...d.matchAll(/[ML]([-\d.e]+),([-\d.e]+)/g)].map((m) => [Number(m[1]), Number(m[2])])
+}
+
+/**
+ * The furthest any point of one polyline sits from the other, in world units.
+ *
+ * Point-to-segment rather than point-to-point: two paths along the same curve
+ * sampled at different densities have no shared vertices, and comparing vertices
+ * would report a difference where there is none.
+ */
+function maxDeviation(a: [number, number][], b: [number, number][]): number {
+  let worst = 0
+  for (const p of a) {
+    let best = Infinity
+    for (let i = 1; i < b.length; i++) best = Math.min(best, toSegment(p, b[i - 1], b[i]))
+    worst = Math.max(worst, best)
+  }
+  return worst
+}
+
+function toSegment(p: [number, number], a: [number, number], b: [number, number]): number {
+  const dx = b[0] - a[0]
+  const dy = b[1] - a[1]
+  const len2 = dx * dx + dy * dy
+  if (!len2) return Math.hypot(p[0] - a[0], p[1] - a[1])
+  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2))
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
+}
+
 describe('arc series', () => {
   const ROUTES = [
     { name: 'NRT-JFK', from: TOKYO, to: NEW_YORK, value: 900 },
@@ -353,6 +384,20 @@ describe('arc series', () => {
     // polyline that bends far north of it.
     expect(straight.length).toBeLessThan(geodesic.length)
     expect(geodesic.split('L').length).toBeGreaterThan(10)
+
+    /*
+     * And the two are actually in different places, which the counts above do not
+     * say and which this test used to pass without. Handing d3-geo a two-point
+     * LineString does not draw a straight line: it resamples the segment along the
+     * great circle between its ends, so `geodesic: false` came back as the geodesic
+     * to within the resampling tolerance, under a pixel, in every projection. The
+     * vertex counts still differed, so the assertions above were satisfied by a map
+     * on which the option did nothing at all.
+     */
+    // Measured from the great circle towards the chord. The other direction is
+    // zero whatever happens, because the two paths share their endpoints and the
+    // chord has nothing else in it.
+    expect(maxDeviation(polyline(geodesic), polyline(straight))).toBeGreaterThan(20)
   })
 
   it('splits an antimeridian crossing instead of streaking across the map', async () => {
@@ -362,6 +407,66 @@ describe('arc series', () => {
     const d = el.querySelector('path.apexmaps-arc')!.getAttribute('d')!
     // d3-geo cuts the arc at the map edge, so the path contains two subpaths.
     expect((d.match(/M/g) ?? []).length).toBeGreaterThanOrEqual(2)
+  })
+
+  /*
+   * The legend draws a colour-scaled arc series as `<button aria-pressed>`
+   * swatches, so it looks and focuses like a control. Before this it was not one:
+   * `toggleClass` returned false, and the only redraw a toggle triggered visited
+   * feature series, so the swatch dimmed itself and every route stayed put.
+   */
+  describe('legend classes switch routes off', () => {
+    const scaled = {
+      type: 'arc' as const,
+      name: 'Distance',
+      data: ROUTES,
+      colorScale: { classes: 3 },
+      endpoints: { show: true },
+    }
+    const swatches = () => [
+      ...el.querySelectorAll<HTMLButtonElement>('button.apexmaps-legend-item'),
+    ]
+    const drawn = () => el.querySelectorAll('path.apexmaps-arc').length
+
+    it('hides the routes in a class, and puts them back', async () => {
+      await render({ series: [scaled], legend: { show: true, style: 'classes' } })
+      expect(swatches()).toHaveLength(3)
+      expect(drawn()).toBe(3)
+
+      swatches()[0].click()
+      expect(drawn()).toBe(2)
+      expect(swatches()[0].getAttribute('aria-pressed')).toBe('false')
+
+      swatches()[0].click()
+      expect(drawn()).toBe(3)
+      expect(swatches()[0].getAttribute('aria-pressed')).toBe('true')
+    })
+
+    it('takes the hidden routes’ endpoint dots with them', async () => {
+      await render({ series: [scaled], legend: { show: true, style: 'classes' } })
+      const before = map.series[0].endpoints(map.viewport).length
+      swatches()[0].click()
+      expect(map.series[0].endpoints(map.viewport).length).toBeLessThan(before)
+    })
+
+    it('leaves no beads travelling along a route that is gone', async () => {
+      await render({
+        series: [{ ...scaled, flow: true }],
+        legend: { show: true, style: 'classes' },
+      })
+      expect(el.querySelectorAll('path.apexmaps-flow')).toHaveLength(3)
+      swatches()[0].click()
+      expect(el.querySelectorAll('path.apexmaps-flow')).toHaveLength(2)
+    })
+
+    it('has nothing to toggle without a colour scale', async () => {
+      await render({ series: [{ type: 'arc', name: 'Routes', data: ROUTES }] })
+      // No scale, so no swatches: the legend never offers a control that could not
+      // do anything.
+      expect(swatches()).toHaveLength(0)
+      expect(map.series[0].toggleClass(0)).toBe(false)
+      expect(drawn()).toBe(3)
+    })
   })
 
   it('scales width by value', async () => {

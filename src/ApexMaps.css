@@ -108,6 +108,31 @@
     opacity 150ms ease-out;
 }
 
+/* Beads travelling along a route (`series/flow`). The dash pattern, the width and
+   the colour are attributes written by the renderer; the only thing here is the
+   travel, and all that travels is the dash offset, by one period of the pattern,
+   which is why nothing on this side needs to know how long any route is.
+
+   No transition on `d`: the beads share their path data with the route, and that is
+   camera-driven like every other geometry attribute. The travel is unaffected,
+   being a function of time rather than of position. */
+.apexmaps-flow--moving {
+  animation-name: apexmaps-flow;
+  animation-duration: var(--apexmaps-flow-duration, 1s);
+  animation-delay: var(--apexmaps-flow-delay, 0s);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+/* Negative, because a positive dash offset walks the pattern back towards the
+   start of the path. The beads have to leave `from` and arrive at `to`, which is
+   the direction the data was given in. */
+@keyframes apexmaps-flow {
+  to {
+    stroke-dashoffset: calc(-1 * var(--apexmaps-flow-travel, 0px));
+  }
+}
+
 /* Hover feedback has to feel attached to the pointer: the data-update pace
    would read as lag here. */
 .apexmaps-feature.is-hovered,
@@ -175,6 +200,12 @@
 
   .apexmaps--enter .apexmaps-layer-marks,
   .apexmaps--enter .apexmaps-layer-symbols {
+    animation: none;
+  }
+
+  /* The beads stay, spaced along the route, and stop travelling. Removing them
+     would take a mark off the map because the reader asked for less motion. */
+  .apexmaps-flow--moving {
     animation: none;
   }
 }

@@ -31,7 +31,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 
 | Area | Detail |
 |---|---|
-| Series | `choropleth`, `bubble` (proportional symbols), `marker` (seven shapes, categorical colour, clustering&nbsp;†), `arc` (great-circle connections)&nbsp;†, `line` (routes through given vertices)&nbsp;†, plus an automatic basemap whenever no feature series is present |
+| Series | `choropleth`, `bubble` (proportional symbols), `marker` (seven shapes, categorical colour, clustering&nbsp;†), `arc` (great-circle connections, travelling `flow` beads)&nbsp;†, `line` (routes through given vertices)&nbsp;†, plus an automatic basemap whenever no feature series is present |
 | Projections | 13 core projections with aliases (`equalEarth` default, `webMercator`, `epsg:3857`, `albersUsa`, `orthographic`, conics, azimuthals), spec objects with `rotate` / `parallels` / `clipAngle`, and `ApexMaps.registerProjection()`&nbsp;† for the rest of `d3-geo-projection` |
 | Geometry | 26 built-in packs: world countries and land, US states and counties, EU NUTS 0-3, and admin-1 for 15 more countries. Lazy, one request per pack, provenance and attribution attached |
 | Data | GeoJSON, TopoJSON, bare geometry, feature arrays; automatic winding repair; join-key auto-detection |
@@ -121,7 +121,7 @@ broken by an unrelated one:
 | [basemap](examples/basemap.html) | Geometry with no data, and label collision |
 | [bubbles](examples/bubbles.html) | Square-root versus linear sizing, second colour encoding |
 | [markers](examples/markers.html) | Seven shapes, categorical colour, clustering |
-| [arcs](examples/arcs.html) | Great circles, antimeridian cutting, curvature |
+| [arcs](examples/arcs.html) | Great circles, antimeridian cutting, curvature, travelling flow |
 | [registry](examples/registry.html) | Three packs with no configuration, plus the catalogue |
 | [joins](examples/joins.html) | A failing join explained, then repaired |
 | [drilldown](examples/drilldown.html) | States into counties, and back out |
@@ -286,13 +286,30 @@ a dev-mode warning, since a bulged arc is no longer the true path.
 ```js
 series: [
   { type: 'bubble', name: 'Population', data: cities },
-  { type: 'arc', name: 'Routes', data: routes, endpoints: { show: true } },
+  { type: 'arc', name: 'Routes', data: routes, endpoints: { show: true }, flow: true },
 ]
 ```
 
+`flow` sends beads along each route, from `from` towards `to`. It exists because an arc says two
+places are related without saying which way anything moves, and on a hub map every route leaves the
+same airport, so the reader cannot infer it either. `flow: true` is the whole option: the bead takes
+the route's colour, its size from the route's width, and its phase from a hash of the route's key, so
+many departures out of one hub read as traffic rather than as a single pulse. `{ style: 'dash' }`
+marches a dashed highlight instead. `speed` and `spacing` are screen pixels in the view the map opened
+at: the beads are anchored to the ground, so zooming in spreads them with the geography rather than
+fitting more of them onto the same route. Each of the three is bounded, because each degenerates
+differently at the far end of the camera: size at three times what it opened at, pace at twice, spacing
+at six, past which the flow looks the same however far the reader keeps going. `{ scale: 'screen' }`
+holds all three fixed for a dashboard where the beads are furniture rather than geography. Under
+`prefers-reduced-motion`, with
+`chart.animations.enabled: false`, or past 600 routes on one series, the beads stay where they are and
+stop travelling: a dotted route still reads as a route.
+
 Rendering follows from what each mark encodes: arcs live in world space and scale with the camera,
 while bubbles live in screen space and hold their radius, because that radius carries a value. Thin
-arcs get an invisible wider hit path so a 1px flight line is still hoverable.
+arcs get an invisible wider hit path so a 1px flight line is still hoverable, and a flow's beads are
+one more companion path, in a group of their own above the routes so that the only content that
+repaints every frame is separated from the geometry that never moves.
 
 ## Markers and clustering
 

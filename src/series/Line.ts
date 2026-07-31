@@ -33,6 +33,8 @@ import type {
 } from '../types'
 import type { PathSpec } from '../renderers/SvgRenderer'
 import { readNumber, readText, readLonLat } from './accessors'
+import { resolveFlow } from './flow'
+import { FLOW_BUDGET } from '../utils/motion'
 
 const DEFAULT_COLOR = '#008FFB'
 const DEFAULT_WIDTH_RANGE: [number, number] = [1, 5]
@@ -59,6 +61,8 @@ export class LineSeries {
   readonly items: LineItem[] = []
   readonly widthScale: SizeScale
   readonly colorScale: Scale | null = null
+  /** Class indices switched off from the legend. See `series/Arc`. */
+  readonly mutedClasses = new Set<number>()
 
   constructor({
     config,
@@ -164,18 +168,30 @@ export class LineSeries {
     return this.config.color ?? DEFAULT_COLOR
   }
 
+  /** Whether the legend has switched off the class this route falls in. */
+  isMuted(item: LineItem): boolean {
+    if (!this.mutedClasses.size || !this.colorScale || item.value == null) return false
+    return this.mutedClasses.has(this.colorScale.classIndex(item.value))
+  }
+
   paths(): PathSpec[] {
     const out: PathSpec[] = []
     this.items.forEach((item, i) => {
-      if (!item.d) return
+      if (!item.d || this.isMuted(item)) return
+      const stroke = this.colorFor(item)
       out.push({
         key: item.key,
         item: i,
         d: item.d,
-        stroke: this.colorFor(item),
+        stroke,
         width: item.width,
         opacity: this.config.opacity ?? 0.9,
         dashArray: this.config.stroke?.dashArray,
+        flow: resolveFlow(this.config.flow, {
+          key: item.key,
+          width: item.width,
+          color: stroke,
+        }),
       })
     })
     return out
@@ -197,6 +213,8 @@ export class LineSeries {
     // dots into a darker blob than intended.
     const seen = new Map<string, WorldPoint>()
     this.items.forEach((item) => {
+      // A hidden route leaves no dots behind.
+      if (this.isMuted(item)) return
       for (const lonLat of [item.path[0], item.path[item.path.length - 1]]) {
         const key = `${lonLat[0].toFixed(4)},${lonLat[1].toFixed(4)}`
         if (seen.has(key)) continue
@@ -218,8 +236,15 @@ export class LineSeries {
     return this.config.name
   }
 
-  toggleClass(): boolean {
-    return false
+  /** Switch a legend class off, or back on. Returns the new muted state. */
+  toggleClass(classIndex: number): boolean {
+    if (!this.colorScale) return false
+    if (this.mutedClasses.has(classIndex)) {
+      this.mutedClasses.delete(classIndex)
+      return false
+    }
+    this.mutedClasses.add(classIndex)
+    return true
   }
 
   legendItems(): never[] {
@@ -237,6 +262,11 @@ export class LineSeries {
     if (this.items.length > 400 && (this.config.opacity ?? 0.9) > 0.5) {
       notes.push(
         `${this.items.length} routes will read as a tangle at high opacity. Lower series opacity, or aggregate before plotting.`,
+      )
+    }
+    if (this.config.flow && this.items.length > FLOW_BUDGET) {
+      notes.push(
+        `${this.items.length} routes is past the flow budget of ${FLOW_BUDGET}, so the beads are painted along each route but do not travel. Aggregate before plotting, or accept a dotted route.`,
       )
     }
     return notes

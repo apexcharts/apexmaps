@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Arcs · ApexMaps</title>
     <link rel="stylesheet" href="_shared.css" />
+    <style>
+      /*
+       * The glow is a page decision, not a library one, and it is deliberately on
+       * the routes rather than on their group. A filter on the group would cover
+       * the beads too, and a blur that has to be recomputed every frame is the one
+       * thing on this page that could actually drop a frame. The routes never move,
+       * so this one is rasterised once and cached.
+       */
+      #map .apexmaps-arc {
+        filter: drop-shadow(0 0 3px rgba(120, 190, 255, 0.35));
+      }
+    </style>
   </head>
   <body>
     <header class="topbar">
@@ -27,7 +39,8 @@
                 Great circles, not lines on a rectangle. The Pacific routes are cut at the
                 antimeridian and re-enter on the left edge instead of streaking back across the
                 map, and the flight to São Paulo sweeps south of the Cape because that genuinely is
-                the shortest way there.
+                the shortest way there. Every route leaves the same airport, so the beads say which
+                way, which is something no arc on its own can tell you.
               </p>
             </div>
             <div class="stats">
@@ -48,12 +61,23 @@
               <button data-mode="straight" aria-pressed="false">Straight line</button>
               <button data-mode="curved" aria-pressed="false">Decorative curve</button>
             </div>
+            <div class="seg" id="flow" role="group" aria-label="Flow">
+              <button data-flow="dots" aria-pressed="true">Beads</button>
+              <button data-flow="dash" aria-pressed="false">Dashes</button>
+              <button data-flow="off" aria-pressed="false">Still</button>
+            </div>
             <select id="projection" aria-label="Projection">
               <option value="equalEarth">Equal Earth</option>
               <option value="mercator">Web Mercator</option>
               <option value="orthographic">Orthographic</option>
             </select>
             <span class="readout" id="status"></span>
+          </div>
+          <div class="row">
+            <span class="readout"
+              >Click a legend class to switch those routes off. Zoom in: the beads spread with the
+              geography rather than multiplying.</span
+            >
           </div>
 
           <div class="split">
@@ -73,16 +97,18 @@
           </p>
         </section>
 
-        <div class="two">
+        <div class="three">
           <section class="card">
             <p class="kicker">Geodesic, or decorative</p>
             <h2>Three models of the same pair of points</h2>
             <p class="note">
               <code>geodesic: true</code> is the default and follows the real great circle,
               resampled densely enough to stay smooth at any zoom and split where it crosses the
-              antimeridian. Switch to a straight line and Mercator will draw you a route no aircraft
-              flies. <code>curvature</code> bulges the arc perpendicular to its chord: it looks
-              good, it is no longer the path, so it is off by default.
+              antimeridian. <code>geodesic: false</code> is the naive alternative, a chord through
+              screen space: watch the Pacific routes streak back across the whole map, because a
+              straight line knows nothing about the edge it is crossing. <code>curvature</code>
+              bulges that chord perpendicular to itself: it looks good, it is no longer the path, so
+              it is off by default.
             </p>
             <pre>
 {
@@ -93,7 +119,34 @@
   width: { range: [0.6, 3.4] },    // encodes distance
   colorScale: { palette: NIGHT },  // five explicit stops
   endpoints: { show: true, radius: 2 },
+  flow: true,                      // beads, from -> to
 }</pre
+            >
+          </section>
+
+          <section class="card">
+            <p class="kicker">Direction, without an arrowhead</p>
+            <h2>What <code>flow: true</code> is doing</h2>
+            <p class="note">
+              One dashed companion path per route, animated on its dash offset. A repeating pattern
+              only has to advance by one period to loop, so the duration is
+              <code>spacing / speed</code> and the length of the route never enters into it: no route
+              is measured, and the phase is a function of time, so panning cannot disturb it. The
+              beads are anchored to the ground rather than to the screen, so zooming in spreads them
+              out with the geography instead of fitting more of them onto the same route. Size, pace
+              and spacing are each bounded, at three, two and six times what they opened at, so the
+              far end of the camera is not blobs travelling at forty times the speed you set, nor
+              beads so far apart that none is on screen. They sit in a group of their own above the
+              routes, which keeps the only thing on the map that repaints each frame away from the
+              geometry that never moves. Ask for reduced
+              motion and the beads stay where they are and stop travelling, because a dotted route
+              still reads as a route.
+            </p>
+            <pre>
+flow: true
+flow: { style: 'dash', speed: 60, spacing: 30 }
+flow: { color: '#e8f4ff', size: 5, stagger: false }
+flow: { scale: 'screen' }   // fixed size at any zoom</pre
             >
           </section>
 
@@ -174,6 +227,7 @@ geo: {
       const NIGHT = ['#22d3ee', '#38bdf8', '#818cf8', '#c084fc', '#fbbf24']
 
       let mode = 'geodesic'
+      let flowMode = 'dots'
       const status = document.getElementById('status')
 
       const series = () => ({
@@ -186,6 +240,12 @@ geo: {
         colorScale: { palette: NIGHT, classes: 5 },
         opacity: 0.9,
         endpoints: { show: true, radius: 2, color: '#e8f4ff' },
+        // Every route on this map leaves the same airport, so an arc alone cannot
+        // tell the reader which way anything goes. `true` is the whole option: the
+        // bead takes the route's colour, its size from the route's width, and its
+        // phase from a hash of the route's key so fourteen departures out of one
+        // hub read as traffic rather than as one pulse.
+        flow: flowMode === 'off' ? false : flowMode === 'dash' ? { style: 'dash' } : true,
       })
 
       const map = Demo.watch(
@@ -266,7 +326,9 @@ geo: {
           straight: 'straight lines',
           curved: 'decorative curves',
         }[mode]
-        status.textContent = `${ROUTES.length} routes as ${drawn} paths, ${label}`
+        const moving = document.querySelectorAll('#map .apexmaps-flow--moving').length
+        const flow = moving ? `, ${moving} flowing outward` : ''
+        status.textContent = `${ROUTES.length} routes as ${drawn} paths, ${label}${flow}`
       }
 
       Demo.ready(map.render().then(report))
@@ -275,6 +337,17 @@ geo: {
         const button = event.target.closest('button')
         if (!button) return
         mode = button.dataset.mode
+        for (const other of event.currentTarget.querySelectorAll('button')) {
+          other.setAttribute('aria-pressed', String(other === button))
+        }
+        map.updateSeries([series()])
+        report()
+      })
+
+      document.getElementById('flow').addEventListener('click', (event) => {
+        const button = event.target.closest('button')
+        if (!button) return
+        flowMode = button.dataset.flow
         for (const other of event.currentTarget.querySelectorAll('button')) {
           other.setAttribute('aria-pressed', String(other === button))
         }

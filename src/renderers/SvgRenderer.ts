@@ -37,6 +37,46 @@ import type { NormalizedFeature, StrokeOptions, WorldPoint } from '../types'
 /** Below this stroke width a line needs an invisible wider path to be hoverable. */
 const MIN_HIT_WIDTH = 8
 
+/*
+ * Three bounds on how far a ground-anchored flow may follow the camera, one per
+ * property, because each degenerates in its own way and at its own zoom. Between
+ * them the beads are frozen past six times the opening view: whatever the camera
+ * does after that, the flow looks the same.
+ */
+
+/**
+ * How much larger than its calibrated size a bead may get.
+ *
+ * Routes carry `non-scaling-stroke` and keep their width however far the reader
+ * zooms, so an uncapped bead ends up a blob sitting on a hairline.
+ */
+const MAX_BEAD_GROWTH = 3
+
+/**
+ * How much further apart the beads may spread.
+ *
+ * Spreading is the point of anchoring them to the ground, and it is what keeps the
+ * bead count on a route constant instead of the route turning back into a dotted
+ * line at 3x, so this bound is the loosest of the three. It exists because the
+ * viewport does not grow with the zoom: at 256x an unbounded spacing is 14,000
+ * pixels, one bead passes a given point every eighty seconds, and a reader who
+ * zoomed in to look at the traffic finds a static line.
+ */
+const MAX_SPACING_GROWTH = 6
+
+/**
+ * How much faster than at the opening view a bead may appear to travel.
+ *
+ * Beads cover one dash period per cycle and the period scales, so without this the
+ * apparent speed scales too: at ten times the opening zoom they cross the screen
+ * ten times faster, which stops reading as traffic and starts reading as agitation.
+ *
+ * Stretching the cycle is the only lever that holds the speed. Capping the travel
+ * instead would leave it shorter than the pattern it advances, and the beads would
+ * jump back once per cycle rather than looping.
+ */
+const MAX_FLOW_SPEEDUP = 2
+
 export interface SymbolSpec {
   /** Stable identity within the series, used for the DOM key and hit-testing. */
   key: string
@@ -89,6 +129,33 @@ export interface PathSpec {
   width: number
   opacity?: number
   dashArray?: string
+  /** Beads travelling along this path. See `series/flow`. */
+  flow?: FlowSpec
+}
+
+/**
+ * A resolved flow: everything the dashed companion path needs, in screen pixels
+ * and seconds. Built by `series/flow`, which is where the reasoning lives.
+ */
+export interface FlowSpec {
+  /** Dash length. Near zero with a round cap is a dot. */
+  dash: number
+  gap: number
+  /** Stroke width, which is the bead's diameter. */
+  width: number
+  color: string
+  opacity: number
+  /** Seconds to advance one full period. Zero paints the beads without motion. */
+  duration: number
+  /** Negative seconds, so a staggered route starts mid-pattern rather than pausing. */
+  delay: number
+  /**
+   * `'zoom'` anchors the beads to the ground: every number above is multiplied by
+   * how far the camera has zoomed from the view the map opened at, so a bead stays
+   * over the same stretch of route. `'screen'` holds them at a fixed size and
+   * spacing however far the reader zooms.
+   */
+  scale: 'zoom' | 'screen'
 }
 
 export class SvgRenderer {
@@ -106,6 +173,10 @@ export class SvgRenderer {
   defs: SVGDefsElement | null = null
 
   private readonly pathsByKey = new Map<string, SVGPathElement>()
+  /** Calibrated geometry of live flow paths, so a camera change can rescale them. */
+  private readonly flowByKey = new Map<string, FlowSpec>()
+  /** The scale factor last written, so an unchanged camera writes nothing. */
+  private flowFactor = 1
   private readonly symbolsByKey = new Map<string, SVGCircleElement>()
   private readonly marksByKey = new Map<string, SVGGElement>()
   /** World positions of live symbols, so a camera change can reposition them. */
@@ -180,6 +251,7 @@ export class SvgRenderer {
   applyCamera(): void {
     if (this.world) this.world.setAttribute('transform', this.viewport.transform())
     this.positionSymbols()
+    this.applyFlowScale()
   }
 
   /**
@@ -275,12 +347,19 @@ export class SvgRenderer {
     seriesId = 'p0',
     hitWidth = MIN_HIT_WIDTH,
     markClass = 'apexmaps-arc',
+    animateFlow = true,
   }: {
     paths: PathSpec[]
     seriesId?: string
     hitWidth?: number
     /** CSS class per mark; the hit companion gets `${markClass}-hit`. */
     markClass?: string
+    /**
+     * Whether a flow's beads travel. False still paints them, spaced along the
+     * route: a dotted route reads as a route, which is a better answer under
+     * reduced motion than a route that lost its marks.
+     */
+    animateFlow?: boolean
   }): void {
     if (!this.marksLayer) return
     const group = this.ensureGroup(
@@ -340,7 +419,156 @@ export class SvgRenderer {
       if (spec.dashArray) path.setAttribute('stroke-dasharray', spec.dashArray)
     }
 
+    this.drawFlow(group, paths, seriesId, seen, animateFlow)
     this.prune(this.pathsByKey, seriesId, seen)
+  }
+
+  /**
+   * The travelling beads, one dashed companion path per route.
+   *
+   * They go in a group of their own, after the routes, for two reasons. Every
+   * bead then sits above every route, rather than being cut by whichever route
+   * happened to be drawn later, and the only content on the map that repaints
+   * every frame is isolated in its own paint chunk from the geometry that never
+   * moves.
+   */
+  private drawFlow(
+    group: SVGGElement,
+    paths: PathSpec[],
+    seriesId: string,
+    seen: Set<string>,
+    animate: boolean,
+  ): void {
+    const flows = paths.filter((spec) => spec.d && spec.flow)
+    let flowGroup = group.querySelector<SVGGElement>('g.apexmaps-series--flow')
+
+    // Rebuilt rather than merged: a route that lost its flow, or the series that
+    // lost every route, must not leave an entry behind for the camera to keep
+    // rescaling.
+    for (const key of this.flowByKey.keys()) {
+      if (key.startsWith(`${seriesId}:`)) this.flowByKey.delete(key)
+    }
+
+    // Flow turned off by an update. The beads themselves are pruned by key like
+    // any other companion mark, because they never entered `seen`; this is the
+    // group they lived in, which nothing else would collect.
+    if (!flows.length) {
+      remove(flowGroup)
+      return
+    }
+
+    if (!flowGroup) {
+      flowGroup = svg('g', { class: 'apexmaps-series--flow' })
+      group.appendChild(flowGroup)
+    }
+
+    for (const spec of flows) {
+      const flow = spec.flow!
+      const key = `${seriesId}:flow:${spec.key}`
+      seen.add(key)
+
+      let path = this.pathsByKey.get(key) as SVGPathElement | undefined
+      if (!path) {
+        path = svg('path', {
+          class: 'apexmaps-flow',
+          fill: 'none',
+          'stroke-linecap': 'round',
+          // A bead is decoration over a route that is already hoverable, and one
+          // that swallowed the pointer would make the route under it harder to
+          // hit than it was before flow was turned on.
+          'pointer-events': 'none',
+        })
+        this.pathsByKey.set(key, path)
+        flowGroup.appendChild(path)
+      }
+
+      this.flowByKey.set(key, flow)
+      setAttrs(path, {
+        d: spec.d,
+        stroke: flow.color,
+        // The width and the dash pattern are written by `applyFlowScale` below,
+        // which is the only place that knows where the camera is.
+        'vector-effect': 'non-scaling-stroke',
+      })
+      // Written or removed rather than skipped when it is 1: `setAttrs` treats a
+      // null as "leave alone", which would strand yesterday's 0.4 on a bead the
+      // caller has since asked for at full strength.
+      if (flow.opacity === 1) path.removeAttribute('opacity')
+      else path.setAttribute('opacity', String(flow.opacity))
+
+      // Every number the animation runs on is written by `applyFlowScale`, which
+      // is the only place that knows where the camera is. All that is decided here
+      // is whether it runs at all.
+      path.classList.toggle('apexmaps-flow--moving', animate && flow.duration > 0)
+    }
+
+    // Kept last: a route added by a later update is appended to the series group,
+    // which would otherwise put it over the beads.
+    group.appendChild(flowGroup)
+    this.applyFlowScale(true)
+  }
+
+  /**
+   * Size and space the beads for where the camera is.
+   *
+   * Beads are anchored to the ground rather than to the screen, so a bead stays
+   * over the same stretch of route as the reader zooms, and the number of them on
+   * a route stays what it was set to be. Holding the spacing constant in screen
+   * pixels instead means the count grows with the zoom, and a route that read as
+   * five beads at the opening view is a dotted line at 3x, which is the whole
+   * reason this exists.
+   *
+   * Everything is written in screen pixels, against `non-scaling-stroke`, rather
+   * than left in world units for the camera transform to scale: expressing it in
+   * world units would scale the bead's width by the same factor as its spacing,
+   * and those two want different laws. See `MAX_BEAD_GROWTH`.
+   *
+   * The travel goes with them, so the beads cross the same ground per second at
+   * any zoom and appear faster when the reader is closer, which is what anything
+   * moving over a map does, up to `MAX_FLOW_SPEEDUP`. Past that the cycle is
+   * stretched to hold the speed, because a deep zoom is where the honest version
+   * turns into agitation.
+   *
+   * The factor is the camera's zoom, with nothing subtracted, because `view.fit`
+   * fits the *projection* and never moves the camera: `k` is already the zoom
+   * relative to the view the map opened at, whatever that view was framed on. A
+   * flow's screen-pixel options therefore mean what they say in the opening view of
+   * a map fitted to one country as much as one fitted to the world.
+   *
+   * @param force Write even when the camera has not moved, for newly drawn paths.
+   */
+  private applyFlowScale(force = false): void {
+    if (!this.flowByKey.size) return
+
+    const factor = this.viewport.camera.k || 1
+    // A pan changes no zoom, and a pan is the common gesture: below this the whole
+    // pass is one comparison per frame.
+    if (!force && Math.abs(factor - this.flowFactor) < 1e-4) return
+    this.flowFactor = factor
+
+    for (const [key, flow] of this.flowByKey) {
+      const path = this.pathsByKey.get(key)
+      if (!path) continue
+
+      const scale = flow.scale === 'screen' ? 1 : factor
+      const spread = Math.min(scale, MAX_SPACING_GROWTH)
+      const dash = flow.dash * spread
+      const gap = flow.gap * spread
+      path.setAttribute('stroke-dasharray', `${dash} ${gap}`)
+      path.setAttribute('stroke-width', String(flow.width * Math.min(scale, MAX_BEAD_GROWTH)))
+      // The keyframe travels by one period, and the period just changed.
+      path.style.setProperty('--apexmaps-flow-travel', `${dash + gap}px`)
+
+      // The cycle covers exactly that travel, so pace is period over duration and
+      // this ratio is what sets it: the cycle takes as much longer as the period
+      // grew, divided by however much faster the beads are allowed to look. Below
+      // both bounds it is 1 and the pace tracks the zoom. The delay is stretched
+      // with it so the routes keep the relative stagger they were given rather than
+      // drifting into step.
+      const stretch = spread / Math.min(scale, MAX_FLOW_SPEEDUP)
+      path.style.setProperty('--apexmaps-flow-duration', `${flow.duration * stretch}s`)
+      path.style.setProperty('--apexmaps-flow-delay', `${flow.delay * stretch}s`)
+    }
   }
 
   /**
@@ -558,6 +786,7 @@ export class SvgRenderer {
       if (key.startsWith(`${seriesId}:`)) {
         remove(el)
         this.pathsByKey.delete(key)
+        this.flowByKey.delete(key)
       }
     }
     for (const [key, el] of this.symbolsByKey) {
@@ -589,6 +818,7 @@ export class SvgRenderer {
     this.overlayLayer = null
     this.defs = null
     this.pathsByKey.clear()
+    this.flowByKey.clear()
     this.symbolsByKey.clear()
     this.symbolWorld.clear()
     this.marksByKey.clear()

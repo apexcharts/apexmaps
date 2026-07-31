@@ -35,6 +35,8 @@ import type {
 } from '../types'
 import type { PathSpec } from '../renderers/SvgRenderer'
 import { readNumber, readText, readLonLat } from './accessors'
+import { resolveFlow } from './flow'
+import { FLOW_BUDGET } from '../utils/motion'
 
 const DEFAULT_COLOR = '#775DD0'
 const DEFAULT_WIDTH_RANGE: [number, number] = [0.75, 6]
@@ -63,6 +65,16 @@ export class ArcSeries {
   readonly items: ArcItem[] = []
   readonly widthScale: SizeScale
   readonly colorScale: Scale | null = null
+  /**
+   * Class indices switched off from the legend.
+   *
+   * A muted class hides its routes rather than greying them, which is the
+   * opposite of what a choropleth does with the same click, and for a reason: a
+   * choropleth cannot remove a country, so it can only drain the colour out of
+   * it, while a route is nothing but the datum. Fourteen grey lines left behind
+   * would be the clutter the reader clicked to get rid of.
+   */
+  readonly mutedClasses = new Set<number>()
 
   constructor({
     config,
@@ -160,21 +172,25 @@ export class ArcSeries {
     const geodesic = this.config.geodesic !== false
 
     for (const item of this.items) {
-      if (curvature > 0) {
-        // Bezier bulge is a screen-space effect, so it needs projected endpoints.
-        const a = viewport.project(item.from)
-        const b = viewport.project(item.to)
-        item.d = a && b ? bezierArc(a, b, curvature) : ''
-      } else if (geodesic) {
+      if (geodesic && curvature <= 0) {
         // Hand d3-geo a lon/lat LineString so its clipping and antimeridian
         // cutting apply. This is what makes trans-Pacific arcs render correctly.
         item.d = viewport.path?.(greatCircleLine(item.from, item.to)) ?? ''
       } else {
-        item.d =
-          viewport.path?.({
-            type: 'LineString',
-            coordinates: [item.from, item.to],
-          }) ?? ''
+        // Both of the other models are chords through screen space, so both are
+        // built from projected endpoints, and `bezierArc` with no curvature is the
+        // straight line.
+        //
+        // Building it here rather than handing d3-geo a two-point LineString is
+        // the whole point of this branch: d3-geo resamples a line segment along
+        // the great circle between its ends, so the naive straight line comes back
+        // as the geodesic to within the resampling tolerance, which is under a
+        // pixel. It is also why this is the one path model that streaks across the
+        // map instead of being cut at the antimeridian, and a straight line that
+        // does not do that would not be the thing `geodesic: false` promises.
+        const a = viewport.project(item.from)
+        const b = viewport.project(item.to)
+        item.d = a && b ? bezierArc(a, b, curvature) : ''
       }
 
       const midpoint = greatCircleMidpoint(item.from, item.to)
@@ -191,18 +207,30 @@ export class ArcSeries {
     return this.config.color ?? DEFAULT_COLOR
   }
 
+  /** Whether the legend has switched off the class this route falls in. */
+  isMuted(item: ArcItem): boolean {
+    if (!this.mutedClasses.size || !this.colorScale || item.value == null) return false
+    return this.mutedClasses.has(this.colorScale.classIndex(item.value))
+  }
+
   paths(): PathSpec[] {
     const out: PathSpec[] = []
     this.items.forEach((item, i) => {
-      if (!item.d) return
+      if (!item.d || this.isMuted(item)) return
+      const stroke = this.colorFor(item)
       out.push({
         key: item.key,
         item: i,
         d: item.d,
-        stroke: this.colorFor(item),
+        stroke,
         width: item.width,
         opacity: this.config.opacity ?? 0.75,
         dashArray: this.config.stroke?.dashArray,
+        flow: resolveFlow(this.config.flow, {
+          key: item.key,
+          width: item.width,
+          color: stroke,
+        }),
       })
     })
     return out
@@ -224,6 +252,9 @@ export class ArcSeries {
     // 80 identical dots on it is wasted DOM and a darker blob than intended.
     const seen = new Map<string, WorldPoint>()
     this.items.forEach((item) => {
+      // A hidden route leaves no dots behind, or a legend click would empty the
+      // map of lines and keep the endpoints of the routes it removed.
+      if (this.isMuted(item)) return
       for (const lonLat of [item.from, item.to]) {
         const key = `${lonLat[0].toFixed(4)},${lonLat[1].toFixed(4)}`
         if (seen.has(key)) continue
@@ -245,8 +276,20 @@ export class ArcSeries {
     return this.config.name
   }
 
-  toggleClass(): boolean {
-    return false
+  /**
+   * Switch a legend class off, or back on. Returns the new muted state.
+   *
+   * A series with no `colorScale` has no classes and no swatches, so there is
+   * nothing to toggle and the legend does not offer it.
+   */
+  toggleClass(classIndex: number): boolean {
+    if (!this.colorScale) return false
+    if (this.mutedClasses.has(classIndex)) {
+      this.mutedClasses.delete(classIndex)
+      return false
+    }
+    this.mutedClasses.add(classIndex)
+    return true
   }
 
   legendItems(): never[] {
@@ -264,6 +307,11 @@ export class ArcSeries {
     if (this.items.length > 400 && (this.config.opacity ?? 0.75) > 0.5) {
       notes.push(
         `${this.items.length} arcs will read as a hairball at full opacity. Lower series opacity, or aggregate origin-destination pairs before plotting.`,
+      )
+    }
+    if (this.config.flow && this.items.length > FLOW_BUDGET) {
+      notes.push(
+        `${this.items.length} arcs is past the flow budget of ${FLOW_BUDGET}, so the beads are painted along each route but do not travel. Aggregate the pairs, or accept a dotted route.`,
       )
     }
     return notes

@@ -65,7 +65,7 @@ import { GlobeRotation } from './interaction/GlobeRotation'
 import { registerPalette, listPalettes, getPalette } from './scales/Palettes'
 import type { Palette } from './scales/Palettes'
 import { html, remove, resolveSize, pointerPosition, hasDom } from './utils/dom'
-import { motionBudget, prefersReducedMotion, resolveSpeed } from './utils/motion'
+import { FLOW_BUDGET, motionBudget, prefersReducedMotion, resolveSpeed } from './utils/motion'
 import { darken } from './scales/Color'
 import { formatNumber } from './scales/Scale'
 import type { Scale } from './scales/Scale'
@@ -701,6 +701,7 @@ class ApexMaps extends BaseChart {
             paths: pathSeries.paths(),
             seriesId: pathSeries.id,
             markClass: pathSeries.type === 'line' ? 'apexmaps-line' : undefined,
+            animateFlow: this._flowTravels(pathSeries.items.length),
           })
           const endpoints = pathSeries.endpoints(this.viewport)
           if (endpoints.length) {
@@ -2165,10 +2166,19 @@ class ApexMaps extends BaseChart {
   }
 
   private _onLegendToggle(classIndex: number, seriesIndex: number): void {
+    let marks = false
     for (const series of this.renderTargets) {
-      if (series.index === seriesIndex) series.toggleClass(classIndex)
+      if (series.index !== seriesIndex) continue
+      series.toggleClass(classIndex)
+      // A feature series answers a toggle by draining the colour out of the
+      // class, which is one attribute per feature. A route series answers it by
+      // no longer emitting those routes, and that has to go through the draw:
+      // `_redrawFills` only ever visits feature series, so before this the swatch
+      // dimmed itself and the map did not move.
+      if (series.kind !== 'features') marks = true
     }
-    this._redrawFills()
+    if (marks) this._drawGeometry()
+    else this._redrawFills()
     this.emit('legendToggle', { classIndex, instance: this })
   }
 
@@ -3083,6 +3093,21 @@ class ApexMaps extends BaseChart {
     const anim = this.config.chart.animations ?? {}
     const speed = anim.enabled === false ? 0 : resolveSpeed(anim.speed)
     return motionBudget(this._markCount()).animate ? speed : 0
+  }
+
+  /**
+   * Whether a flow's beads travel, or are painted spaced along the route and left
+   * there.
+   *
+   * Counted per series rather than over the whole map, because the cost is the
+   * routes being repainted and a choropleth underneath them contributes nothing to
+   * it. `motionBudget` is reused for the decision so that `prefers-reduced-motion`
+   * still answers first, at whatever the route count happens to be.
+   */
+  private _flowTravels(routes: number): boolean {
+    const anim = this.config.chart.animations ?? {}
+    if (anim.enabled === false) return false
+    return motionBudget(routes, { fullBudget: FLOW_BUDGET, reducedBudget: FLOW_BUDGET }).animate
   }
 
   /** Marks this draw will produce, for the motion budget. */

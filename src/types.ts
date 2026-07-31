@@ -425,6 +425,80 @@ export interface MarkerSeriesOptions extends SeriesCommon {
   cluster?: ClusterOptions
 }
 
+/**
+ * Beads travelling along a route, so a connection reads as a direction.
+ *
+ * An arc says two places are related; it does not say which way anything moves,
+ * and on a hub map every route leaves the same airport, so the reader cannot
+ * infer it either. Drawn as a dashed companion path animated on its dash offset,
+ * which is why `speed` and `spacing` are in screen pixels and the route's length
+ * never enters into it: see `series/flow`.
+ *
+ * `prefers-reduced-motion`, `chart.animations.enabled: false` and a route count
+ * past the flow budget all leave the beads in place and stop them moving, because
+ * a dotted route still reads as a route.
+ */
+export interface FlowOptions {
+  /**
+   * `'dots'` beads the route, which is the one that reads as traffic. `'dash'`
+   * marches a dashed highlight along it instead.
+   */
+  style?: 'dots' | 'dash'
+  /**
+   * Whether the beads belong to the ground or to the screen.
+   *
+   * `'zoom'`, the default, anchors them to the route: zooming in spreads them out
+   * with the geography and enlarges them, so a bead stays over the same stretch of
+   * route and the number of beads on it does not change. `'screen'` holds their
+   * size and spacing fixed however far the reader zooms, which is what a dashboard
+   * wants when the beads are furniture rather than geography, and which turns a
+   * route into a dotted line once it is a few times longer than it opened.
+   *
+   * Each of the three is bounded under `'zoom'`, because each degenerates in its
+   * own way at the far end of the camera. Beads reach three times their opening
+   * size (past which they are a blob on a route that kept its own width), twice
+   * their opening pace (past which they read as agitation), and six times their
+   * opening spacing (past which they thin out until none is in view, because the
+   * viewport does not grow with the zoom). Beyond all three the flow looks the same
+   * however far the reader keeps going.
+   */
+  scale?: 'zoom' | 'screen'
+  /**
+   * Travel speed in screen pixels per second, at the zoom the map opened at.
+   * Default 90.
+   *
+   * Under `scale: 'zoom'` a bead covers the same ground per second whatever the
+   * zoom, so it appears faster the closer the reader gets, as anything moving over
+   * a map does, up to twice this and then no faster.
+   */
+  speed?: number
+  /**
+   * Screen pixels between one bead and the next, at the zoom the map opened at, and
+   * up to six times that as the reader zooms in. Default 56, which is chosen so that
+   * a route of ordinary length carries a handful of beads rather than a dotted
+   * texture.
+   *
+   * Lower it for a map of short routes: the pattern repeats along the path, so a
+   * route shorter than the spacing carries at most one bead, and for part of each
+   * cycle none.
+   */
+  spacing?: number
+  /**
+   * Bead diameter, or dash weight, in screen pixels. Defaults to the route's own
+   * width so the heavy corridors carry the fat beads.
+   */
+  size?: number
+  /** Defaults to the route's colour. */
+  color?: string
+  /** Default 1, so the beads stand off a route drawn under full opacity. */
+  opacity?: number
+  /**
+   * Offset each route's phase, so a corridor of parallel routes reads as traffic
+   * rather than as one synchronised pulse. Default true.
+   */
+  stagger?: boolean
+}
+
 /** Licensed feature: works without a key for evaluation, with a watermark. */
 export interface ArcSeriesOptions extends SeriesCommon {
   type: 'arc'
@@ -447,6 +521,8 @@ export interface ArcSeriesOptions extends SeriesCommon {
   colorScale?: ScaleOptions
   /** Draw a dot at each end. */
   endpoints?: { show?: boolean; radius?: number; color?: string }
+  /** Send beads along the route, from `from` towards `to`. `true` for defaults. */
+  flow?: boolean | FlowOptions
   /** Resolve string endpoints against geometry keys. */
   joinBy?: JoinSpec
 }
@@ -467,6 +543,8 @@ export interface LineSeriesOptions extends SeriesCommon {
   colorScale?: ScaleOptions
   /** Draw a dot at each route's start and end. */
   endpoints?: { show?: boolean; radius?: number; color?: string }
+  /** Send beads along the route, in the order its vertices were given. */
+  flow?: boolean | FlowOptions
 }
 
 export type Series =

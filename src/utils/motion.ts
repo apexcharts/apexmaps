@@ -46,6 +46,18 @@ export function resolveSpeed(
   }
 }
 
+/**
+ * Routes past which a flow layer is painted but not animated.
+ *
+ * A flow cannot ride the mark budget below, because it is not a transition that
+ * ends: it is a repaint of every dashed geodesic on the map, every frame, for as
+ * long as the page is open. So it gets a ceiling of its own, an order of
+ * magnitude lower, and above it the beads stay where they are. A dotted route
+ * still reads as a route, which is a better failure than a map that drops frames
+ * forever.
+ */
+export const FLOW_BUDGET = 600
+
 export interface MotionBudget {
   animate: boolean
   properties: 'all' | 'cheap'

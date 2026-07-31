@@ -56,6 +56,12 @@ const INHERITED = [
   'stroke-width',
   'stroke-opacity',
   'stroke-dasharray',
+  // Read as well as the pattern, because a flow's beads are positioned by their
+  // offset and nothing else (`series/flow`). Without it every bead in an export
+  // sits at the start of its route, which is not where the reader can see it. The
+  // consequence is that two exports of a travelling map differ, and that is the
+  // right way round: the export is meant to be what is on screen.
+  'stroke-dashoffset',
   'stroke-linecap',
   'stroke-linejoin',
   'visibility',
