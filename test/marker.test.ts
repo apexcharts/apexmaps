@@ -391,3 +391,42 @@ describe('clustered markers', () => {
     expect(instance.viewport.camera.k).toBeLessThanOrEqual(64)
   })
 })
+
+describe('cluster count legibility', () => {
+  /**
+   * The count is the only text in the library that sits on a colour the caller
+   * chose, so it cannot take the page's ink. A dark `cluster.color` drew a
+   * near-black count on a near-black circle, which is unreadable and was visible
+   * in the markers demo.
+   */
+  const clustered = (color: string) => ({
+    geo: { map: WORLD, projection: 'equirectangular' },
+    series: [
+      {
+        type: 'marker' as const,
+        name: 'Sites',
+        // Three points a few degrees apart: one cluster at this radius.
+        data: [
+          { lon: 0, lat: 0 },
+          { lon: 0.4, lat: 0.3 },
+          { lon: 0.8, lat: 0.1 },
+        ] as MarkerDatum[],
+        cluster: { radius: 60, minPoints: 2, color },
+      },
+    ],
+  })
+
+  const countLabel = () => el.querySelector<SVGTextElement>('text.apexmaps-mark-label')
+
+  it('draws a light count on a dark cluster', async () => {
+    await render(clustered('#4a5568'))
+    const label = countLabel()
+    expect(label?.textContent).toBe('3')
+    expect(label?.getAttribute('fill')).toBe('#ffffff')
+  })
+
+  it('draws a dark count on a light cluster', async () => {
+    await render(clustered('#f4d35e'))
+    expect(countLabel()?.getAttribute('fill')).toBe('#1a1a1a')
+  })
+})

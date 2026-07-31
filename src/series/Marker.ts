@@ -24,6 +24,7 @@
 
 import { resolveJoin } from '../data/Join'
 import { createScale, Scale } from '../scales/Scale'
+import { readableOn } from '../scales/Color'
 import { clusterPoints, clusterLevel, levelScale } from '../geo/Cluster'
 import type { Cluster } from '../geo/Cluster'
 import type { JoinResult } from '../data/Join'
@@ -307,6 +308,7 @@ export class MarkerSeries {
       // uses, so a cluster of 100 does not read as 100 times a cluster of 1.
       const t = Math.sqrt(cluster.count) / Math.sqrt(largest)
       const radius = minR + (maxR - minR) * t
+      const fill = opts.color ?? this.config.color ?? DEFAULT_COLOR
 
       return {
         key: `cluster-${i}`,
@@ -315,11 +317,17 @@ export class MarkerSeries {
         world: cluster.world,
         d: markerPath('circle', radius * 2),
         pointAnchored: false,
-        fill: opts.color ?? this.config.color ?? DEFAULT_COLOR,
+        fill,
         stroke,
         opacity,
         label: opts.showCount === false ? undefined : String(cluster.count),
         labelSize: cluster.count >= 1000 ? 10 : 11,
+        // The count is the one piece of text in this library that sits on a
+        // colour the caller chose, so it cannot inherit the page's ink: a dark
+        // `cluster.color` used to draw a near-black count on a near-black circle.
+        // WCAG contrast against the fill decides, the same rule the choropleth
+        // labels use over a dark class.
+        labelFill: readableOn(fill),
         hitRadius: radius,
       }
     })

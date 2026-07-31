@@ -70,6 +70,12 @@ export interface MarkSpec {
   opacity?: number
   label?: string
   labelSize?: number
+  /**
+   * Ink for the label, which the mark decides rather than the stylesheet: a
+   * cluster count sits on the cluster's own fill, and that fill is the caller's.
+   * Left unset the text inherits, which is only safe when nothing is behind it.
+   */
+  labelFill?: string
   /** Radius of the invisible hit circle, so small shapes stay clickable. */
   hitRadius?: number
 }
@@ -457,6 +463,7 @@ export class SvgRenderer {
         }
         text.textContent = spec.label
         text.setAttribute('font-size', String(spec.labelSize ?? 11))
+        if (spec.labelFill) text.setAttribute('fill', spec.labelFill)
       } else if (text) {
         remove(text)
       }
