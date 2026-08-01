@@ -661,42 +661,6 @@ a:focus-visible {
 
 /* --- navigation ------------------------------------------------------------ */
 
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  backdrop-filter: saturate(140%) blur(12px);
-  background: color-mix(in oklab, var(--page) 82%, transparent);
-  border-bottom: 1px solid var(--line);
-}
-
-.topbar__inner {
-  max-width: 1320px;
-  margin: 0 auto;
-  padding: 12px 28px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  font-weight: 640;
-  font-size: 14.5px;
-  letter-spacing: -0.015em;
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.brand__mark {
-  width: 9px;
-  height: 9px;
-  border-radius: 3px;
-  background: linear-gradient(140deg, var(--accent-bright), #6a5cff);
-}
-
 .crumb {
   font-size: 13px;
   color: var(--ink-4);
@@ -713,10 +677,6 @@ a:focus-visible {
 
 .crumb a:hover {
   color: var(--accent);
-}
-
-.spacer {
-  flex: 1;
 }
 
 /* --- hero ------------------------------------------------------------------ */
