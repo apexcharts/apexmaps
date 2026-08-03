@@ -179,6 +179,23 @@ describe('ApexMaps render', () => {
     expect(tooltip.style.display).toBe('none')
   })
 
+  it('shows no tooltip when the formatter returns an empty string', async () => {
+    // The formatter runs for every mark, including background geometry with no
+    // row behind it, so it needs a way to say "nothing here" that is not an
+    // empty chip parked next to the pointer.
+    await render({
+      tooltip: { formatter: ({ name }) => (name === 'Beta' ? '' : `<b>${name}</b>`) },
+    })
+    const paths = el.querySelectorAll('path.apexmaps-feature')
+    const tooltip = el.querySelector('.apexmaps-tooltip' as HTMLElement)
+
+    paths[0].dispatchEvent(new window.PointerEvent('pointerover', { bubbles: true }))
+    expect(tooltip.style.display).toBe('block')
+
+    paths[1].dispatchEvent(new window.PointerEvent('pointerover', { bubbles: true }))
+    expect(tooltip.style.display).toBe('none')
+  })
+
   it('emits featureClick and tracks selection', async () => {
     const onClick = vi.fn()
     await render()

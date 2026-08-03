@@ -177,14 +177,20 @@ legend: { title: 'Metro population' }</pre
           },
           legend: { title: 'Metro population', align: 'start' },
           tooltip: {
+            // The formatter runs for every mark under the pointer, and the land
+            // underneath the bubbles is a mark with no row behind it. It has
+            // nothing to say here, so it says nothing: an empty string means no
+            // tooltip rather than an empty one.
             formatter: ({ name, value, datum }) =>
-              `<div style="font-weight:640;margin-bottom:2px">${name}</div>` +
-              `<div style="font-size:15px;font-weight:600;font-variant-numeric:tabular-nums">${Demo.fmt.int(
-                value,
-              )}</div>` +
-              `<div style="opacity:.62;margin-top:2px">${
-                datum.growth > 0 ? '+' : ''
-              }${datum.growth}% a year</div>`,
+              !datum
+                ? ''
+                : `<div style="font-weight:640;margin-bottom:2px">${name}</div>` +
+                  `<div style="font-size:15px;font-weight:600;font-variant-numeric:tabular-nums">${Demo.fmt.int(
+                    value,
+                  )}</div>` +
+                  `<div style="opacity:.62;margin-top:2px">${
+                    datum.growth > 0 ? '+' : ''
+                  }${datum.growth}% a year</div>`,
           },
           series: [series()],
         }),

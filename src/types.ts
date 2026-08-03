@@ -777,7 +777,11 @@ export interface TooltipContext {
 export interface TooltipOptions {
   enabled?: boolean
   followCursor?: boolean
-  /** Returns HTML. Responsible for its own escaping. */
+  /**
+   * Returns HTML. Responsible for its own escaping. Return an empty string to
+   * show no tooltip for that mark: the formatter also runs for background
+   * geometry, which has no row behind it.
+   */
   formatter?: (context: TooltipContext) => string
   valueFormatter?: (value: number) => string
   offset?: [number, number]

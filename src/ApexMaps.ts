@@ -2170,10 +2170,18 @@ class ApexMaps extends BaseChart {
             format: this.config.tooltip.valueFormatter,
           })
 
-      const point: ScreenPoint = mark.anchor
-        ? this.viewport.worldToScreen(mark.anchor)
-        : [this.viewport.width / 2, this.viewport.height / 2]
-      this.tooltip.show({ point, html: markup })
+      // An empty string means "nothing to say about this mark", the same as it
+      // does for a label formatter. Showing it anyway would park an empty chip
+      // next to the pointer, so the only way to opt a mark out of the tooltip
+      // would be to disable tooltips for the whole chart.
+      if (markup.trim()) {
+        const point: ScreenPoint = mark.anchor
+          ? this.viewport.worldToScreen(mark.anchor)
+          : [this.viewport.width / 2, this.viewport.height / 2]
+        this.tooltip.show({ point, html: markup })
+      } else {
+        this.tooltip.hide()
+      }
     }
   }
 
