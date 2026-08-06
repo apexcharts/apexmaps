@@ -317,11 +317,11 @@ describe('beads belong to the ground, not to the screen', () => {
     const opening = m.viewport.camera.k
     const width = () => Number(bead.getAttribute('stroke-width'))
 
-    // Under every bound, all three track the camera.
+    // Under every bound, both track the camera. The pace never does.
     m.camera!.set({ k: opening * 2 })
     expect(period(bead)).toBeCloseTo(80, 3)
     expect(width()).toBeCloseTo(8, 3)
-    expect(pace(bead)).toBeCloseTo(100, 3)
+    expect(pace(bead)).toBeCloseTo(50, 3)
 
     // Size stops next: routes keep their own width however far the reader zooms, so
     // a bead that went on growing would be a blob on a hairline.
@@ -334,12 +334,12 @@ describe('beads belong to the ground, not to the screen', () => {
     m.camera!.set({ k: opening * 6 })
     expect(period(bead)).toBeCloseTo(240, 3)
 
-    // Past all three the camera changes nothing about the flow at all.
+    // Past both the camera changes nothing about the flow at all.
     for (const k of [8, 64, 2048]) {
       m.camera!.set({ k: opening * k })
       expect(period(bead)).toBeCloseTo(240, 3)
       expect(width()).toBeCloseTo(12, 3)
-      expect(pace(bead)).toBeCloseTo(100, 3)
+      expect(pace(bead)).toBeCloseTo(50, 3)
     }
   })
 
@@ -356,37 +356,88 @@ describe('beads belong to the ground, not to the screen', () => {
 
   /*
    * Apparent speed is the travel divided by the cycle, and the travel is one dash
-   * period, which scales. So the pace scales with the zoom unless the cycle is
-   * stretched to match, and at the far end of the camera that is not brisk, it is
-   * frantic.
+   * period. So the pace is `speed` only for as long as the cycle is stretched by
+   * whatever the period was stretched by, which is the one number on this page a
+   * reader can actually feel go wrong.
    */
   const pace = (bead: SVGPathElement) =>
     period(bead) / Number.parseFloat(bead.style.getPropertyValue('--apexmaps-flow-duration'))
 
-  it('lets the pace rise with the zoom, but only so far', async () => {
+  it('holds the pace at the speed that was asked for, at every zoom', async () => {
     const m = await render({ flow: { spacing: 40, size: 4, speed: 50 } })
     const bead = beads()[0]
     const opening = m.viewport.camera.k
     expect(pace(bead)).toBeCloseTo(50, 3)
 
-    // Up to the cap the beads cover the same ground per second, so the screen pace
-    // tracks the zoom.
-    m.camera!.set({ k: opening * 2 })
-    expect(pace(bead)).toBeCloseTo(100, 3)
+    // Zoomed in, zoomed out, and past every bound: fifty screen pixels per second
+    // throughout. A pace that tracks the zoom has to stop tracking it somewhere, and
+    // a reader crossing that somewhere sees the flow speed up and then flatten out,
+    // which is three paces where the option named one.
+    for (const k of [0.25, 0.5, 1, 2, 4, 6, 8, 1000]) {
+      m.camera!.set({ k: opening * k })
+      expect(pace(bead)).toBeCloseTo(50, 3)
+    }
 
-    // Past it the pace holds while the beads go on spreading.
+    // And it is the cycle that carries the zoom, not the travel. Holding the travel
+    // is the obvious way to hold the pace and the wrong one: a travel shorter than
+    // the pattern it advances makes the beads jump back once per cycle instead of
+    // looping.
     m.camera!.set({ k: opening * 4 })
     expect(period(bead)).toBeCloseTo(160, 3)
-    expect(pace(bead)).toBeCloseTo(100, 3)
-    // And it is the cycle that was stretched, not the travel. Capping the travel
-    // is the obvious way to hold the speed and the wrong one: a travel shorter
-    // than the pattern it advances makes the beads jump back once per cycle
-    // instead of looping.
     expect(bead.style.getPropertyValue('--apexmaps-flow-travel')).toBe('160px')
+    expect(Number.parseFloat(bead.style.getPropertyValue('--apexmaps-flow-duration'))).toBeCloseTo(
+      3.2,
+      3,
+    )
+  })
 
-    // And at the very end of the camera it is still twice, not four thousand times.
-    m.camera!.set({ k: opening * 1000 })
-    expect(pace(bead)).toBeCloseTo(100, 3)
+  /*
+   * Rewriting the cycle length does not move a running CSS animation to the matching
+   * point in the new cycle: progress is local time over duration, and the local time
+   * does not change, so the beads jump. A zoom rewrites the cycle every frame of the
+   * gesture, which makes that jump the thing a reader notices rather than the travel.
+   *
+   * jsdom runs no animations, so the phase has to be supplied. What is under test is
+   * the arithmetic that puts a measured phase back, which is the part that is wrong
+   * silently: a browser with no compensation at all still animates, just not from
+   * where the reader was watching.
+   */
+  const fakeAnimation = (bead: SVGPathElement, progress: number, elapsedMs: number) => {
+    const animation = {
+      animationName: 'apexmaps-flow',
+      startTime: 1000,
+      timeline: { currentTime: 1000 + elapsedMs },
+      effect: { getComputedTiming: () => ({ progress }) },
+    }
+    ;(bead as unknown as { getAnimations: () => unknown[] }).getAnimations = () => [
+      // A transition on the same element is an animation too, and is not this one.
+      { animationName: undefined, startTime: 0 },
+      animation,
+    ]
+  }
+
+  it('resumes the cycle where the beads were when the camera changed it', async () => {
+    const m = await render({ flow: { spacing: 40, speed: 50 } })
+    const bead = beads()[0]
+    const delay = () => Number.parseFloat(bead.style.getPropertyValue('--apexmaps-flow-delay'))
+
+    // A quarter of the way through the pattern, twelve seconds in.
+    fakeAnimation(bead, 0.25, 12_000)
+    m.camera!.set({ k: m.viewport.camera.k * 2 })
+
+    // The cycle is now 80px at 50px/s, and the delay has to leave the animation a
+    // quarter into it: local time is elapsed minus delay, so 12 - 0.25 * 1.6.
+    expect(Number.parseFloat(bead.style.getPropertyValue('--apexmaps-flow-duration'))).toBeCloseTo(
+      1.6,
+      6,
+    )
+    expect(delay()).toBeCloseTo(12 - 0.4, 6)
+
+    // Nothing accumulates: every write is read off the animation's own clock, so a
+    // second change lands on the phase measured then, not on the one before it.
+    fakeAnimation(bead, 0.75, 30_000)
+    m.camera!.set({ k: m.viewport.camera.k * 2 })
+    expect(delay()).toBeCloseTo(30 - 0.75 * 3.2, 6)
   })
 
   it('keeps the routes staggered when the cycle stretches', async () => {

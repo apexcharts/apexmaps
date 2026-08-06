@@ -124,10 +124,14 @@
               <code>spacing / speed</code> and the length of the route never enters into it: no route
               is measured, and the phase is a function of time, so panning cannot disturb it. The
               beads are anchored to the ground rather than to the screen, so zooming in spreads them
-              out with the geography instead of fitting more of them onto the same route. Size, pace
-              and spacing are each bounded, at three, two and six times what they opened at, so the
-              far end of the camera is not blobs travelling at forty times the speed you set, nor
-              beads so far apart that none is on screen. They sit in a group of their own above the
+              out with the geography instead of fitting more of them onto the same route. The pace is
+              the one thing the camera leaves alone: the cycle is stretched by exactly what the
+              spacing grew by, so <code>speed</code> is screen pixels per second at any zoom, and the
+              alternative, letting the beads cover the same ground per second and appear faster as
+              you come closer, has to be capped somewhere and reads as three different speeds either
+              side of the cap. Size and spacing are bounded instead, at three and six times what they
+              opened at, so the far end of the camera is not blobs on hairlines, nor beads so far
+              apart that none is on screen. They sit in a group of their own above the
               routes, which keeps the only thing on the map that repaints each frame away from the
               geometry that never moves. Ask for reduced
               motion and the beads stay where they are and stop travelling, because a dotted route

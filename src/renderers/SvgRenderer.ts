@@ -40,10 +40,13 @@ import type { NormalizedFeature, StrokeOptions, WorldPoint } from '../types'
 const MIN_HIT_WIDTH = 8
 
 /*
- * Three bounds on how far a ground-anchored flow may follow the camera, one per
+ * Two bounds on how far a ground-anchored flow may follow the camera, one per
  * property, because each degenerates in its own way and at its own zoom. Between
  * them the beads are frozen past six times the opening view: whatever the camera
  * does after that, the flow looks the same.
+ *
+ * There is deliberately no third bound on the pace, because the pace does not
+ * follow the camera at all. See `applyFlowScale`.
  */
 
 /**
@@ -65,19 +68,6 @@ const MAX_BEAD_GROWTH = 3
  * zoomed in to look at the traffic finds a static line.
  */
 const MAX_SPACING_GROWTH = 6
-
-/**
- * How much faster than at the opening view a bead may appear to travel.
- *
- * Beads cover one dash period per cycle and the period scales, so without this the
- * apparent speed scales too: at ten times the opening zoom they cross the screen
- * ten times faster, which stops reading as traffic and starts reading as agitation.
- *
- * Stretching the cycle is the only lever that holds the speed. Capping the travel
- * instead would leave it shorter than the pattern it advances, and the beads would
- * jump back once per cycle rather than looping.
- */
-const MAX_FLOW_SPEEDUP = 2
 
 export interface SymbolSpec {
   /** Stable identity within the series, used for the DOM key and hit-testing. */
@@ -559,11 +549,26 @@ export class SvgRenderer {
    * world units would scale the bead's width by the same factor as its spacing,
    * and those two want different laws. See `MAX_BEAD_GROWTH`.
    *
-   * The travel goes with them, so the beads cross the same ground per second at
-   * any zoom and appear faster when the reader is closer, which is what anything
-   * moving over a map does, up to `MAX_FLOW_SPEEDUP`. Past that the cycle is
-   * stretched to hold the speed, because a deep zoom is where the honest version
-   * turns into agitation.
+   * The pace does not follow the camera. Apparent speed is the travel over the
+   * cycle, and the travel is one period, so stretching the cycle by exactly what
+   * the period grew by cancels the zoom out of it: `speed` is screen pixels per
+   * second at every zoom, in both directions, and the two bounds above change what
+   * the flow looks like rather than how fast it goes.
+   *
+   * That is not the physically honest reading, which is that something moving over
+   * the ground appears faster as the reader comes closer, and the honest version is
+   * what this used to do up to a bound of twice. It reads badly, because a pace that
+   * tracks the zoom has to stop tracking it somewhere: the beads accelerate to the
+   * bound, flatten out, and then, as the spacing goes on spreading past where the
+   * pace stopped, thin out into something a reader sees as slowing down again. Three
+   * regimes over a zoom range a reader crosses in one gesture. A flow is a direction
+   * marker rather than a vehicle, so it is worth more that it reads as one pace than
+   * that it reads as physics.
+   *
+   * The cost is that the beads cover less ground per second the further in the
+   * reader goes, which nobody has a reference for, and that they pass any given
+   * point less often, which is bounded by `MAX_SPACING_GROWTH` along with the
+   * spacing itself.
    *
    * The factor is the camera's zoom, with nothing subtracted, because `view.fit`
    * fits the *projection* and never moves the camera: `k` is already the zoom
@@ -582,6 +587,11 @@ export class SvgRenderer {
     if (!force && Math.abs(factor - this.flowFactor) < 1e-4) return
     this.flowFactor = factor
 
+    // Read before write, in one pass each: asking a browser where an animation is
+    // flushes pending style, so interleaving the two would make it resolve style
+    // once per bead instead of once for the pass.
+    const phases = this.readFlowPhases()
+
     for (const [key, flow] of this.flowByKey) {
       const path = this.pathsByKey.get(key)
       if (!path) continue
@@ -595,16 +605,64 @@ export class SvgRenderer {
       // The keyframe travels by one period, and the period just changed.
       path.style.setProperty('--apexmaps-flow-travel', `${dash + gap}px`)
 
-      // The cycle covers exactly that travel, so pace is period over duration and
-      // this ratio is what sets it: the cycle takes as much longer as the period
-      // grew, divided by however much faster the beads are allowed to look. Below
-      // both bounds it is 1 and the pace tracks the zoom. The delay is stretched
-      // with it so the routes keep the relative stagger they were given rather than
-      // drifting into step.
-      const stretch = spread / Math.min(scale, MAX_FLOW_SPEEDUP)
-      path.style.setProperty('--apexmaps-flow-duration', `${flow.duration * stretch}s`)
-      path.style.setProperty('--apexmaps-flow-delay', `${flow.delay * stretch}s`)
+      // The cycle stretches by exactly what the period did, which is what holds the
+      // pace. See the note above for why it is held rather than allowed to rise.
+      const duration = flow.duration * spread
+      const phase = phases.get(key)
+      path.style.setProperty('--apexmaps-flow-duration', `${duration}s`)
+      path.style.setProperty(
+        '--apexmaps-flow-delay',
+        // Nothing to carry over: the calibrated stagger, stretched with the cycle so
+        // the routes keep the relative phase they were given rather than drifting
+        // into one synchronised pulse.
+        `${phase === undefined ? flow.delay * spread : phase.elapsed - phase.progress * duration}s`,
+      )
     }
+  }
+
+  /**
+   * Where every travelling bead currently is in its cycle, keyed as `flowByKey`.
+   *
+   * Rewriting `animation-duration` does not move a running CSS animation to the
+   * matching point in the new cycle. Local time is fixed by the start time, and
+   * progress is local time over duration, so a route that has been travelling for a
+   * minute lands on an arbitrary point of the pattern the moment the cycle changes
+   * length. A zoom rewrites the cycle on every frame of the gesture, so the beads
+   * scatter for as long as it lasts instead of flowing, and the longer the page has
+   * been open the further each jump throws them.
+   *
+   * So the phase is read here and put back as a compensating delay: local time is
+   * `now - start - delay`, and progress is that over the duration, which makes
+   * `elapsed - progress * duration` the delay that resumes the cycle where the
+   * reader was watching it. It is arithmetic on the animation's own clock rather
+   * than state of ours, so a dropped frame or a paused tab cannot desynchronise it.
+   *
+   * Web Animations is the only way to ask a browser where a CSS animation is. Where
+   * it is missing (jsdom, SSR) nothing is animating in the first place, and the
+   * absence of a key means "use the calibrated stagger" rather than "phase zero".
+   */
+  private readFlowPhases(): Map<string, { progress: number; elapsed: number }> {
+    const phases = new Map<string, { progress: number; elapsed: number }>()
+    for (const key of this.flowByKey.keys()) {
+      const path = this.pathsByKey.get(key)
+      // Beads that are not travelling have no phase to keep, and this is what says
+      // so for all three ways of stopping them: reduced motion, animations off, and
+      // a route count past the flow budget.
+      if (!path?.classList.contains('apexmaps-flow--moving')) continue
+      if (typeof path.getAnimations !== 'function') continue
+      // By name, not by index: a transition on the same element is an animation too.
+      const travel = path
+        .getAnimations()
+        .find((a): a is CSSAnimation => (a as CSSAnimation).animationName === 'apexmaps-flow')
+      const progress = travel?.effect?.getComputedTiming().progress
+      const now = travel?.timeline?.currentTime
+      const start = travel?.startTime
+      // A bead whose animation was created in this same frame has no start time yet,
+      // which is the newly drawn case, and it wants the calibrated stagger anyway.
+      if (progress == null || typeof now !== 'number' || typeof start !== 'number') continue
+      phases.set(key, { progress, elapsed: (now - start) / 1000 })
+    }
+    return phases
   }
 
   /**
