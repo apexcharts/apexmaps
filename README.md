@@ -49,8 +49,8 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 [Licensing](#licensing) for the whole list and the reasoning.
 
 **Where the detail lives.** Every option carries its reasoning in its own JSDoc, so it shows on hover
-in an editor. [`examples/`](examples) is one runnable demo per feature. [`docs/features.md`](docs/features.md)
-carries the longer notes on why each feature behaves the way it does rather than the obvious way.
+in an editor. [`examples/`](examples) is one runnable demo per feature, and each page carries the
+longer notes on why the feature behaves the way it does rather than the obvious way.
 
 ## Frameworks
 
@@ -185,7 +185,8 @@ The budget is a p95 pan and zoom frame under 16 ms at 3,000 features. It comes i
 group, so a camera frame writes one `transform` on one element and the per-frame cost in our code is
 constant in the feature count. CI enforces that invariant rather than the milliseconds
 ([test/perf.test.ts](test/perf.test.ts)), because a wall-clock assertion would flake on a loaded
-runner, get skipped, and then nothing would be enforced. [More on the numbers](docs/features.md#performance).
+runner, get skipped, and then nothing would be enforced.
+[Run the numbers yourself](examples/bench.html).
 
 ## Joins fail loudly
 
@@ -203,7 +204,7 @@ join: 3/6 data rows matched 3/177 features (geometry key "name", data key "name"
 Available programmatically as `map.diagnoseJoin()`. Matching stays exact by default, because silently
 guessing turns an obvious failure into a plausible wrong answer; `fuzzyJoin: true` applies the
 suggestions and reports every substitution.
-[More on one-to-many joins](docs/features.md#the-join-diagnostic).
+[More on one-to-many joins](examples/joins.html).
 
 ## API sketch
 

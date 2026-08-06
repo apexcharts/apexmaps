@@ -5,6 +5,7 @@ coverage/
 *.log
 
 plans/
+docs/
 
 # Personal agent permissions. `.claude/settings.json` is shared config; only the
 # per-machine allowlist is ignored.
