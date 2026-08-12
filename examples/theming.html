@@ -20,6 +20,18 @@
         padding: 10px;
         border-radius: 8px;
       }
+      /* The family root tokens. Declared on an ancestor rather than the map, and
+         with no --apexmaps-* anywhere, so what reaches the map is inheritance
+         doing the work. A real page would put these on :root. */
+      #family-scope {
+        --apx-surface: #fffbeb;
+        --apx-fore: #422006;
+        --apx-grid: rgba(120, 53, 15, 0.24);
+        --apx-accent: #b45309;
+        background: #fef3c7;
+        padding: 10px;
+        border-radius: 8px;
+      }
       #frame {
         /* An explicit width, or a resizable box reports its max-content width and
            the map inside sizes itself to that instead of to the page. */
@@ -63,6 +75,19 @@
           the tooltip pick it up.
         </p>
         <div id="branded"></div>
+      </div>
+
+      <div class="card">
+        <h1>Family tokens</h1>
+        <p class="note">
+          The same five <code>--apx-*</code> tokens every ApexCharts product reads, so one brand
+          declaration themes a whole dashboard. Nothing here sets a single <code>--apexmaps-*</code>
+          property or a theme option: the wrapper declares <code>--apx-surface</code>,
+          <code>--apx-fore</code>, <code>--apx-grid</code> and <code>--apx-accent</code>, and the
+          legend, tooltip and focus ring inherit them. Anything you set yourself still wins over
+          them, and dark mode keeps its own palette.
+        </p>
+        <div id="family-scope"><div id="family"></div></div>
       </div>
 
       <div class="card">
@@ -116,6 +141,15 @@ responsive: [
         }),
       )
 
+      const family = Demo.watch(
+        'family',
+        new ApexMaps(document.getElementById('family'), {
+          chart: { height: 320, background: 'transparent' },
+          geo: { map: 'eu/nuts0@20m' },
+          series: [series('oranges')],
+        }),
+      )
+
       const responsive = Demo.watch(
         'responsive',
         new ApexMaps(document.getElementById('responsive'), {
@@ -142,7 +176,7 @@ responsive: [
       responsive.on('resized', reportSize)
 
       Demo.ready(
-        Promise.all([theme.render(), branded.render(), responsive.render()]).then(() => {
+        Promise.all([theme.render(), branded.render(), family.render(), responsive.render()]).then(() => {
           document.getElementById('mode-status').textContent = `mode: ${theme.config.theme.mode}`
           reportSize()
         }),

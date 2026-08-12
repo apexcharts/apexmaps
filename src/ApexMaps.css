@@ -5,16 +5,31 @@
  * `--apexmaps-*` on the container (or globally) and the map follows, which is how
  * theme inheritance works without configuration. Dark mode is a class rather than
  * only a media query so a dashboard can force it independently of the OS.
+ *
+ * The roles that mean the same thing in every ApexCharts product fall back to
+ * the shared `--apx-*` family tokens, so a page can state its brand once on
+ * `:root` and have the map follow along with the charts beside it. Precedence
+ * reads left to right in each declaration below:
+ *
+ *   --apexmaps-* set by the host  >  --apx-* family token  >  built-in default
+ *
+ * The dark palette deliberately takes no tokens. A single set of `--apx-*`
+ * values describes one appearance, and applying a light brand surface to the
+ * palette chosen for dark mode is how you get white text on white. Dark stays
+ * self-contained and always legible; override `--apexmaps-*` to theme it.
  */
 
 .apexmaps {
-  --apexmaps-fg: #1f2933;
+  --apexmaps-fg: var(--apx-fore, #1f2933);
   --apexmaps-fg-muted: #6b7280;
+  /* Not token-backed: the light default is transparent on purpose, so the
+     host's own card shows through. Painting it with `--apx-surface` would
+     cover a tinted card that was deliberately chosen. */
   --apexmaps-bg: transparent;
-  --apexmaps-surface: #ffffff;
-  --apexmaps-border: rgba(0, 0, 0, 0.12);
+  --apexmaps-surface: var(--apx-surface, #ffffff);
+  --apexmaps-border: var(--apx-grid, rgba(0, 0, 0, 0.12));
   --apexmaps-shadow: 0 4px 16px rgba(15, 23, 42, 0.14);
-  --apexmaps-focus: #2563eb;
+  --apexmaps-focus: var(--apx-accent, #2563eb);
   /* The label halo, so it flips with the theme rather than staying white over a
      dark map. */
   --apexmaps-halo: rgba(255, 255, 255, 0.85);
@@ -65,6 +80,8 @@
    it is an unreadable map. A dashboard that is already dark can hand the
    background back with `--apexmaps-bg: transparent`. */
 .apexmaps--dark {
+  /* No `--apx-*` fallbacks here on purpose — see the note at the top of the
+     file. This palette must stay readable whatever the page's tokens describe. */
   --apexmaps-fg: #e5e7eb;
   --apexmaps-fg-muted: #9ca3af;
   --apexmaps-bg: #111827;

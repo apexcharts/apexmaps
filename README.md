@@ -302,6 +302,67 @@ ApexMaps.mapMeta('us/counties@10m')             // source, licence, vintage, key
 ApexMaps.catalogue()                            // every built-in pack, with provenance
 ```
 
+## Theming
+
+The map's chrome is styled with CSS custom properties under the `--apexmaps-*`
+namespace. Set any of them on the container (or anywhere above it) and the map
+follows, with no configuration:
+
+```css
+.my-map {
+  --apexmaps-surface: #faf7ff;
+  --apexmaps-border: rgba(91, 33, 182, 0.2);
+  --apexmaps-focus: #5b21b6;
+}
+```
+
+### Family tokens (`--apx-*`)
+
+Every product in the ApexCharts family reads the same five root tokens, so a
+page can state its brand once and have maps, plots, trees, flow diagrams and
+Gantt charts all follow:
+
+| Token | Role |
+| --- | --- |
+| `--apx-accent` | The colour that means interactive or selected |
+| `--apx-fore` | Text and anything that must stay legible on the surface |
+| `--apx-grid` | Hairlines: borders and separators |
+| `--apx-surface` | The plane content sits on |
+| `--apx-series-1` … `--apx-series-N` | An ordered categorical palette (1-based) |
+
+```css
+:root {
+  --apx-accent: #5b21b6;
+  --apx-fore: #1f2933;
+  --apx-grid: rgba(0, 0, 0, 0.12);
+  --apx-surface: #ffffff;
+}
+```
+
+Custom properties inherit, so declaring them on `:root` reaches every chart on
+the page. They sit **below** anything you set yourself, so adopting them cannot
+change a map you had already themed:
+
+```
+--apexmaps-* you set  >  --apx-* family token  >  built-in default
+```
+
+`--apexmaps-fg`, `--apexmaps-surface`, `--apexmaps-border` and
+`--apexmaps-focus` take them. `--apexmaps-bg` deliberately does not: its default
+is `transparent` so your own card shows through, and painting it with
+`--apx-surface` would cover a background you chose.
+
+### Why dark mode does not take them
+
+A single set of `--apx-*` values describes **one** appearance. The map's mode is
+chosen by `theme.mode` (`'light'`, `'dark'` or `'auto'`), not by the page, so
+the two can disagree: a page with a light brand surface plus `theme.mode:
+'dark'` would paint the dark palette white and put white text on it. Rather than
+guess, the dark palette stays self-contained and always legible.
+
+To brand dark mode, override the `--apexmaps-*` tokens under `.apexmaps--dark`
+(or on the container) — those still win over everything.
+
 ## Opinionated defaults, and why
 
 - **Equal Earth, not Web Mercator.** Most developers never choose a projection, so the default has to
