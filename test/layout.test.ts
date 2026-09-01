@@ -242,6 +242,16 @@ describe('geo.layout', () => {
     expect(layoutIdFor('jp/admin1@10m', 'hex')).toBeUndefined()
   })
 
+  it('resolves every shipped layout from its country alias', () => {
+    // The alias is how anyone will actually reach these, so the mapping from a
+    // boundary pack to its layout is asserted for each rather than for the US
+    // alone: it is table-driven, and a wrong `of` would only show up here.
+    expect(layoutIdFor('au', 'hex')).toBe('au/admin1@hex')
+    expect(layoutIdFor('ca', 'hex')).toBe('ca/admin1@hex')
+    expect(layoutIdFor('de', 'hex')).toBe('de/admin1@hex')
+    expect(layoutIdFor('de/states', 'hex')).toBe('de/admin1@hex')
+  })
+
   it('declares an unplaced list for every layout that is a subset', () => {
     // The coverage warning reads this copy, and `npm run check:layout` fails if
     // it disagrees with the file's own.
@@ -295,6 +305,59 @@ describe.skipIf(!hasLayout)('the committed us/states@hex pack', () => {
     const pack = JSON.parse(readFileSync(HEX_FILE, 'utf8')) as { unplaced: string[] }
     const row = geoLayouts().find((l) => l.id === 'us/states@hex')
     expect([...pack.unplaced].sort()).toEqual([...(row?.unplaced ?? [])].sort())
+  })
+})
+
+describe.skipIf(!hasLayout)('every shipped layout', () => {
+  beforeEach(() => {
+    installCatalogue()
+    setGeoSource((file) => Promise.resolve(readPack(file)))
+  })
+
+  const SHIPPED = [
+    { id: 'au/admin1@hex', cells: 8, key: 'iso_3166_2', has: 'AU-TAS' },
+    { id: 'ca/admin1@hex', cells: 13, key: 'iso_3166_2', has: 'CA-NU' },
+    { id: 'de/admin1@hex', cells: 16, key: 'iso_3166_2', has: 'DE-BE' },
+    { id: 'us/states@hex', cells: 51, key: 'abbr', has: 'DC' },
+  ]
+
+  for (const layout of SHIPPED) {
+    it(`${layout.id} generates ${layout.cells} keyed cells`, async () => {
+      const resolved = await resolveMap(layout.id)
+      const features = (resolved.data as { features: { properties: Record<string, string> }[] })
+        .features
+      expect(features).toHaveLength(layout.cells)
+      expect(features.map((f) => f.properties[layout.key])).toContain(layout.has)
+      // Six corners and the closing point, for every cell in every layout.
+      for (const f of features as unknown as { geometry: { coordinates: number[][][] } }[]) {
+        expect(f.geometry.coordinates[0]).toHaveLength(7)
+      }
+    })
+  }
+
+  it('keys every cell to a real feature in the boundary pack it claims', async () => {
+    // The join is the whole promise: one dataset, either representation. A cell
+    // keyed to something the boundary pack has never heard of silently drops.
+    for (const layout of SHIPPED) {
+      const row = geoLayouts().find((l) => l.id === layout.id)!
+      const boundary = await resolveMap(row.of)
+      const geometries = (
+        boundary.data as {
+          objects: Record<string, { geometries: { properties: Record<string, string> }[] }>
+        }
+      ).objects
+      const real = new Set(
+        Object.values(geometries)[0].geometries.map((g) => g.properties?.[layout.key]),
+      )
+      const cells = await resolveMap(layout.id)
+      for (const f of (cells.data as { features: { properties: Record<string, string> }[] })
+        .features) {
+        expect(
+          real.has(f.properties[layout.key]),
+          `${layout.id}: ${f.properties[layout.key]}`,
+        ).toBe(true)
+      }
+    }
   })
 })
 

@@ -34,7 +34,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Series | `choropleth`, `bubble` (proportional symbols), `marker` (seven shapes, categorical colour, clustering&nbsp;†), `arc` (great-circle connections, travelling `flow` beads)&nbsp;†, `line` (routes through given vertices)&nbsp;†, plus an automatic basemap whenever no feature series is present |
 | Projections | 13 core projections with aliases (`equalEarth` default, `webMercator`, `epsg:3857`, `albersUsa`, `orthographic`, conics, azimuthals), spec objects with `rotate` / `parallels` / `clipAngle`, and `ApexMaps.registerProjection()`&nbsp;† for the rest of `d3-geo-projection` |
 | Geometry | 26 built-in packs: world countries and land, US states and counties, EU NUTS 0-3, and admin-1 for 15 more countries. Lazy, one request per pack, provenance and attribution attached |
-| Layouts | `layout: 'hex'` redraws a region set as a hex tile map (honeycomb, tilegram): one equal cell per region, keyed the way the boundary pack is keyed, so the same data and the same `joinBy` serve both. `us/states@hex` ships; `ApexMaps.registerLayout()` takes your own&nbsp;† |
+| Layouts | `layout: 'hex'` redraws a region set as a hex tile map (honeycomb, tilegram): one equal cell per region, keyed the way the boundary pack is keyed, so the same data and the same `joinBy` serve both. Four ship (US states, Australia, Canada, Germany), each scored against its boundary pack by `npm run check:layout`; `ApexMaps.registerLayout()` takes your own&nbsp;† |
 | Data | GeoJSON, TopoJSON, bare geometry, feature arrays; automatic winding repair; join-key auto-detection |
 | Joins | Explicit `joinBy`, mismatch diagnostics with suggestions, FIPS leading-zero repair, opt-in `fuzzyJoin` |
 | Scales | quantile, equal interval, Jenks, threshold, linear, log, sqrt, ordinal; OkLab-sampled ramps; 17 palettes; automatic diverging selection; square-root size scales with nested-circle legends |
@@ -139,7 +139,14 @@ geo: { map: 'world/countries' }        // detail-free: the lightest one
 geo: { map: 'us' }                     // states
 geo: { map: 'jp/prefectures' }         // the country's own word for its tier
 geo: { map: 'eu/nuts2@20m' }           // Eurostat regions
+geo: { map: 'us', layout: 'hex' }      // the same states as one hexagon each
 ```
+
+Four region sets also have a **hex tile layout**, which is the same regions drawn as
+equal cells instead of real boundaries: `us`, `au`, `ca` and `de`. Reach one with
+`layout: 'hex'` or by its own id (`us/states@hex`, `au/hex`). The layout is keyed the way
+its boundary pack is keyed, so one dataset serves both, and it resolves independently:
+asking for the honeycomb never downloads the boundaries.
 
 26 packs cover world countries and coastline, US states and all 3,231 counties, NUTS levels 0 to 3,
 and admin-1 for China, India, Japan, Germany, the UK, France, Italy, Canada, Brazil, Russia, Mexico,

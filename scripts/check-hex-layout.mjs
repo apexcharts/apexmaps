@@ -34,7 +34,7 @@ import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
 const { feature: topoFeature, neighbors } = require('topojson-client')
-const { geoCentroid } = require('d3-geo')
+const { geoCentroid, geoArea } = require('d3-geo')
 
 const ROOT = resolve(import.meta.dirname, '..')
 const GEO_DIR = join(ROOT, 'geo')
@@ -169,13 +169,22 @@ for (const { file, json: pack } of layouts) {
   const geometries = topology.objects[objectName].geometries
   const fc = topoFeature(topology, topology.objects[objectName])
 
+  // One key can cover several geometries, and the biggest one is the one the
+  // reader means. Natural Earth files New South Wales and Lord Howe Island
+  // under the same `AU-NSW`, and the island sits 12 degrees out into the
+  // Tasman; taking whichever came last would score the layout against a speck
+  // of rock and report the mainland as misplaced.
   const truth = new Map()
   for (const f of fc.features) {
     const value = f.properties?.[pack.keyField]
     if (value == null) continue
     const [lon, lat] = geoCentroid(f)
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue
-    truth.set(String(value), { lon, lat, name: f.properties.name })
+    const key = String(value)
+    const area = Math.abs(geoArea(f))
+    const held = truth.get(key)
+    if (held && held.area >= area) continue
+    truth.set(key, { lon, lat, area, name: f.properties.name })
   }
 
   // --- 1. coverage

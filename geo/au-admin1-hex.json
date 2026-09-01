@@ -1,0 +1,72 @@
+{
+  "id": "au/admin1@hex",
+  "kind": "layout",
+  "of": "au/admin1@10m",
+  "grid": "hex",
+  "orientation": "pointy",
+  "offset": "odd-r",
+  "keyField": "iso_3166_2",
+  "nameField": "name",
+  "levelName": "States",
+  "unplaced": [
+    "AU-X02~",
+    "AU-X03~",
+    "AU-X04~"
+  ],
+  "source": "hand-authored for ApexMaps, verified against Natural Earth 5.1.1 centroids and shared-arc adjacency",
+  "license": "public domain",
+  "attribution": "",
+  "vintage": "2026",
+  "boundaries": "The six states plus the ACT and the Northern Territory. The three external-territory codes in au/admin1@10m (Ashmore and Cartier, Jervis Bay, Macquarie Island) are unplaced: they are not units anyone reports state-level data for.",
+  "compromises": [
+    "ACT is drawn beside NSW rather than inside it, which is the only way a hex grid can show an enclave at all."
+  ],
+  "accept": {
+    "order": [],
+    "borders": []
+  },
+  "cells": {
+    "AU-NT": [
+      1,
+      0
+    ],
+    "AU-QLD": [
+      2,
+      0
+    ],
+    "AU-WA": [
+      0,
+      1
+    ],
+    "AU-SA": [
+      1,
+      1
+    ],
+    "AU-NSW": [
+      2,
+      1
+    ],
+    "AU-VIC": [
+      2,
+      2
+    ],
+    "AU-ACT": [
+      3,
+      2
+    ],
+    "AU-TAS": [
+      2,
+      3
+    ]
+  },
+  "names": {
+    "AU-NT": "Northern Territory",
+    "AU-QLD": "Queensland",
+    "AU-WA": "Western Australia",
+    "AU-SA": "South Australia",
+    "AU-NSW": "New South Wales",
+    "AU-VIC": "Victoria",
+    "AU-ACT": "Australian Capital Territory",
+    "AU-TAS": "Tasmania"
+  }
+}

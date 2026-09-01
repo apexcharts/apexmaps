@@ -444,6 +444,34 @@ const LAYOUTS: LayoutRow[] = [
     unplaced: ['AS', 'GU', 'MP', 'PR', 'VI'],
     note: '50 states plus DC. The five inhabited territories in us/states@10m are unplaced: no published one-hex-per-unit layout includes them.',
   },
+  {
+    id: 'au/admin1@hex',
+    file: 'au-admin1-hex.json',
+    of: 'au/admin1@10m',
+    level: 'States',
+    key: 'iso_3166_2',
+    alias: ['au/hex', 'au/states/hex'],
+    unplaced: ['AU-X02~', 'AU-X03~', 'AU-X04~'],
+    note: 'Six states plus the ACT and the Northern Territory. The three external-territory codes in au/admin1@10m are unplaced: nobody reports state-level data for them.',
+  },
+  {
+    id: 'ca/admin1@hex',
+    file: 'ca-admin1-hex.json',
+    of: 'ca/admin1@10m',
+    level: 'Provinces',
+    key: 'iso_3166_2',
+    alias: ['ca/hex', 'ca/provinces/hex'],
+    note: 'All ten provinces and three territories.',
+  },
+  {
+    id: 'de/admin1@hex',
+    file: 'de-admin1-hex.json',
+    of: 'de/admin1@10m',
+    level: 'States',
+    key: 'iso_3166_2',
+    alias: ['de/hex', 'de/states/hex'],
+    note: 'All sixteen Laender. Berlin and Bremen get a full cell each, which is the reason to draw this rather than a choropleth.',
+  },
 ]
 
 /** Every layout, for documentation and the id-agreement checks. */

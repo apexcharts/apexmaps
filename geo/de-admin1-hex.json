@@ -1,0 +1,109 @@
+{
+  "id": "de/admin1@hex",
+  "kind": "layout",
+  "of": "de/admin1@10m",
+  "grid": "hex",
+  "orientation": "pointy",
+  "offset": "odd-r",
+  "keyField": "iso_3166_2",
+  "nameField": "name",
+  "levelName": "States",
+  "unplaced": [],
+  "source": "hand-authored for ApexMaps, verified against Natural Earth 5.1.1 centroids and shared-arc adjacency",
+  "license": "public domain",
+  "attribution": "",
+  "vintage": "2026",
+  "boundaries": "All sixteen Laender.",
+  "compromises": [
+    "Berlin is drawn beside Brandenburg rather than inside it. The two share a centroid, so no grid can express the enclave; adjacency is preserved instead.",
+    "Hamburg and Bremen get a full cell each, which is the entire reason to draw this rather than a choropleth."
+  ],
+  "accept": {
+    "order": [],
+    "borders": []
+  },
+  "cells": {
+    "DE-SH": [
+      1,
+      0
+    ],
+    "DE-MV": [
+      2,
+      0
+    ],
+    "DE-HB": [
+      0,
+      1
+    ],
+    "DE-HH": [
+      1,
+      1
+    ],
+    "DE-BB": [
+      2,
+      1
+    ],
+    "DE-NI": [
+      1,
+      2
+    ],
+    "DE-ST": [
+      2,
+      2
+    ],
+    "DE-BE": [
+      3,
+      2
+    ],
+    "DE-NW": [
+      0,
+      3
+    ],
+    "DE-HE": [
+      1,
+      3
+    ],
+    "DE-TH": [
+      2,
+      3
+    ],
+    "DE-SN": [
+      3,
+      3
+    ],
+    "DE-RP": [
+      1,
+      4
+    ],
+    "DE-BY": [
+      2,
+      4
+    ],
+    "DE-SL": [
+      0,
+      5
+    ],
+    "DE-BW": [
+      1,
+      5
+    ]
+  },
+  "names": {
+    "DE-SH": "Schleswig-Holstein",
+    "DE-MV": "Mecklenburg-Vorpommern",
+    "DE-HB": "Bremen",
+    "DE-HH": "Hamburg",
+    "DE-BB": "Brandenburg",
+    "DE-NI": "Niedersachsen",
+    "DE-ST": "Sachsen-Anhalt",
+    "DE-BE": "Berlin",
+    "DE-NW": "Nordrhein-Westfalen",
+    "DE-HE": "Hessen",
+    "DE-TH": "Thüringen",
+    "DE-SN": "Sachsen",
+    "DE-RP": "Rheinland-Pfalz",
+    "DE-BY": "Bayern",
+    "DE-SL": "Saarland",
+    "DE-BW": "Baden-Württemberg"
+  }
+}

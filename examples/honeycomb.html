@@ -81,6 +81,32 @@
       </div>
 
       <div class="card">
+        <h2 style="margin-top: 0">Four region sets have one</h2>
+        <p class="note">
+          A layout has no canonical answer, so each of these is a judgement about which real
+          adjacencies matter most, scored against the boundary pack it claims to represent.
+          Australia keeps every one of its 10 state borders touching; Germany keeps 72% of 29, with
+          Berlin drawn beside Brandenburg because the two share a centroid and no grid can express
+          an enclave; Canada keeps 75% of 16, and Nunavut is the hard one, spanning 60 degrees of
+          longitude and bordering regions at both ends of a span no single cell can reach.
+        </p>
+        <div class="three">
+          <div>
+            <div class="label"><code>map: 'au', layout: 'hex'</code></div>
+            <div id="au" class="plot"></div>
+          </div>
+          <div>
+            <div class="label"><code>map: 'ca', layout: 'hex'</code></div>
+            <div id="ca" class="plot"></div>
+          </div>
+          <div>
+            <div class="label"><code>map: 'de', layout: 'hex'</code></div>
+            <div id="de" class="plot"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
         <h2 style="margin-top: 0">Author your own</h2>
         <p class="note">
           <code>registerLayout</code> takes a table of <code>key → [col, row]</code>, row 0 north and
@@ -184,7 +210,54 @@ ApexMaps.registerLayout('demo/quad@hex', {
           }),
         )
 
-        await Promise.all([hex.render(), geo.render(), custom.render()])
+        /* ---- the other three that ship ------------------------------------- */
+        const others = await Promise.all(
+          [
+            ['au', 'au-admin1-10m.json', 'oranges'],
+            ['ca', 'ca-admin1-10m.json', 'purples'],
+            ['de', 'de-admin1-10m.json', 'teal'],
+          ].map(async ([cc, file, palette]) => {
+            // The data is built from the *boundary* pack and drawn on the
+            // layout without a single change, which is the claim this card is
+            // making. Both are keyed on the ISO subdivision code.
+            const regions = await Demo.places(file)
+            const rows = regions
+              .filter((r) => r.props.iso_3166_2 && !r.props.iso_3166_2.includes('~'))
+              .map((r) => ({ key: r.props.iso_3166_2, value: Demo.field(r) }))
+
+            return Demo.watch(
+              cc,
+              new ApexMaps(document.getElementById(cc), {
+                chart: { height: 300 },
+                geo: { map: cc, layout: 'hex' },
+                series: [
+                  {
+                    name: 'Illustrative index',
+                    joinBy: ['iso_3166_2', 'key'],
+                    data: rows,
+                    scale: { palette, classes: 4 },
+                  },
+                ],
+                dataLabels: {
+                  enabled: true,
+                  minFeatureArea: 0,
+                  collision: 'none',
+                  // The country prefix is on every cell, so it is noise.
+                  formatter: ({ key }) => String(key).replace(/^[A-Z]{2}-/, ''),
+                  style: { fontSize: 11, fontWeight: 600 },
+                },
+                legend: { show: false },
+              }),
+            )
+          }),
+        )
+
+        await Promise.all([
+          hex.render(),
+          geo.render(),
+          custom.render(),
+          ...others.map((m) => m.render()),
+        ])
 
         /* ---- the toggle: geography and back, on one instance ---------------- */
         let onHex = true

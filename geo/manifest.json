@@ -17,6 +17,22 @@
       "boundaries": "Natural Earth de facto boundaries; disputed areas follow the NE default view"
     },
     {
+      "id": "au/admin1@hex",
+      "file": "au-admin1-hex.json",
+      "kind": "layout",
+      "of": "au/admin1@10m",
+      "features": 8,
+      "bytes": 1518,
+      "keyField": "iso_3166_2",
+      "levelName": "States",
+      "source": "hand-authored for ApexMaps, verified against Natural Earth 5.1.1 centroids and shared-arc adjacency",
+      "license": "public domain",
+      "attribution": "",
+      "vintage": "2026",
+      "boundaries": "The six states plus the ACT and the Northern Territory. The three external-territory codes in au/admin1@10m (Ashmore and Cartier, Jervis Bay, Macquarie Island) are unplaced: they are not units anyone reports state-level data for.",
+      "note": "Hand-authored grid layout, not built by data:build. Verified with npm run check:layout."
+    },
+    {
       "id": "br/admin1@10m",
       "file": "br-admin1-10m.json",
       "object": "admin1",
@@ -47,6 +63,22 @@
       "boundaries": "Natural Earth de facto boundaries; disputed areas follow the NE default view"
     },
     {
+      "id": "ca/admin1@hex",
+      "file": "ca-admin1-hex.json",
+      "kind": "layout",
+      "of": "ca/admin1@10m",
+      "features": 13,
+      "bytes": 1811,
+      "keyField": "iso_3166_2",
+      "levelName": "Provinces",
+      "source": "hand-authored for ApexMaps, verified against Natural Earth 5.1.1 centroids and shared-arc adjacency",
+      "license": "public domain",
+      "attribution": "",
+      "vintage": "2026",
+      "boundaries": "All ten provinces and three territories.",
+      "note": "Hand-authored grid layout, not built by data:build. Verified with npm run check:layout."
+    },
+    {
       "id": "cn/admin1@10m",
       "file": "cn-admin1-10m.json",
       "object": "admin1",
@@ -75,6 +107,22 @@
       "attribution": "",
       "vintage": "2022",
       "boundaries": "Natural Earth de facto boundaries; disputed areas follow the NE default view"
+    },
+    {
+      "id": "de/admin1@hex",
+      "file": "de-admin1-hex.json",
+      "kind": "layout",
+      "of": "de/admin1@10m",
+      "features": 16,
+      "bytes": 1925,
+      "keyField": "iso_3166_2",
+      "levelName": "States",
+      "source": "hand-authored for ApexMaps, verified against Natural Earth 5.1.1 centroids and shared-arc adjacency",
+      "license": "public domain",
+      "attribution": "",
+      "vintage": "2026",
+      "boundaries": "All sixteen Laender.",
+      "note": "Hand-authored grid layout, not built by data:build. Verified with npm run check:layout."
     },
     {
       "id": "es/admin1@10m",

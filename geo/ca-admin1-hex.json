@@ -1,0 +1,97 @@
+{
+  "id": "ca/admin1@hex",
+  "kind": "layout",
+  "of": "ca/admin1@10m",
+  "grid": "hex",
+  "orientation": "pointy",
+  "offset": "odd-r",
+  "keyField": "iso_3166_2",
+  "nameField": "name",
+  "levelName": "Provinces",
+  "unplaced": [],
+  "source": "hand-authored for ApexMaps, verified against Natural Earth 5.1.1 centroids and shared-arc adjacency",
+  "license": "public domain",
+  "attribution": "",
+  "vintage": "2026",
+  "boundaries": "All ten provinces and three territories.",
+  "compromises": [
+    "Nunavut spans 60 degrees of longitude, more than twice any other region, and borders the Northwest Territories in the west and Newfoundland and Labrador in the east. One cell cannot reach both, so it is placed to keep the long land border with the Northwest Territories touching; the boundary with Labrador, which is offshore, is the one that gives.",
+    "Labrador is drawn in the top row beside the territories rather than at the end of the provinces row: its centroid is level with Quebec, and it keeps the Maritimes below it where a reader looks for them.",
+    "Prince Edward Island shares no border with anything in the topology, so its cell is placed by eye between New Brunswick and Nova Scotia."
+  ],
+  "accept": {
+    "order": [],
+    "borders": [
+      "CA-NL/CA-NU"
+    ]
+  },
+  "cells": {
+    "CA-YT": [
+      0,
+      0
+    ],
+    "CA-NT": [
+      1,
+      0
+    ],
+    "CA-NU": [
+      2,
+      0
+    ],
+    "CA-NL": [
+      6,
+      0
+    ],
+    "CA-BC": [
+      0,
+      1
+    ],
+    "CA-AB": [
+      1,
+      1
+    ],
+    "CA-SK": [
+      2,
+      1
+    ],
+    "CA-MB": [
+      3,
+      1
+    ],
+    "CA-ON": [
+      4,
+      1
+    ],
+    "CA-QC": [
+      5,
+      1
+    ],
+    "CA-NB": [
+      5,
+      2
+    ],
+    "CA-PE": [
+      6,
+      2
+    ],
+    "CA-NS": [
+      6,
+      3
+    ]
+  },
+  "names": {
+    "CA-YT": "Yukon",
+    "CA-NT": "Northwest Territories",
+    "CA-NU": "Nunavut",
+    "CA-NL": "Newfoundland and Labrador",
+    "CA-BC": "British Columbia",
+    "CA-AB": "Alberta",
+    "CA-SK": "Saskatchewan",
+    "CA-MB": "Manitoba",
+    "CA-ON": "Ontario",
+    "CA-QC": "Québec",
+    "CA-NB": "New Brunswick",
+    "CA-PE": "Prince Edward Island",
+    "CA-NS": "Nova Scotia"
+  }
+}
