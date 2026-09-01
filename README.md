@@ -407,7 +407,7 @@ the two can disagree: a page with a light brand surface plus `theme.mode:
 guess, the dark palette stays self-contained and always legible.
 
 To brand dark mode, override the `--apexmaps-*` tokens under `.apexmaps--dark`
-(or on the container) — those still win over everything.
+(or on the container), which still wins over everything.
 
 ## Opinionated defaults, and why
 
