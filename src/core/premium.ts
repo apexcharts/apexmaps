@@ -42,6 +42,10 @@
  * own. `morph`, `presentation`, `timePlayback` and `webgl` are named ahead of the
  * features themselves and are the exception that test knows about.
  *
+ * `morph` there means map-to-chart morphing, which is not built. The layout
+ * morph that ships today is a different feature and is not missing a gate: it
+ * only runs on a layout toggle, so `gridLayout` has already answered for it.
+ *
  * @module core/premium
  */
 

@@ -2,10 +2,11 @@
 
 Interactive geographic data visualization and storytelling for the ApexCharts ecosystem.
 
-> **Status: phase 1, pre-alpha (0.3.0).** Written in TypeScript. The engine, five series
-> (choropleth, bubble, marker, arc, line), projections, joins, scales, pattern and image fills,
-> legend, tooltip, labels, annotations, camera, geometry registry, drilldown, clustering, selection
-> and accessibility layer are working and tested. The story engine and tiles are not built yet.
+> **Status: phase 1, pre-alpha (0.3.0).** Written in TypeScript. The engine, six series
+> (choropleth, bubble, marker, hexbin, arc, line), hex tile layouts and the morph between them,
+> projections, joins, scales, pattern and image fills, legend, tooltip, labels, annotations, camera,
+> geometry registry, drilldown, clustering, selection and accessibility layer are working and
+> tested. The story engine and tiles are not built yet.
 
 ```js
 import ApexMaps from 'apexmaps'
@@ -211,8 +212,11 @@ ApexMaps.setGeoSource((file) => import(`apexmaps-geo/${file}`).then((m) => m.def
 ApexMaps.setGeoSource('https://cdn.example.com/apexmaps-geo/')                         // self-hosted
 ```
 
-> **Status:** `apexmaps-geo` is prepared but awaiting its first publish, so the default source 404s
-> until then. Pass geometry directly or call `setGeoSource()` in the meantime.
+> **Status:** `apexmaps-geo@1.0.0` is published, and the 26 boundary packs load from the default
+> CDN source with no configuration. The seven hex layout files are not in that release yet, so
+> `layout: 'hex'` needs `setGeoSource()` pointed at a copy that has them until the next dataset
+> publish. `npm run check:geo` reads this repository's own `geo/` directory, so it cannot tell you
+> this: check the CDN before relying on a pack in production.
 
 ## Performance
 
