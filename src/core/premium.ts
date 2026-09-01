@@ -13,10 +13,14 @@
  * tooltips, a legend, labels, zoom and pan, scales, export and accessibility, is
  * the free tier and renders clean. Depth of interaction (drilling into a level,
  * linking views, playing time), authoring on top of the map (annotations, routes),
- * summarising points into clusters, cartography beyond the built-in
- * projections, texture in place of a flat fill (patterns, imagery), and drawing
- * the geography as something other than itself (grid layouts) are the licensed
- * tier.
+ * summarising points, whether into clusters or a hexagonal lattice, cartography
+ * beyond the built-in projections, texture in place of a flat fill (patterns,
+ * imagery), and drawing the geography as something other than itself (grid
+ * layouts) are the licensed tier.
+ *
+ * `hexbin` is priced with `clustering` rather than with the free point series:
+ * both take raw points and hand back an aggregate the reader cannot get back to
+ * the originals from, which is a step past drawing the points themselves.
  *
  * `gridLayout` is priced with the geometry rather than with the renderer. The
  * generator is a hundred lines; what is being sold is the curated cell table
@@ -47,6 +51,7 @@ export const PREMIUM_FEATURES = [
   'customProjection',
   'drilldown',
   'gridLayout',
+  'hexbin',
   'imageFill',
   'linkGroup',
   'morph',

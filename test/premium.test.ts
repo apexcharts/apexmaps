@@ -87,6 +87,17 @@ const ACTIVATES: Partial<Record<PremiumFeature, Record<string, unknown>>> = {
   // the gate cannot see in the config: it has to come off the resolved geometry.
   // `registerLayout` is the caller's own table, which is gated the same way.
   gridLayout: { geo: { map: 'testOnly/quad@hex' } },
+  hexbin: {
+    series: [
+      {
+        type: 'hexbin',
+        data: [
+          { lon: 1, lat: 1 },
+          { lon: 1.1, lat: 1.1 },
+        ],
+      },
+    ],
+  },
   drilldown: {
     series: [
       {
@@ -135,6 +146,7 @@ const TURNS_OFF: Partial<Record<PremiumFeature, Record<string, unknown>>> = {
   customProjection: { geo: { projection: 'mercator' } },
   drilldown: { series: BASE.series },
   gridLayout: { geo: { map: BOX } },
+  hexbin: { series: BASE.series },
   imageFill: { series: BASE.series },
   linkGroup: { link: { group: '' } },
   patternFill: { series: BASE.series },

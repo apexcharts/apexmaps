@@ -3423,6 +3423,9 @@ class ApexMaps extends BaseChart {
       if ('cluster' in series && series.cluster && series.cluster.enabled !== false) {
         this._requirePremium('clustering')
       }
+      // Priced with clustering, not with the free point series: both summarise
+      // points into an aggregate the reader cannot get back to the originals from.
+      if (series.type === 'hexbin') this._requirePremium('hexbin')
       // Configured counts as used: the reader can drill whether or not they have
       // clicked yet, exactly as with a link group.
       if ('drilldown' in series && series.drilldown) this._requirePremium('drilldown')

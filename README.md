@@ -31,7 +31,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 
 | Area | Detail |
 |---|---|
-| Series | `choropleth`, `bubble` (proportional symbols), `marker` (seven shapes, categorical colour, clustering&nbsp;†), `hexbin` (point density on a hexagonal lattice, count/sum/mean/min/max, refining with the zoom), `arc` (great-circle connections, travelling `flow` beads)&nbsp;†, `line` (routes through given vertices)&nbsp;†, plus an automatic basemap whenever no feature series is present |
+| Series | `choropleth`, `bubble` (proportional symbols), `marker` (seven shapes, categorical colour, clustering&nbsp;†), `hexbin` (point density on a hexagonal lattice, count/sum/mean/min/max, refining with the zoom)&nbsp;†, `arc` (great-circle connections, travelling `flow` beads)&nbsp;†, `line` (routes through given vertices)&nbsp;†, plus an automatic basemap whenever no feature series is present |
 | Projections | 13 core projections with aliases (`equalEarth` default, `webMercator`, `epsg:3857`, `albersUsa`, `orthographic`, conics, azimuthals), spec objects with `rotate` / `parallels` / `clipAngle`, and `ApexMaps.registerProjection()`&nbsp;† for the rest of `d3-geo-projection` |
 | Geometry | 26 built-in packs: world countries and land, US states and counties, EU NUTS 0-3, and admin-1 for 15 more countries. Lazy, one request per pack, provenance and attribution attached |
 | Layouts | `layout: 'hex'` redraws a region set as a hex tile map (honeycomb, tilegram): one equal cell per region, keyed the way the boundary pack is keyed, so the same data and the same `joinBy` serve both. Toggling it **morphs**, region by region, so the reader can see which cell is which place. Seven ship (US states, Australia, Canada, Germany, Brazil, Japan, Europe), each scored against its boundary pack by `npm run check:layout`; `ApexMaps.registerLayout()` takes your own&nbsp;† |
@@ -439,7 +439,7 @@ survives the next one.
 
 | Free, always | Licensed |
 |---|---|
-| `choropleth`, `bubble`, `marker` and `hexbin` series, and the automatic basemap | Point clustering (`cluster`) |
+| `choropleth`, `bubble` and `marker` series, and the automatic basemap | Point clustering (`cluster`) and point density (`type: 'hexbin'`) |
 | Every one of the 13 built-in projections, with spec objects | Projections you register yourself (`registerProjection`) |
 | The geometry registry, all 26 packs, provenance and attribution | Drilldown and the breadcrumb (`drilldown`) |
 | Real boundaries, in every pack and projection | Hex tile layouts (`layout: 'hex'`, `registerLayout`) |
