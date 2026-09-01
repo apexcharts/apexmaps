@@ -3301,6 +3301,15 @@ class ApexMaps extends BaseChart {
       this._requirePremium('customProjection')
     }
 
+    // Read off the resolved geometry rather than off `geo.layout`, which is the
+    // one gate here that cannot be answered from the config alone. There are
+    // three ways to end up drawing a grid layout: `layout: 'hex'`, naming the
+    // layout id (`map: 'us/states@hex'`), and `registerLayout` with a table of
+    // your own. All three are the same feature, and the option is only present
+    // for the first, so gating on it would leave two free routes to a licensed
+    // representation. `mapMeta` is set before this runs on every path that can
+    // change the map, so the answer stays recomputable.
+    if (this.mapMeta?.layout) this._requirePremium('gridLayout')
 
     for (const series of config.series ?? []) {
       if (series.type === 'arc' || series.type === 'line') this._requirePremium('routes')
@@ -3597,6 +3606,9 @@ class ApexMaps extends BaseChart {
    * no canonical layout for any country, and a good one is a judgement about
    * which real adjacencies matter most. `npm run check:layout` scores one
    * against real centroids and borders.
+   *
+   * Registering is free. *Rendering* a grid layout is a licensed feature, your
+   * own table included: works without a key for evaluation, with a watermark.
    */
   static registerLayout(id: string, layout: LayoutPack, meta?: MapMeta): typeof ApexMaps {
     registerLayout(id, layout, meta)

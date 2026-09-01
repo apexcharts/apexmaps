@@ -100,6 +100,10 @@ export function registerMap(id: string, data: GeoInput | MapLoader, meta?: MapMe
  *   cells: { 'NL-GR': [4, 0], 'NL-FR': [3, 1] },
  * })
  * ```
+ *
+ * Registering costs nothing. Rendering the result is a licensed feature, because
+ * the gate is on drawing a region set as a grid rather than on whose table it
+ * is; see `core/premium`.
  */
 export function registerLayout(id: string, pack: LayoutPack, meta?: MapMeta): void {
   if (typeof id !== 'string' || !id) {

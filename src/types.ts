@@ -738,6 +738,11 @@ export interface GeoOptions {
    * Layouts exist for a subset of the packs; `ApexMaps.listMaps()` shows which,
    * and an unavailable one is an error rather than a silent fall back to real
    * boundaries, which would look like the option had been ignored.
+   *
+   * Licensed feature: works without a key for evaluation, with a watermark.
+   * Naming a layout id directly (`map: 'us/states@hex'`) or registering your own
+   * through `ApexMaps.registerLayout()` is the same feature and is gated the
+   * same way.
    */
   layout?: 'hex' | null
   /** TopoJSON object name, when the topology holds several. */

@@ -14,8 +14,18 @@
  * the free tier and renders clean. Depth of interaction (drilling into a level,
  * linking views, playing time), authoring on top of the map (annotations, routes),
  * summarising points into clusters, cartography beyond the built-in
- * projections, and texture in place of a flat fill (patterns, imagery) are the
- * licensed tier.
+ * projections, texture in place of a flat fill (patterns, imagery), and drawing
+ * the geography as something other than itself (grid layouts) are the licensed
+ * tier.
+ *
+ * `gridLayout` is priced with the geometry rather than with the renderer. The
+ * generator is a hundred lines; what is being sold is the curated cell table
+ * behind it, which is a per-country judgement about which real adjacencies
+ * matter, has no canonical answer, and has to be verified against the boundary
+ * pack it claims to represent. That is the same kind of ongoing work as the
+ * geometry registry, and it is why a layout a caller authors themselves through
+ * `registerLayout` is gated too: the gate is on the representation, not on whose
+ * table it is.
  *
  * One member of the free tier is there deliberately rather than by omission.
  * Accessibility is never gated: a watermark
@@ -36,6 +46,7 @@ export const PREMIUM_FEATURES = [
   'clustering',
   'customProjection',
   'drilldown',
+  'gridLayout',
   'imageFill',
   'linkGroup',
   'morph',

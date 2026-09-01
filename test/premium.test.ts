@@ -83,6 +83,10 @@ const ACTIVATES: Partial<Record<PremiumFeature, Record<string, unknown>>> = {
   // Registered in beforeEach. Every built-in name stays free, so this asserts the
   // distinction rather than just "a projection was set".
   customProjection: { geo: { map: BOX, projection: 'testOnly' } },
+  // Named directly rather than through `geo.layout`, because that is the route
+  // the gate cannot see in the config: it has to come off the resolved geometry.
+  // `registerLayout` is the caller's own table, which is gated the same way.
+  gridLayout: { geo: { map: 'testOnly/quad@hex' } },
   drilldown: {
     series: [
       {
@@ -130,6 +134,7 @@ const TURNS_OFF: Partial<Record<PremiumFeature, Record<string, unknown>>> = {
   clustering: { series: BASE.series },
   customProjection: { geo: { projection: 'mercator' } },
   drilldown: { series: BASE.series },
+  gridLayout: { geo: { map: BOX } },
   imageFill: { series: BASE.series },
   linkGroup: { link: { group: '' } },
   patternFill: { series: BASE.series },
@@ -147,6 +152,10 @@ describe('premium gating', () => {
     document.body.appendChild(el)
     LicenseManager.setLicense('')
     ApexMaps.registerProjection('testOnly', geoMercator as never)
+    ApexMaps.registerLayout('testOnly/quad@hex', {
+      keyField: 'iso_a3',
+      cells: { AAA: [0, 0], BBB: [1, 0] },
+    })
   })
 
   afterEach(() => {

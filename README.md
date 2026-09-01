@@ -34,7 +34,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Series | `choropleth`, `bubble` (proportional symbols), `marker` (seven shapes, categorical colour, clustering&nbsp;†), `arc` (great-circle connections, travelling `flow` beads)&nbsp;†, `line` (routes through given vertices)&nbsp;†, plus an automatic basemap whenever no feature series is present |
 | Projections | 13 core projections with aliases (`equalEarth` default, `webMercator`, `epsg:3857`, `albersUsa`, `orthographic`, conics, azimuthals), spec objects with `rotate` / `parallels` / `clipAngle`, and `ApexMaps.registerProjection()`&nbsp;† for the rest of `d3-geo-projection` |
 | Geometry | 26 built-in packs: world countries and land, US states and counties, EU NUTS 0-3, and admin-1 for 15 more countries. Lazy, one request per pack, provenance and attribution attached |
-| Layouts | `layout: 'hex'` redraws a region set as a hex tile map (honeycomb, tilegram): one equal cell per region, keyed the way the boundary pack is keyed, so the same data and the same `joinBy` serve both. `us/states@hex` ships; `ApexMaps.registerLayout()` takes your own |
+| Layouts | `layout: 'hex'` redraws a region set as a hex tile map (honeycomb, tilegram): one equal cell per region, keyed the way the boundary pack is keyed, so the same data and the same `joinBy` serve both. `us/states@hex` ships; `ApexMaps.registerLayout()` takes your own&nbsp;† |
 | Data | GeoJSON, TopoJSON, bare geometry, feature arrays; automatic winding repair; join-key auto-detection |
 | Joins | Explicit `joinBy`, mismatch diagnostics with suggestions, FIPS leading-zero repair, opt-in `fuzzyJoin` |
 | Scales | quantile, equal interval, Jenks, threshold, linear, log, sqrt, ordinal; OkLab-sampled ramps; 17 palettes; automatic diverging selection; square-root size scales with nested-circle legends |
@@ -399,6 +399,7 @@ survives the next one.
 | `choropleth`, `bubble` and `marker` series, and the automatic basemap | Point clustering (`cluster`) |
 | Every one of the 13 built-in projections, with spec objects | Projections you register yourself (`registerProjection`) |
 | The geometry registry, all 26 packs, provenance and attribution | Drilldown and the breadcrumb (`drilldown`) |
+| Real boundaries, in every pack and projection | Hex tile layouts (`layout: 'hex'`, `registerLayout`) |
 | Tooltips, legends, labels, data labels, states and themes | Editorial annotations (`annotations`) |
 | Zoom, pan, pinch, hover, click and box selection, the camera API | `arc` and `line` route series |
 | Joins, including `fuzzyJoin`, and the join diagnostics | Linked selection across maps (`link: { group }`) |
