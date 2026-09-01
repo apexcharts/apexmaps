@@ -110,6 +110,7 @@ broken by an unrelated one:
 | [patterns](examples/patterns.html) | A tile per region, with the colour still leading |
 | [image-fill](examples/image-fill.html) | A picture per region, clipped to its own outline |
 | [honeycomb](examples/honeycomb.html) | One hexagon per state, and the same map toggled back to real boundaries |
+| [hexbin](examples/hexbin.html) | Twenty thousand points binned, and what drawing every one of them costs |
 | [bubbles](examples/bubbles.html) | Square-root versus linear sizing, second colour encoding |
 | [markers](examples/markers.html) | Seven shapes, categorical colour, clustering |
 | [arcs](examples/arcs.html) | Great circles, antimeridian cutting, curvature, travelling flow |

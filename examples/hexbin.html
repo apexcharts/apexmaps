@@ -19,10 +19,40 @@
           lattice over the projection and colours each cell by how many landed in it, so the same
           twelve clusters arrive with a legend that says which is which.
         </p>
+        <p class="note">
+          The left one is behind a button, and that is the second half of the same point. Drawing
+          every point means one SVG group, one shape and one hit target per point, so the left map
+          costs around sixty thousand DOM nodes against the right one's few hundred, and the numbers
+          below are measured in your browser as you click rather than quoted from ours. The
+          boundaries are already loaded by then, so what you are waiting for is the drawing.
+        </p>
+        <div class="row">
+          <button id="draw-dots">Draw all 20,000 marks</button>
+          <span class="label" id="cost"></span>
+        </div>
         <div class="two">
           <div>
-            <div class="label"><code>type: 'marker'</code> · 20,000 marks</div>
+            <div class="label"><code>type: 'marker'</code> · 20,000 marks, on request</div>
             <div id="dots" class="plot"></div>
+            <!-- Held at the plot's own height, so drawing the map does not shift
+                 the card and the two columns stay level either way. -->
+            <div
+              id="dots-empty"
+              style="
+                height: 400px;
+                display: grid;
+                place-items: center;
+                text-align: center;
+                padding: 0 32px;
+                border: 1px dashed var(--line-2);
+                border-radius: 12px;
+                color: var(--ink-4);
+                font-size: 13px;
+              "
+            >
+              Not drawn yet. Every point gets its own group, shape and hit target, so this half is
+              about sixty thousand DOM nodes and it is worth feeling that rather than being told it.
+            </div>
           </div>
           <div>
             <div class="label"><code>type: 'hexbin'</code> · the same 20,000 points</div>
@@ -166,6 +196,13 @@
           points.push({ lon, lat, value: Demo.field({ lon, lat, key: `v${i}` }) })
         }
 
+        /** Wall time for one render, which is what a reader waits through. */
+        const timed = async (fn) => {
+          const t0 = performance.now()
+          await fn()
+          return performance.now() - t0
+        }
+
         // No basemap series is declared anywhere on this page. A hexbin is not
         // bound to geometry, so the library draws the coastline underneath it by
         // itself: points floating in the void are not a map. Declaring an empty
@@ -183,8 +220,20 @@
             }),
           )
 
-        /* ---- one point each, versus one cell each -------------------------- */
-        const dots = make('dots', {
+        /* ---- one point each, versus one cell each --------------------------
+         * The marker half is built on demand. Not to flatter the page: at three
+         * SVG nodes per mark it is around sixty thousand of them, which made
+         * this demo slow to load, and a card whose argument is "drawing every
+         * point is the expensive way to do this" should not be paying that cost
+         * on the way in to say so. Clicking is also the honest way to show it,
+         * because the delay is the finding.
+         *
+         * Deliberately not passed to `Demo.watch`. The smoke check asserts that
+         * every watched map has rendered and drawn marks, and this one has done
+         * neither until a reader asks. `markers.html` is where the marker series
+         * itself is covered.
+         */
+        const dotsConfig = {
           type: 'marker',
           name: 'One mark per point',
           data: points,
@@ -198,7 +247,7 @@
           // Clustering off on purpose: this half of the comparison exists to show
           // what 20,000 individual marks actually look like.
           cluster: { enabled: false },
-        })
+        }
 
         const bins = make('bins', {
           type: 'hexbin',
@@ -241,13 +290,52 @@
           scale: { palette: 'magma', classes: 6 },
         })
 
-        await Promise.all([
-          dots.render(),
-          bins.render(),
-          count.render(),
-          mean.render(),
-          zoomable.render(),
-        ])
+        const binsMs = await timed(() => bins.render())
+        await Promise.all([count.render(), mean.render(), zoomable.render()])
+
+        /* ---- what each way of drawing it costs -----------------------------
+         * Measured here rather than written into the prose, so the comparison
+         * cannot go stale and cannot be more flattering than the truth.
+         */
+        const costEl = document.getElementById('cost')
+        const nodes = (id) => document.getElementById(id).querySelectorAll('*').length
+        const cells = () => document.querySelectorAll('#bins path.apexmaps-bin').length
+        const hexCost = `hexbin: ${cells()} cells, ${Demo.fmt.int(nodes('bins'))} nodes, ${Math.round(binsMs)} ms`
+        let drawn = null
+        costEl.textContent = `marker: not drawn yet · ${hexCost}`
+
+        const button = document.getElementById('draw-dots')
+        const placeholder = document.getElementById('dots-empty')
+        button.addEventListener('click', async () => {
+          button.disabled = true
+          if (drawn) {
+            drawn.destroy()
+            drawn = null
+            placeholder.style.display = 'grid'
+            button.textContent = 'Draw all 20,000 marks'
+            costEl.textContent = `marker: not drawn yet · ${hexCost}`
+            button.disabled = false
+            return
+          }
+          costEl.textContent = `marker: drawing… · ${hexCost}`
+          placeholder.style.display = 'none'
+          // Yielded once, so the readout above actually paints before the main
+          // thread goes away for a third of a second.
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+          drawn = new ApexMaps(document.getElementById('dots'), {
+            chart: { height: 400 },
+            geo: { map: 'us', fill: '#eef1f5' },
+            series: [dotsConfig],
+            legend: { position: 'bottom' },
+          })
+          const ms = await timed(() => drawn.render())
+          const marks = document.querySelectorAll('#dots g.apexmaps-mark').length
+          costEl.textContent =
+            `marker: ${Demo.fmt.int(marks)} marks, ${Demo.fmt.int(nodes('dots'))} nodes, ` +
+            `${Math.round(ms)} ms · ${hexCost}`
+          button.textContent = 'Remove them again'
+          button.disabled = false
+        })
 
         const readout = document.getElementById('zoom-readout')
         const report = () => {

@@ -2,10 +2,13 @@
  * Hexbin series (binned point density).
  *
  * The right mark when there are more points than pixels. Ten thousand markers on
- * a country map is not a map of ten thousand things, it is a solid blob with a
- * fringe: the middle saturates, overlap hides the count, and the reader learns
- * only where the data *is not*. Binning answers the question the points were
- * asked to answer, because a cell of fixed area can carry a number.
+ * a country map is not a map of ten thousand things: past the first overlap the
+ * ink stops tracking the number, so the reader gets the shape of the data and no
+ * way to rank one part of it against another. Binning answers the question the
+ * points were asked to answer, because a cell of fixed area can carry a number.
+ *
+ * It is also three SVG nodes per point against one per cell, which is the same
+ * argument in a different currency.
  *
  * Not to be confused with `geo/HexLayout`, which is also hexagons and is a
  * different thing entirely. A layout is a cartogram: one cell per region, placed
