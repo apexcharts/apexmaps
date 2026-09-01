@@ -1,0 +1,267 @@
+{
+  "id": "jp/admin1@hex",
+  "kind": "layout",
+  "of": "jp/admin1@10m",
+  "grid": "hex",
+  "orientation": "pointy",
+  "offset": "odd-r",
+  "keyField": "iso_3166_2",
+  "nameField": "name",
+  "levelName": "Prefectures",
+  "unplaced": [],
+  "source": "hand-authored for ApexMaps, verified against Natural Earth 5.1.1 centroids and shared-arc adjacency",
+  "license": "public domain",
+  "attribution": "",
+  "vintage": "2026",
+  "boundaries": "All forty-seven prefectures.",
+  "compromises": [
+    "Nagano borders eight prefectures and Gifu borders seven. A hexagon has six sides, so both keep the six the grid can hold and the rest fall one cell away.",
+    "The empty cell between Okayama, Hiroshima, Wakayama and Shikoku is the Seto Inland Sea, which is enclosed by land on the ground as well.",
+    "Hokkaido, Shikoku, Kyushu and Okinawa share no boundary with Honshu, because the straits between them are water. Each is placed by position rather than by adjacency, and each is solved as its own block: Kyushu keeps all nine of its internal borders and Shikoku all five.",
+    "Okinawa is drawn one row clear of Kagoshima. It is 5 degrees further south than that, and no grid that showed the real distance would leave the other forty-six legible."
+  ],
+  "accept": {
+    "order": [],
+    "borders": []
+  },
+  "cells": {
+    "JP-01": [
+      10,
+      0
+    ],
+    "JP-02": [
+      9,
+      1
+    ],
+    "JP-05": [
+      9,
+      2
+    ],
+    "JP-03": [
+      10,
+      2
+    ],
+    "JP-06": [
+      8,
+      3
+    ],
+    "JP-04": [
+      9,
+      3
+    ],
+    "JP-15": [
+      8,
+      4
+    ],
+    "JP-07": [
+      9,
+      4
+    ],
+    "JP-17": [
+      5,
+      5
+    ],
+    "JP-16": [
+      6,
+      5
+    ],
+    "JP-10": [
+      7,
+      5
+    ],
+    "JP-09": [
+      8,
+      5
+    ],
+    "JP-08": [
+      9,
+      5
+    ],
+    "JP-18": [
+      5,
+      6
+    ],
+    "JP-21": [
+      6,
+      6
+    ],
+    "JP-20": [
+      7,
+      6
+    ],
+    "JP-11": [
+      8,
+      6
+    ],
+    "JP-12": [
+      9,
+      6
+    ],
+    "JP-31": [
+      3,
+      7
+    ],
+    "JP-26": [
+      4,
+      7
+    ],
+    "JP-25": [
+      5,
+      7
+    ],
+    "JP-23": [
+      6,
+      7
+    ],
+    "JP-19": [
+      7,
+      7
+    ],
+    "JP-13": [
+      8,
+      7
+    ],
+    "JP-32": [
+      2,
+      8
+    ],
+    "JP-33": [
+      3,
+      8
+    ],
+    "JP-28": [
+      4,
+      8
+    ],
+    "JP-27": [
+      5,
+      8
+    ],
+    "JP-24": [
+      6,
+      8
+    ],
+    "JP-22": [
+      7,
+      8
+    ],
+    "JP-14": [
+      8,
+      8
+    ],
+    "JP-35": [
+      1,
+      9
+    ],
+    "JP-34": [
+      2,
+      9
+    ],
+    "JP-30": [
+      4,
+      9
+    ],
+    "JP-29": [
+      5,
+      9
+    ],
+    "JP-37": [
+      4,
+      10
+    ],
+    "JP-41": [
+      0,
+      11
+    ],
+    "JP-40": [
+      1,
+      11
+    ],
+    "JP-44": [
+      2,
+      11
+    ],
+    "JP-38": [
+      3,
+      11
+    ],
+    "JP-36": [
+      4,
+      11
+    ],
+    "JP-42": [
+      0,
+      12
+    ],
+    "JP-43": [
+      2,
+      12
+    ],
+    "JP-45": [
+      3,
+      12
+    ],
+    "JP-39": [
+      4,
+      12
+    ],
+    "JP-46": [
+      2,
+      13
+    ],
+    "JP-47": [
+      0,
+      15
+    ]
+  },
+  "names": {
+    "JP-01": "Hokkaidō",
+    "JP-02": "Aomori",
+    "JP-05": "Akita",
+    "JP-03": "Iwate",
+    "JP-06": "Yamagata",
+    "JP-04": "Miyagi",
+    "JP-15": "Niigata",
+    "JP-07": "Fukushima",
+    "JP-17": "Ishikawa",
+    "JP-16": "Toyama",
+    "JP-10": "Gunma",
+    "JP-09": "Tochigi",
+    "JP-08": "Ibaraki",
+    "JP-18": "Fukui",
+    "JP-21": "Gifu",
+    "JP-20": "Nagano",
+    "JP-11": "Saitama",
+    "JP-12": "Chiba",
+    "JP-31": "Tottori",
+    "JP-26": "Kyōto",
+    "JP-25": "Shiga",
+    "JP-23": "Aichi",
+    "JP-19": "Yamanashi",
+    "JP-13": "Tokyo",
+    "JP-32": "Shimane",
+    "JP-33": "Okayama",
+    "JP-28": "Hyōgo",
+    "JP-27": "Ōsaka",
+    "JP-24": "Mie",
+    "JP-22": "Shizuoka",
+    "JP-14": "Kanagawa",
+    "JP-35": "Yamaguchi",
+    "JP-34": "Hiroshima",
+    "JP-30": "Wakayama",
+    "JP-29": "Nara",
+    "JP-37": "Kagawa",
+    "JP-41": "Saga",
+    "JP-40": "Fukuoka",
+    "JP-44": "Ōita",
+    "JP-38": "Ehime",
+    "JP-36": "Tokushima",
+    "JP-42": "Nagasaki",
+    "JP-43": "Kumamoto",
+    "JP-45": "Miyazaki",
+    "JP-39": "Kōchi",
+    "JP-46": "Kagoshima",
+    "JP-47": "Okinawa"
+  },
+  "parked": []
+}

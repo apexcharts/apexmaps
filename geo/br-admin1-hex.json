@@ -1,0 +1,166 @@
+{
+  "id": "br/admin1@hex",
+  "kind": "layout",
+  "of": "br/admin1@10m",
+  "grid": "hex",
+  "orientation": "pointy",
+  "offset": "odd-r",
+  "keyField": "iso_3166_2",
+  "nameField": "name",
+  "levelName": "States",
+  "unplaced": [],
+  "source": "hand-authored for ApexMaps, verified against Natural Earth 5.1.1 centroids and shared-arc adjacency",
+  "license": "public domain",
+  "attribution": "",
+  "vintage": "2026",
+  "boundaries": "All twenty-six states plus the Distrito Federal.",
+  "compromises": [
+    "The nine states of the Nordeste descend 7.5 degrees of latitude within about 2 degrees of longitude, so the coast is a near-vertical chain that needs four grid rows. Alagoas and Sergipe therefore sit level with the central plateau, several degrees south of where they are.",
+    "The Distrito Federal gets a cell beside Goias rather than inside it. It is an enclave, so no grid can hold it, and adjacency is kept instead.",
+    "Mato Grosso do Sul borders five states and reaches two of them. Placed to keep Sao Paulo and Parana, which are the borders that carry traffic; Goias, Minas Gerais and Mato Grosso end up one cell away.",
+    "Roraima and Amapa are drawn side by side along the top. Para separates them on the ground, and it is the cell directly below both."
+  ],
+  "accept": {
+    "order": [],
+    "borders": []
+  },
+  "cells": {
+    "BR-RR": [
+      2,
+      0
+    ],
+    "BR-AP": [
+      3,
+      0
+    ],
+    "BR-AM": [
+      1,
+      1
+    ],
+    "BR-PA": [
+      2,
+      1
+    ],
+    "BR-MA": [
+      3,
+      1
+    ],
+    "BR-CE": [
+      4,
+      1
+    ],
+    "BR-RN": [
+      5,
+      1
+    ],
+    "BR-AC": [
+      1,
+      2
+    ],
+    "BR-RO": [
+      2,
+      2
+    ],
+    "BR-TO": [
+      3,
+      2
+    ],
+    "BR-PI": [
+      4,
+      2
+    ],
+    "BR-PE": [
+      5,
+      2
+    ],
+    "BR-PB": [
+      6,
+      2
+    ],
+    "BR-MT": [
+      2,
+      3
+    ],
+    "BR-GO": [
+      3,
+      3
+    ],
+    "BR-BA": [
+      4,
+      3
+    ],
+    "BR-AL": [
+      5,
+      3
+    ],
+    "BR-DF": [
+      3,
+      4
+    ],
+    "BR-MG": [
+      4,
+      4
+    ],
+    "BR-SE": [
+      5,
+      4
+    ],
+    "BR-MS": [
+      2,
+      5
+    ],
+    "BR-SP": [
+      3,
+      5
+    ],
+    "BR-ES": [
+      4,
+      5
+    ],
+    "BR-PR": [
+      3,
+      6
+    ],
+    "BR-RJ": [
+      4,
+      6
+    ],
+    "BR-SC": [
+      3,
+      7
+    ],
+    "BR-RS": [
+      3,
+      8
+    ]
+  },
+  "names": {
+    "BR-RR": "Roraima",
+    "BR-AP": "Amapá",
+    "BR-AM": "Amazonas",
+    "BR-PA": "Pará",
+    "BR-MA": "Maranhão",
+    "BR-CE": "Ceará",
+    "BR-RN": "Rio Grande do Norte",
+    "BR-AC": "Acre",
+    "BR-RO": "Rondônia",
+    "BR-TO": "Tocantins",
+    "BR-PI": "Piauí",
+    "BR-PE": "Pernambuco",
+    "BR-PB": "Paraíba",
+    "BR-MT": "Mato Grosso",
+    "BR-GO": "Goiás",
+    "BR-BA": "Bahia",
+    "BR-AL": "Alagoas",
+    "BR-DF": "Distrito Federal",
+    "BR-MG": "Minas Gerais",
+    "BR-SE": "Sergipe",
+    "BR-MS": "Mato Grosso do Sul",
+    "BR-SP": "São Paulo",
+    "BR-ES": "Espírito Santo",
+    "BR-PR": "Paraná",
+    "BR-RJ": "Rio de Janeiro",
+    "BR-SC": "Santa Catarina",
+    "BR-RS": "Rio Grande do Sul"
+  }
+}

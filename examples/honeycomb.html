@@ -81,29 +81,75 @@
       </div>
 
       <div class="card">
-        <h2 style="margin-top: 0">Four region sets have one</h2>
+        <h2 style="margin-top: 0">Seven region sets have one</h2>
         <p class="note">
           A layout has no canonical answer, so each of these is a judgement about which real
-          adjacencies matter most, scored against the boundary pack it claims to represent.
-          Australia keeps every one of its 10 state borders touching; Germany keeps 72% of 29, with
-          Berlin drawn beside Brandenburg because the two share a centroid and no grid can express
-          an enclave; Canada keeps 75% of 16, and Nunavut is the hard one, spanning 60 degrees of
-          longitude and bordering regions at both ends of a span no single cell can reach.
+          adjacencies matter most, scored against the boundary pack it claims to represent. Each one
+          has a shape that fights the grid, and the interesting part is which compromise it forces:
         </p>
+        <ul class="note">
+          <li>
+            <strong>Australia</strong> keeps all 10 of its state borders touching, the only one that
+            keeps every single one. <strong>Germany</strong> keeps 72% of 29, and draws Berlin beside
+            Brandenburg because the two share a centroid and no grid can hold an enclave.
+          </li>
+          <li>
+            <strong>Canada</strong> keeps 75% of 16. Nunavut is the problem: it spans 60 degrees of
+            longitude, more than twice any other region, and borders the Northwest Territories in the
+            west and Labrador in the east. One cell cannot reach both, so it keeps the land border
+            and gives up the offshore one.
+          </li>
+          <li>
+            <strong>Brazil</strong> keeps 82% of 50. Its nine northeastern states descend 7.5 degrees
+            of latitude within about 2 degrees of longitude, so that coast is a near-vertical chain
+            that costs four grid rows, and Alagoas and Sergipe end up level with the central plateau.
+          </li>
+          <li>
+            <strong>Japan</strong> keeps 86% of 86, the highest of the large ones, because Hokkaido,
+            Shikoku, Kyushu and Okinawa share no boundary with Honshu at all. The straits are water,
+            so each island is a separate component that can be solved on its own: Kyushu keeps all
+            nine of its internal borders and Shikoku all five. Nagano borders eight prefectures and a
+            hexagon has six sides, so six is its ceiling and it reaches it.
+          </li>
+          <li>
+            <strong>Europe</strong> keeps 78% of 58. Germany borders nine countries and Austria
+            eight. Austria gets all six a hexagon can hold; Germany gets five, because one of its two
+            northern cells is North Sea and Denmark takes the other.
+          </li>
+        </ul>
         <div class="three">
           <div>
-            <div class="label"><code>map: 'au', layout: 'hex'</code></div>
+            <div class="label"><code>map: 'au', layout: 'hex'</code> · 8 states</div>
             <div id="au" class="plot"></div>
           </div>
           <div>
-            <div class="label"><code>map: 'ca', layout: 'hex'</code></div>
+            <div class="label"><code>map: 'ca', layout: 'hex'</code> · 13 provinces</div>
             <div id="ca" class="plot"></div>
           </div>
           <div>
-            <div class="label"><code>map: 'de', layout: 'hex'</code></div>
+            <div class="label"><code>map: 'de', layout: 'hex'</code> · 16 Laender</div>
             <div id="de" class="plot"></div>
           </div>
         </div>
+        <div class="three" style="margin-top: 18px">
+          <div>
+            <div class="label"><code>map: 'br', layout: 'hex'</code> · 27 states</div>
+            <div id="br" class="plot"></div>
+          </div>
+          <div>
+            <div class="label"><code>map: 'jp', layout: 'hex'</code> · 47 prefectures</div>
+            <div id="jp" class="plot"></div>
+          </div>
+          <div>
+            <div class="label"><code>map: 'eu', layout: 'hex'</code> · 37 NUTS0</div>
+            <div id="eu" class="plot"></div>
+          </div>
+        </div>
+        <p class="source">
+          <b>Europe's set is not the EU.</b> NUTS is a statistical classification, so level 0 also
+          covers the United Kingdom, the four EFTA countries and the five candidate countries.
+          Boundaries © EuroGeographics; the cell positions are ours.
+        </p>
       </div>
 
       <div class="card">
@@ -210,20 +256,24 @@ ApexMaps.registerLayout('demo/quad@hex', {
           }),
         )
 
-        /* ---- the other three that ship ------------------------------------- */
+        /* ---- the other six that ship --------------------------------------- */
         const others = await Promise.all(
           [
-            ['au', 'au-admin1-10m.json', 'oranges'],
-            ['ca', 'ca-admin1-10m.json', 'purples'],
-            ['de', 'de-admin1-10m.json', 'teal'],
-          ].map(async ([cc, file, palette]) => {
+            ['au', 'au-admin1-10m.json', 'iso_3166_2', 'oranges'],
+            ['ca', 'ca-admin1-10m.json', 'iso_3166_2', 'purples'],
+            ['de', 'de-admin1-10m.json', 'iso_3166_2', 'teal'],
+            ['br', 'br-admin1-10m.json', 'iso_3166_2', 'greens'],
+            ['jp', 'jp-admin1-10m.json', 'iso_3166_2', 'reds'],
+            ['eu', 'eu-nuts0-20m.json', 'nuts_id', 'blues'],
+          ].map(async ([cc, file, keyField, palette]) => {
             // The data is built from the *boundary* pack and drawn on the
             // layout without a single change, which is the claim this card is
-            // making. Both are keyed on the ISO subdivision code.
+            // making. Each pair is keyed on the same field, whatever it is:
+            // an ISO subdivision code for the countries, a NUTS id for Europe.
             const regions = await Demo.places(file)
             const rows = regions
-              .filter((r) => r.props.iso_3166_2 && !r.props.iso_3166_2.includes('~'))
-              .map((r) => ({ key: r.props.iso_3166_2, value: Demo.field(r) }))
+              .filter((r) => r.props[keyField] && !r.props[keyField].includes('~'))
+              .map((r) => ({ key: r.props[keyField], value: Demo.field(r) }))
 
             return Demo.watch(
               cc,
@@ -233,7 +283,7 @@ ApexMaps.registerLayout('demo/quad@hex', {
                 series: [
                   {
                     name: 'Illustrative index',
-                    joinBy: ['iso_3166_2', 'key'],
+                    joinBy: [keyField, 'key'],
                     data: rows,
                     scale: { palette, classes: 4 },
                   },
@@ -242,9 +292,12 @@ ApexMaps.registerLayout('demo/quad@hex', {
                   enabled: true,
                   minFeatureArea: 0,
                   collision: 'none',
-                  // The country prefix is on every cell, so it is noise.
+                  // The country prefix repeats on every cell of a subdivision
+                  // layout, so it is noise; a NUTS id is already two letters.
                   formatter: ({ key }) => String(key).replace(/^[A-Z]{2}-/, ''),
-                  style: { fontSize: 11, fontWeight: 600 },
+                  // Japan's 47 cells in the same box as Australia's 8 leave a
+                  // third of the room, so the type has to come down with them.
+                  style: { fontSize: rows.length > 20 ? 8 : 11, fontWeight: 600 },
                 },
                 legend: { show: false },
               }),

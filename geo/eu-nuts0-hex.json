@@ -1,0 +1,218 @@
+{
+  "id": "eu/nuts0@hex",
+  "kind": "layout",
+  "of": "eu/nuts0@20m",
+  "grid": "hex",
+  "orientation": "pointy",
+  "offset": "odd-r",
+  "keyField": "nuts_id",
+  "nameField": "name",
+  "levelName": "Countries",
+  "unplaced": [],
+  "source": "hand-authored for ApexMaps, verified against Eurostat GISCO NUTS 2021 (1:20 million) centroids and shared-arc adjacency",
+  "license": "CC BY 4.0, EuroGeographics terms apply",
+  "attribution": "© EuroGeographics for the administrative boundaries",
+  "vintage": "2026",
+  "boundaries": "All thirty-seven NUTS level 0 territories. That is not the EU: the set also carries the United Kingdom, the four EFTA countries and the five candidate countries, because NUTS is a statistical classification rather than a membership list. France is placed by metropolitan France, which is where the layout puts it; the boundary pack files the five overseas departments in the same geometry.",
+  "compromises": [
+    "Germany borders nine countries and Austria eight, against a hexagon's six sides. Austria keeps all six the grid can hold. Germany keeps five, because one of its two northern cells is North Sea and Denmark takes the other.",
+    "Luxembourg and Liechtenstein get a cell each, which is the entire reason to draw this rather than a choropleth. They end up side by side despite 3.5 degrees between them, both being wedged between larger neighbours.",
+    "Portugal and Spain are drawn level with France and Switzerland, about 6 degrees north of where they are. The cell that keeps Spain touching France across the Pyrenees is that one, and the Pyrenees are a border a reader looks for.",
+    "Iceland, Malta and Cyprus share no land border with anything, so each is placed by position alone and touches nothing.",
+    "The empty cell between the United Kingdom and the Netherlands is the North Sea, and the one below Italy is the Tyrrhenian. Neither is a missing country."
+  ],
+  "accept": {
+    "order": [],
+    "borders": []
+  },
+  "cells": {
+    "IS": [
+      0,
+      0
+    ],
+    "NO": [
+      8,
+      1
+    ],
+    "FI": [
+      9,
+      1
+    ],
+    "SE": [
+      9,
+      2
+    ],
+    "EE": [
+      10,
+      2
+    ],
+    "LV": [
+      9,
+      3
+    ],
+    "IE": [
+      3,
+      4
+    ],
+    "UK": [
+      4,
+      4
+    ],
+    "NL": [
+      6,
+      4
+    ],
+    "DK": [
+      7,
+      4
+    ],
+    "PL": [
+      8,
+      4
+    ],
+    "LT": [
+      9,
+      4
+    ],
+    "BE": [
+      5,
+      5
+    ],
+    "DE": [
+      6,
+      5
+    ],
+    "CZ": [
+      7,
+      5
+    ],
+    "SK": [
+      8,
+      5
+    ],
+    "HU": [
+      9,
+      5
+    ],
+    "LU": [
+      6,
+      6
+    ],
+    "LI": [
+      7,
+      6
+    ],
+    "AT": [
+      8,
+      6
+    ],
+    "SI": [
+      9,
+      6
+    ],
+    "RS": [
+      10,
+      6
+    ],
+    "RO": [
+      11,
+      6
+    ],
+    "PT": [
+      4,
+      7
+    ],
+    "ES": [
+      5,
+      7
+    ],
+    "FR": [
+      6,
+      7
+    ],
+    "CH": [
+      7,
+      7
+    ],
+    "IT": [
+      8,
+      7
+    ],
+    "HR": [
+      9,
+      7
+    ],
+    "MK": [
+      10,
+      7
+    ],
+    "BG": [
+      11,
+      7
+    ],
+    "ME": [
+      9,
+      8
+    ],
+    "AL": [
+      10,
+      8
+    ],
+    "TR": [
+      11,
+      8
+    ],
+    "MT": [
+      8,
+      9
+    ],
+    "EL": [
+      10,
+      9
+    ],
+    "CY": [
+      11,
+      10
+    ]
+  },
+  "names": {
+    "IS": "Ísland",
+    "NO": "Norge",
+    "FI": "Suomi/Finland",
+    "SE": "Sverige",
+    "EE": "Eesti",
+    "LV": "Latvija",
+    "IE": "Éire/Ireland",
+    "UK": "United Kingdom",
+    "NL": "Nederland",
+    "DK": "Danmark",
+    "PL": "Polska",
+    "LT": "Lietuva",
+    "BE": "Belgique/België",
+    "DE": "Deutschland",
+    "CZ": "Česko",
+    "SK": "Slovensko",
+    "HU": "Magyarország",
+    "LU": "Luxembourg",
+    "LI": "Liechtenstein",
+    "AT": "Österreich",
+    "SI": "Slovenija",
+    "RS": "Serbia",
+    "RO": "România",
+    "PT": "Portugal",
+    "ES": "España",
+    "FR": "France",
+    "CH": "Schweiz/Suisse/Svizzera",
+    "IT": "Italia",
+    "HR": "Hrvatska",
+    "MK": "Severna Makedonija",
+    "BG": "Bulgaria",
+    "ME": "Crna Gora",
+    "AL": "Shqipëria",
+    "TR": "Türkiye",
+    "MT": "Malta",
+    "EL": "Elláda",
+    "CY": "Kýpros"
+  },
+  "parked": []
+}

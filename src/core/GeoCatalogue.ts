@@ -472,6 +472,33 @@ const LAYOUTS: LayoutRow[] = [
     alias: ['de/hex', 'de/states/hex'],
     note: 'All sixteen Laender. Berlin and Bremen get a full cell each, which is the reason to draw this rather than a choropleth.',
   },
+  {
+    id: 'br/admin1@hex',
+    file: 'br-admin1-hex.json',
+    of: 'br/admin1@10m',
+    level: 'States',
+    key: 'iso_3166_2',
+    alias: ['br/hex', 'br/states/hex'],
+    note: 'All twenty-six states plus the Distrito Federal. The nine states of the Nordeste run down a near-vertical coast, so the layout spends four rows on them.',
+  },
+  {
+    id: 'jp/admin1@hex',
+    file: 'jp-admin1-hex.json',
+    of: 'jp/admin1@10m',
+    level: 'Prefectures',
+    key: 'iso_3166_2',
+    alias: ['jp/hex', 'jp/prefectures/hex'],
+    note: 'All forty-seven prefectures. Hokkaido, Shikoku, Kyushu and Okinawa share no boundary with Honshu, so each is placed by position and solved as its own block.',
+  },
+  {
+    id: 'eu/nuts0@hex',
+    file: 'eu-nuts0-hex.json',
+    of: 'eu/nuts0@20m',
+    level: 'Countries',
+    key: 'nuts_id',
+    alias: ['eu/hex', 'eu/countries/hex'],
+    note: 'All thirty-seven NUTS level 0 territories, which is more than the EU: the classification also covers the UK, EFTA and the candidate countries.',
+  },
 ]
 
 /** Every layout, for documentation and the id-agreement checks. */

@@ -239,7 +239,7 @@ describe('geo.layout', () => {
 
   it('has no layout for a pack that has none', () => {
     expect(layoutIdFor('world/countries@110m', 'hex')).toBeUndefined()
-    expect(layoutIdFor('jp/admin1@10m', 'hex')).toBeUndefined()
+    expect(layoutIdFor('in/admin1@10m', 'hex')).toBeUndefined()
   })
 
   it('resolves every shipped layout from its country alias', () => {
@@ -250,6 +250,12 @@ describe('geo.layout', () => {
     expect(layoutIdFor('ca', 'hex')).toBe('ca/admin1@hex')
     expect(layoutIdFor('de', 'hex')).toBe('de/admin1@hex')
     expect(layoutIdFor('de/states', 'hex')).toBe('de/admin1@hex')
+    expect(layoutIdFor('br', 'hex')).toBe('br/admin1@hex')
+    expect(layoutIdFor('jp', 'hex')).toBe('jp/admin1@hex')
+    expect(layoutIdFor('jp/prefectures', 'hex')).toBe('jp/admin1@hex')
+    // `eu` is the only alias that reaches a pack keyed on something other than
+    // an ISO subdivision code, so it is the one that would break a join.
+    expect(layoutIdFor('eu', 'hex')).toBe('eu/nuts0@hex')
   })
 
   it('declares an unplaced list for every layout that is a subset', () => {
@@ -318,6 +324,9 @@ describe.skipIf(!hasLayout)('every shipped layout', () => {
     { id: 'au/admin1@hex', cells: 8, key: 'iso_3166_2', has: 'AU-TAS' },
     { id: 'ca/admin1@hex', cells: 13, key: 'iso_3166_2', has: 'CA-NU' },
     { id: 'de/admin1@hex', cells: 16, key: 'iso_3166_2', has: 'DE-BE' },
+    { id: 'br/admin1@hex', cells: 27, key: 'iso_3166_2', has: 'BR-DF' },
+    { id: 'jp/admin1@hex', cells: 47, key: 'iso_3166_2', has: 'JP-47' },
+    { id: 'eu/nuts0@hex', cells: 37, key: 'nuts_id', has: 'CY' },
     { id: 'us/states@hex', cells: 51, key: 'abbr', has: 'DC' },
   ]
 
@@ -418,8 +427,8 @@ describe.skipIf(!hasLayout)('rendering a layout', () => {
   })
 
   it('explains itself when no layout exists for the map', async () => {
-    const map = new ApexMaps(host, { geo: { map: 'jp', layout: 'hex' }, series: [] })
-    await expect(map.render()).rejects.toThrow(/no "hex" layout exists for map "jp"/)
+    const map = new ApexMaps(host, { geo: { map: 'in', layout: 'hex' }, series: [] })
+    await expect(map.render()).rejects.toThrow(/no "hex" layout exists for map "in"/)
     map.destroy()
   })
 

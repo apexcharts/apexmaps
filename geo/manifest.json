@@ -48,6 +48,22 @@
       "boundaries": "Natural Earth de facto boundaries; disputed areas follow the NE default view"
     },
     {
+      "id": "br/admin1@hex",
+      "file": "br-admin1-hex.json",
+      "kind": "layout",
+      "of": "br/admin1@10m",
+      "features": 27,
+      "bytes": 3150,
+      "keyField": "iso_3166_2",
+      "levelName": "States",
+      "source": "hand-authored for ApexMaps, verified against Natural Earth 5.1.1 centroids and shared-arc adjacency",
+      "license": "public domain",
+      "attribution": "",
+      "vintage": "2026",
+      "boundaries": "All twenty-six states plus the Distrito Federal.",
+      "note": "Hand-authored grid layout, not built by data:build. Verified with npm run check:layout."
+    },
+    {
       "id": "ca/admin1@10m",
       "file": "ca-admin1-10m.json",
       "object": "admin1",
@@ -153,6 +169,22 @@
       "attribution": "© EuroGeographics for the administrative boundaries",
       "vintage": "2021",
       "boundaries": "Eurostat NUTS 2021 classification"
+    },
+    {
+      "id": "eu/nuts0@hex",
+      "file": "eu-nuts0-hex.json",
+      "kind": "layout",
+      "of": "eu/nuts0@20m",
+      "features": 37,
+      "bytes": 4227,
+      "keyField": "nuts_id",
+      "levelName": "Countries",
+      "source": "hand-authored for ApexMaps, verified against Eurostat GISCO NUTS 2021 (1:20 million) centroids and shared-arc adjacency",
+      "license": "CC BY 4.0, EuroGeographics terms apply",
+      "attribution": "© EuroGeographics for the administrative boundaries",
+      "vintage": "2026",
+      "boundaries": "All thirty-seven NUTS level 0 territories. That is not the EU: the set also carries the United Kingdom, the four EFTA countries and the five candidate countries, because NUTS is a statistical classification rather than a membership list. France is placed by metropolitan France, which is where the layout puts it; the boundary pack files the five overseas departments in the same geometry.",
+      "note": "Hand-authored grid layout, not built by data:build. Verified with npm run check:layout."
     },
     {
       "id": "eu/nuts1@20m",
@@ -288,6 +320,22 @@
       "attribution": "",
       "vintage": "2022",
       "boundaries": "Natural Earth de facto boundaries; disputed areas follow the NE default view"
+    },
+    {
+      "id": "jp/admin1@hex",
+      "file": "jp-admin1-hex.json",
+      "kind": "layout",
+      "of": "jp/admin1@10m",
+      "features": 47,
+      "bytes": 4313,
+      "keyField": "iso_3166_2",
+      "levelName": "Prefectures",
+      "source": "hand-authored for ApexMaps, verified against Natural Earth 5.1.1 centroids and shared-arc adjacency",
+      "license": "public domain",
+      "attribution": "",
+      "vintage": "2026",
+      "boundaries": "All forty-seven prefectures.",
+      "note": "Hand-authored grid layout, not built by data:build. Verified with npm run check:layout."
     },
     {
       "id": "kr/admin1@10m",
