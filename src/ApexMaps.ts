@@ -29,6 +29,7 @@ import {
   installCatalogue,
   setGeoSource,
   geoPacks,
+  geoPack,
   geoLayouts,
   layoutIdFor,
   type GeoFetcher,
@@ -46,6 +47,8 @@ import { SvgRenderer } from './renderers/SvgRenderer'
 import { LevelGhost } from './renderers/LevelGhost'
 import { LevelReveal, orderFromPoint } from './renderers/LevelReveal'
 import type { RevealMark } from './renderers/LevelReveal'
+import { LayoutMorph } from './renderers/LayoutMorph'
+import type { MorphPair } from './renderers/LayoutMorph'
 import {
   serializeSvg,
   rasterize,
@@ -292,6 +295,8 @@ class ApexMaps extends BaseChart {
   private _ghost: LevelGhost | null = null
   /** The level being developed, which outlives the level change by its own tail. */
   private _reveal: LevelReveal | null = null
+  /** Regions in flight between two representations of the same set. */
+  private _morph: LayoutMorph | null = null
 
   private readonly _onMarkPointerOver: (event: Event) => void
   private readonly _onMarkPointerMove: (event: Event) => void
@@ -2696,6 +2701,14 @@ class ApexMaps extends BaseChart {
       // the plot, which is a resize by any other name.
       this._reservedLegendWidth() !== reservedLegendWidth(previous.legend)
 
+    // Captured before the swap, because after it the marks hold the new shapes
+    // and the old ones are gone. Both halves of the comparison are needed: the
+    // shapes on screen now, and which region set they were a picture of.
+    this._morph?.destroy()
+    this._morph = null
+    const morphFrom = mapChanged ? this._captureShapes() : null
+    const morphSet = this._regionSetId()
+
     if (redrawGeometry || mapChanged || projectionChanged) {
       if (mapChanged) {
         // A caller changing the map is a new starting point, so any drilldown
@@ -2734,6 +2747,11 @@ class ApexMaps extends BaseChart {
       this._draw()
       this.renderer?.applyCamera()
     }
+
+    // Only between two pictures of the same regions. Changing `map` outright
+    // shares no keys with what was on screen, so there is nothing to interpolate
+    // along and the swap stays a swap.
+    if (morphFrom && morphSet && morphSet === this._regionSetId()) this._startMorph(morphFrom)
 
     // The interaction tree is plain data (no formatters), so a JSON comparison is
     // exact. Recreating drops any gesture mid-flight, which is why it only happens
@@ -3441,6 +3459,92 @@ class ApexMaps extends BaseChart {
   }
 
   /**
+   * The region set a map is a picture of.
+   *
+   * A boundary pack is its own id; a layout is the pack it is a layout *of*. Two
+   * maps that agree here are two representations of the same regions, keyed the
+   * same way, which is the entire precondition for a morph: without it there are
+   * no pairs of shapes to interpolate between.
+   */
+  private _regionSetId(): string | undefined {
+    const id = (this.mapMeta?.layout as { of?: string } | undefined)?.of ?? this.mapId
+    if (!id) return undefined
+    // Canonical, because `resolveMap` hands back the id it was *asked* for.
+    // `geo: { map: 'us' }` resolves to "us" while the layout it toggles with
+    // names its pack as "us/states@10m", and comparing those two says the reader
+    // changed to a different region set when they changed representation.
+    return geoPack(id)?.id ?? id
+  }
+
+  /** Every drawn region's path as it stands, by the key it joins on. */
+  private _captureShapes(): Map<string, string> | null {
+    if (!this.renderer) return null
+    const shapes = new Map<string, string>()
+    for (const [key, el] of this.renderer.featureMarks()) {
+      const d = el.getAttribute('d')
+      if (d) shapes.set(key, d)
+    }
+    return shapes.size ? shapes : null
+  }
+
+  /**
+   * Walk each region from the shape it had to the shape it has.
+   *
+   * Runs after the draw, on purpose: the marks are already carrying their target
+   * shapes, so the morph interpolates towards what the renderer itself produced
+   * and finishes by handing back exactly that string. A region present in only
+   * one of the two representations has no pair and is left to appear or go the
+   * way it always did.
+   */
+  private _startMorph(from: Map<string, string>): void {
+    const duration = this._morphMs()
+    if (duration <= 0 || !this.renderer) return
+
+    const pairs: MorphPair[] = []
+    for (const [key, el] of this.renderer.featureMarks()) {
+      const start = from.get(key)
+      const end = el.getAttribute('d')
+      if (start && end && start !== end) pairs.push({ el, from: start, to: end })
+    }
+
+    // Labels and annotations are anchored to positions in the geometry that has
+    // already arrived, so during the flight they sit where the shapes are going
+    // rather than where the shapes are: "Washington" floating over a hexagon two
+    // cells from the one it belongs to. They also change *text* across a layout
+    // toggle, because a cell is labelled by its key and a state by its name. So
+    // the overlay is taken out for the duration and faded back at the end, which
+    // the stylesheet does off one class.
+    this.element.classList.add('apexmaps--morphing')
+    this._morph = LayoutMorph.run({
+      pairs,
+      duration,
+      onDone: () => {
+        this.element.classList.remove('apexmaps--morphing')
+        this._morph = null
+      },
+    })
+    if (!this._morph) this.element.classList.remove('apexmaps--morphing')
+  }
+
+  /**
+   * How long a layout morph runs, in ms.
+   *
+   * Twice a fill change, and deliberately so: a colour swap only has to be
+   * noticed, while this has to be *followed*, region by region, or it teaches the
+   * reader nothing about which cell is which place.
+   *
+   * Zero when the marks are not animating at all, and zero above the full motion
+   * budget rather than degraded. Every other transition here has a cheap version
+   * to fall back to; this one is vertex work every frame and has none, so past
+   * the budget the honest answer is to swap.
+   */
+  private _morphMs(): number {
+    if (this._markAnimationMs() <= 0) return 0
+    if (motionBudget(this._markCount()).properties !== 'all') return 0
+    return resolveSpeed(this.config.chart.animations?.speed) * 2
+  }
+
+  /**
    * Whether a flow's beads travel, or are painted spaced along the route and left
    * there.
    *
@@ -3531,6 +3635,10 @@ class ApexMaps extends BaseChart {
     // still be holding marks at a borrowed colour when the map is torn down.
     this._reveal?.destroy()
     this._reveal = null
+    // Same reason as the reveal: a morph holds a frame and outlives the call that
+    // started it, so it can still be mid-flight when the map is torn down.
+    this._morph?.destroy()
+    this._morph = null
     this.labels?.destroy()
     this.annotations?.destroy()
     this.legend?.destroy()

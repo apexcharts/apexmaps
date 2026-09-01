@@ -33,6 +33,16 @@
           <button id="toggle">Redraw the left map on real boundaries</button>
           <span class="label" id="toggle-state">layout: 'hex'</span>
         </div>
+        <p class="note" style="margin-top: 10px">
+          <strong>Press it and watch the states, not the map.</strong> Toggling the layout morphs
+          each region between the two representations rather than swapping them, which is the answer
+          to the one real problem with a cartogram: a reader who cannot navigate a honeycomb can
+          navigate the map it grew out of, and watching Texas walk to its cell is what tells them
+          which cell is Texas. Each outline is resampled at equal arc length, rotated to its closest
+          match and walked across; Alaska travels furthest, from the corner it is inset into to the
+          corner the grid parks it in. Labels step out for the flight, because they are placed
+          against the geometry that has already arrived.
+        </p>
         <p class="source">
           <b>Illustrative data.</b> A smooth function of longitude and latitude, not a real
           indicator. The layout is hand-authored and verified against the boundary pack it claims to

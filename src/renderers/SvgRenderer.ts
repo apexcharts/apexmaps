@@ -861,6 +861,24 @@ export class SvgRenderer {
     )
   }
 
+  /**
+   * Every drawn region shape, by the key it joins on.
+   *
+   * Keyed by region rather than by `seriesId:key` because the caller is matching
+   * the same region across two different geometries, where the series ids need
+   * not survive. A region drawn by more than one choropleth resolves to whichever
+   * came last, which is the one on top and so the one the reader sees change.
+   */
+  featureMarks(): Map<string, SVGPathElement> {
+    const found = new Map<string, SVGPathElement>()
+    for (const el of this.pathsByKey.values()) {
+      if (!el.classList.contains('apexmaps-feature')) continue
+      const key = el.getAttribute('data-key')
+      if (key) found.set(key, el as SVGPathElement)
+    }
+    return found
+  }
+
   overlay(): SVGGElement | null {
     return this.overlayLayer
   }

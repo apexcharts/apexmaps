@@ -739,6 +739,14 @@ export interface GeoOptions {
    * and an unavailable one is an error rather than a silent fall back to real
    * boundaries, which would look like the option had been ignored.
    *
+   * Turning this on or off through `updateOptions` **morphs** between the two,
+   * region by region, rather than swapping them. That is the answer to the cost
+   * above: a reader who cannot navigate a cartogram can navigate the map it grew
+   * out of, and watching each region walk to its cell is how they learn which
+   * cell is which. It runs off `chart.animations`, so `enabled: false` turns it
+   * off with everything else, and it stands down on its own above the motion
+   * budget, where per-frame vertex work would cost frames.
+   *
    * Only `'hex'` here, because that is what ships. Square grids are supported by
    * the generator and reachable through `ApexMaps.registerLayout()` with
    * `grid: 'square'`; there is no built-in square layout to name yet.

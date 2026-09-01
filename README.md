@@ -34,7 +34,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Series | `choropleth`, `bubble` (proportional symbols), `marker` (seven shapes, categorical colour, clustering&nbsp;†), `arc` (great-circle connections, travelling `flow` beads)&nbsp;†, `line` (routes through given vertices)&nbsp;†, plus an automatic basemap whenever no feature series is present |
 | Projections | 13 core projections with aliases (`equalEarth` default, `webMercator`, `epsg:3857`, `albersUsa`, `orthographic`, conics, azimuthals), spec objects with `rotate` / `parallels` / `clipAngle`, and `ApexMaps.registerProjection()`&nbsp;† for the rest of `d3-geo-projection` |
 | Geometry | 26 built-in packs: world countries and land, US states and counties, EU NUTS 0-3, and admin-1 for 15 more countries. Lazy, one request per pack, provenance and attribution attached |
-| Layouts | `layout: 'hex'` redraws a region set as a hex tile map (honeycomb, tilegram): one equal cell per region, keyed the way the boundary pack is keyed, so the same data and the same `joinBy` serve both. Seven ship (US states, Australia, Canada, Germany, Brazil, Japan, Europe), each scored against its boundary pack by `npm run check:layout`; `ApexMaps.registerLayout()` takes your own&nbsp;† |
+| Layouts | `layout: 'hex'` redraws a region set as a hex tile map (honeycomb, tilegram): one equal cell per region, keyed the way the boundary pack is keyed, so the same data and the same `joinBy` serve both. Toggling it **morphs**, region by region, so the reader can see which cell is which place. Seven ship (US states, Australia, Canada, Germany, Brazil, Japan, Europe), each scored against its boundary pack by `npm run check:layout`; `ApexMaps.registerLayout()` takes your own&nbsp;† |
 | Data | GeoJSON, TopoJSON, bare geometry, feature arrays; automatic winding repair; join-key auto-detection |
 | Joins | Explicit `joinBy`, mismatch diagnostics with suggestions, FIPS leading-zero repair, opt-in `fuzzyJoin` |
 | Scales | quantile, equal interval, Jenks, threshold, linear, log, sqrt, ordinal; OkLab-sampled ramps; 17 palettes; automatic diverging selection; square-root size scales with nested-circle legends |
@@ -147,6 +147,13 @@ equal cells instead of real boundaries: `us` (51), `jp` (47), `eu` (37), `br` (2
 `ca` (13) and `au` (8). Reach one with `layout: 'hex'` or by its own id (`us/states@hex`,
 `au/hex`). The layout is keyed the way its boundary pack is keyed, so one dataset serves both,
 and it resolves independently: asking for the honeycomb never downloads the boundaries.
+
+Turning a layout on or off through `updateOptions` morphs the regions between the two
+representations rather than swapping them: each outline is resampled at equal arc length,
+rotated to its closest match and walked to its cell. It is not decoration. The hardest thing
+about reading a cartogram is knowing which cell is which region, and watching Texas walk to
+its own is what tells you. It runs off `chart.animations` and stands down above the motion
+budget, since unlike every other transition here it is vertex work every frame.
 
 Every one is hand-authored, because no country has a canonical tilegram and curating the table
 *is* the work. `npm run check:layout` scores each against the boundary pack it claims to
