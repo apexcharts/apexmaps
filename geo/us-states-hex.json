@@ -27,11 +27,13 @@
   "compromises": [
     "AK is parked top-left and HI bottom-left, the usual convention; neither is to scale or in position.",
     "WV sits half a cell left of OH though its centroid is 2.2 degrees east. The two stay adjacent, so the shape reads correctly.",
-    "MO and OK share a short corner border but their cells are three apart; every arrangement that closes it pushes OK well west of KS."
+    "MO and OK share a short corner border but their cells are three apart; every arrangement that closes it pushes OK well west of KS.",
+    "DC is level with North Carolina, 3.4 degrees south of it. The only cell that touches both Maryland and Virginia, which are DC's only two borders, is that one."
   ],
   "accept": {
     "order": [
-      "OH/WV"
+      "OH/WV",
+      "DC/NC"
     ],
     "borders": [
       "MO/OK"

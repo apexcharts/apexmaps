@@ -82,6 +82,21 @@ function declaredUnplaced(id) {
 
 /* ---------------------------------------------------------------- geometry */
 
+/**
+ * Each separately drawable piece of a geometry, as its own Polygon.
+ *
+ * A MultiPolygon is one geometry covering several landmasses, so it has to come
+ * apart before any of them can be measured on its own.
+ */
+function mainlands(geometry) {
+  if (!geometry) return []
+  if (geometry.type === 'Polygon') return [geometry]
+  if (geometry.type === 'MultiPolygon') {
+    return geometry.coordinates.map((coordinates) => ({ type: 'Polygon', coordinates }))
+  }
+  return []
+}
+
 /** Pointy-top odd-r cell centre, unit radius. */
 function centre([col, row], pack) {
   const flat = pack.orientation === 'flat'
@@ -169,22 +184,34 @@ for (const { file, json: pack } of layouts) {
   const geometries = topology.objects[objectName].geometries
   const fc = topoFeature(topology, topology.objects[objectName])
 
-  // One key can cover several geometries, and the biggest one is the one the
-  // reader means. Natural Earth files New South Wales and Lord Howe Island
-  // under the same `AU-NSW`, and the island sits 12 degrees out into the
-  // Tasman; taking whichever came last would score the layout against a speck
-  // of rock and report the mainland as misplaced.
+  // Where a region *is*, for a reader: the centroid of its largest landmass,
+  // not of everything filed under its key. A key sprawls in two different ways
+  // and both would score a correct layout as misplaced:
+  //
+  //   - As several features. Natural Earth files New South Wales and Lord Howe
+  //     Island separately under `AU-NSW`, and the island is 12 degrees out into
+  //     the Tasman.
+  //   - As one MultiPolygon. Eurostat files metropolitan France and the five
+  //     overseas departments as a single `FR`, which puts France in the Bay of
+  //     Biscay, 9 degrees west of Paris and south of the Loire. Natural Earth
+  //     does the same to Tokyo, whose Ogasawara islands reach 1000 km south and
+  //     invert Tokyo against Kanagawa.
+  //
+  // So both collapse to one rule, applied across features and across the rings
+  // inside them: the main landmass is the region.
   const truth = new Map()
   for (const f of fc.features) {
     const value = f.properties?.[pack.keyField]
     if (value == null) continue
-    const [lon, lat] = geoCentroid(f)
-    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue
     const key = String(value)
-    const area = Math.abs(geoArea(f))
-    const held = truth.get(key)
-    if (held && held.area >= area) continue
-    truth.set(key, { lon, lat, area, name: f.properties.name })
+    for (const part of mainlands(f.geometry)) {
+      const [lon, lat] = geoCentroid(part)
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue
+      const area = Math.abs(geoArea(part))
+      const held = truth.get(key)
+      if (held && held.area >= area) continue
+      truth.set(key, { lon, lat, area, name: f.properties.name })
+    }
   }
 
   // --- 1. coverage
@@ -232,20 +259,29 @@ for (const { file, json: pack } of layouts) {
   const lons = scored.map((k) => truth.get(k).lon)
   const lats = scored.map((k) => -truth.get(k).lat)
 
+  // Drawing two regions *level* is the third way to get the order wrong, and
+  // the quietest: a comparison that skipped ties would pass Rio Grande do Sul
+  // sitting beside Santa Catarina rather than below it, because two cells in
+  // one row are neither before nor after each other. So ties count, and only
+  // for pairs the band already says are comparable: a tilegram flattens most
+  // of the map on purpose, and only a pair that is close on one axis and far
+  // apart on the other has an order a reader can miss.
   const swaps = { x: [], y: [] }
   for (let i = 0; i < scored.length; i++) {
     for (let j = i + 1; j < scored.length; j++) {
       const ta = truth.get(scored[i])
       const tb = truth.get(scored[j])
       const pair = pairKey(scored[i], scored[j])
-      if (Math.abs(ta.lat - tb.lat) <= LAT_BAND && xs[i] !== xs[j]) {
-        if (xs[i] < xs[j] !== ta.lon < tb.lon) {
-          swaps.x.push({ pair, gap: Math.abs(ta.lon - tb.lon) })
+      if (Math.abs(ta.lat - tb.lat) <= LAT_BAND) {
+        const grid = Math.sign(xs[i] - xs[j])
+        if (grid !== Math.sign(ta.lon - tb.lon)) {
+          swaps.x.push({ pair, gap: Math.abs(ta.lon - tb.lon), level: grid === 0 })
         }
       }
-      if (Math.abs(ta.lon - tb.lon) <= LON_BAND && ys[i] !== ys[j]) {
-        if (ys[i] < ys[j] !== ta.lat > tb.lat) {
-          swaps.y.push({ pair, gap: Math.abs(ta.lat - tb.lat) })
+      if (Math.abs(ta.lon - tb.lon) <= LON_BAND) {
+        const grid = Math.sign(ys[i] - ys[j])
+        if (grid !== Math.sign(tb.lat - ta.lat)) {
+          swaps.y.push({ pair, gap: Math.abs(ta.lat - tb.lat), level: grid === 0 })
         }
       }
     }
@@ -255,9 +291,12 @@ for (const { file, json: pack } of layouts) {
     const real = list.filter((s) => s.gap >= MARGIN).sort((a, b) => b.gap - a.gap)
     const marginal = list.filter((s) => s.gap < MARGIN)
     const label = axis === 'x' ? 'left-right' : 'top-bottom'
+    const flat = axis === 'x' ? 'the same column' : 'the same row'
     let accepted = 0
     for (const s of real) {
-      const message = `${id}: ${label} order is wrong for ${s.pair} (${s.gap.toFixed(1)}° apart)`
+      const message = s.level
+        ? `${id}: ${s.pair} are drawn in ${flat} but are ${s.gap.toFixed(1)}° apart ${axis === 'x' ? 'east-west' : 'north-south'}`
+        : `${id}: ${label} order is wrong for ${s.pair} (${s.gap.toFixed(1)}° apart)`
       if (accept.order.has(s.pair)) {
         fired.order.add(s.pair)
         accepted++
@@ -266,11 +305,17 @@ for (const { file, json: pack } of layouts) {
         note(message)
       }
     }
+    // Marginal pairs are named, but only the widest few. Japan's prefectures are
+    // small enough that a hundred pairs sit inside a band and under the margin,
+    // and a hundred names is not a review, it is a wall.
+    const worst = marginal.sort((a, b) => b.gap - a.gap)
+    const named = worst.slice(0, 6).map((s) => s.pair)
     console.log(
       `    ${label.padEnd(10)} ${real.length - accepted} error(s)` +
         (accepted ? `, ${accepted} accepted` : '') +
         (marginal.length
-          ? `, ${marginal.length} marginal: ${marginal.map((s) => s.pair).join(', ')}`
+          ? `, ${marginal.length} marginal, widest: ${named.join(', ')}` +
+            (worst.length > named.length ? ` and ${worst.length - named.length} more` : '')
           : ''),
     )
   }

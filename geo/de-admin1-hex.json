@@ -16,10 +16,13 @@
   "boundaries": "All sixteen Laender.",
   "compromises": [
     "Berlin is drawn beside Brandenburg rather than inside it. The two share a centroid, so no grid can express the enclave; adjacency is preserved instead.",
-    "Hamburg and Bremen get a full cell each, which is the entire reason to draw this rather than a choropleth."
+    "Hamburg and Bremen get a full cell each, which is the entire reason to draw this rather than a choropleth.",
+    "Brandenburg sits in the same column as Thueringen though it is 2.4 degrees further east. Its only cell touching both Mecklenburg-Vorpommern and Sachsen-Anhalt is the one directly above Thueringen's."
   ],
   "accept": {
-    "order": [],
+    "order": [
+      "DE-BB/DE-TH"
+    ],
     "borders": []
   },
   "cells": {
