@@ -384,6 +384,51 @@ describe.skipIf(!hasLayout)('rendering a layout', () => {
     map.destroy()
   })
 
+  it('carries a pack-level gap into the geometry', async () => {
+    // `gap` belongs to the pack, not to the render call, so it has to survive
+    // the trip through the registry. It was unreachable from any public entry
+    // point when it lived only on the options argument.
+    ApexMaps.registerLayout('demo/tight@hex', { keyField: 'code', cells: { A: [0, 0] }, gap: 0 })
+    ApexMaps.registerLayout('demo/loose@hex', { keyField: 'code', cells: { A: [0, 0] }, gap: 0.5 })
+
+    const span = async (id: string) => {
+      const resolved = await resolveMap(id)
+      const ring = (resolved.data as { features: { geometry: { coordinates: number[][][] } }[] })
+        .features[0].geometry.coordinates[0]
+      const ys = ring.map((p) => p[1])
+      return Math.max(...ys) - Math.min(...ys)
+    }
+    expect(await span('demo/loose@hex')).toBeLessThan(await span('demo/tight@hex'))
+  })
+
+  it('gives the gestures back when drilling out of a layout, and takes them away coming back', async () => {
+    // Drilling from a hex cell into real county boundaries changes which
+    // gestures exist, and `interaction` says nothing about it. Landing on a
+    // county map that cannot be zoomed is the failure this guards.
+    const map = new ApexMaps(host, {
+      geo: { map: 'us', layout: 'hex' },
+      series: [
+        {
+          type: 'choropleth',
+          joinBy: ['abbr', 'key'],
+          data: [{ key: 'CA', value: 1 }],
+          drilldown: { map: 'us/counties' },
+        },
+      ],
+    })
+    await map.render()
+    expect(host.querySelector('.apexmaps-zoom')).toBeNull()
+
+    await map.drillTo('CA')
+    expect(map.mapId).toBe('us/counties')
+    expect(host.querySelector('.apexmaps-zoom')).not.toBeNull()
+
+    await map.drillUp()
+    expect(map.mapId).toBe('us/states@hex')
+    expect(host.querySelector('.apexmaps-zoom')).toBeNull()
+    map.destroy()
+  })
+
   it('gives the gestures back when the layout is swapped for real boundaries', async () => {
     // The effective gestures are not read from `interaction` alone, so a map
     // change has to re-attach: `interaction` is byte-identical across this

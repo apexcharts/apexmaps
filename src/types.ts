@@ -739,6 +739,10 @@ export interface GeoOptions {
    * and an unavailable one is an error rather than a silent fall back to real
    * boundaries, which would look like the option had been ignored.
    *
+   * Only `'hex'` here, because that is what ships. Square grids are supported by
+   * the generator and reachable through `ApexMaps.registerLayout()` with
+   * `grid: 'square'`; there is no built-in square layout to name yet.
+   *
    * Licensed feature: works without a key for evaluation, with a watermark.
    * Naming a layout id directly (`map: 'us/states@hex'`) or registering your own
    * through `ApexMaps.registerLayout()` is the same feature and is gated the

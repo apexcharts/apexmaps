@@ -14,8 +14,8 @@
  * distributed form makes the US layout 2.4 kB against 111 kB of real boundary,
  * and that ratio is the reason the layout has to resolve on its own: a
  * honeycomb that first downloads boundaries it never draws is slower than the
- * choropleth it replaced. It also means cell size, orientation and gap stay
- * runtime options rather than being frozen at build time.
+ * choropleth it replaced. It also keeps orientation, offset and spacing legible
+ * and arguable in the file, instead of frozen into coordinates nobody can read.
  *
  * **2. The offset convention is declared, never assumed.** Reading an `odd-r`
  * table as `even-r` shifts half the rows by half a cell, and the result still
@@ -65,6 +65,18 @@ export interface LayoutPack {
   levelName?: string
   cells: Record<string, LayoutCell | number[]>
   /**
+   * Space between cells, as a fraction of the cell. Default 0.06, which reads
+   * as a tiled surface. Zero makes the cells share edges, which looks like one
+   * shape rather than a set of units.
+   *
+   * A property of the layout rather than a render option, and deliberately so:
+   * the generated geometry is cached per file, so a gap chosen at render time
+   * would either be ignored by the second map on the page or force a second
+   * copy of the geometry. Density is the pack author's decision, it travels
+   * with the table, and it stays serialisable.
+   */
+  gap?: number
+  /**
    * Region names, so a layout used on its own still has something to put in a
    * tooltip. Without the boundary pack there is no other source for them.
    */
@@ -85,9 +97,9 @@ export interface LayoutPack {
 
 export interface LayoutOptions {
   /**
-   * Space between cells, as a fraction of the cell. Default 0.06, which reads
-   * as a tiled surface. Zero makes the cells share edges, which looks like one
-   * shape rather than a set of units.
+   * Override {@link LayoutPack.gap} for one call. Only useful when calling the
+   * generator directly; through the registry the pack's own value is used, so
+   * that two maps sharing a layout cannot disagree about it.
    */
   gap?: number
 }
@@ -215,7 +227,7 @@ export function layoutToGeoJSON(
   }
 
   const { corners: shape, pitchX, pitchY, shiftX, shiftY } = lattice(pack)
-  const gap = options.gap ?? 0.06
+  const gap = options.gap ?? pack.gap ?? 0.06
   const radius = 1 - Math.min(Math.max(gap, 0), 0.9)
   const nameField = pack.nameField ?? 'name'
 

@@ -294,6 +294,7 @@ const spec = map.toSpec()   // JSON-serialisable
 ```js
 ApexMaps.setLicense(key)                        // shared across the ApexCharts family
 ApexMaps.registerMap(id, geometry, meta)        // meta carries source, licence, vintage
+ApexMaps.registerLayout(id, { keyField, cells }) // one equal cell per region
 ApexMaps.registerProjection(name, factory)
 ApexMaps.registerPalette(name, { kind, stops })
 ApexMaps.listMaps()

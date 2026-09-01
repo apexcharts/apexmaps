@@ -2024,6 +2024,13 @@ class ApexMaps extends BaseChart {
     this.labels?.destroy()
     this.annotations?.destroy()
     this._buildViewport()
+    // A level change can change which gestures exist, because a pack can declare
+    // itself `fixed` and turn zoom and pan off. Drilling from a hex layout into
+    // real county boundaries has to give them back, and drilling the other way
+    // has to take them away; neither is expressed in `interaction`, so nothing
+    // else here would notice. Unconditional because a drill is a deliberate
+    // navigation: there is no gesture in flight worth preserving across it.
+    this._attachInteraction()
   }
 
   private _resetDrill(): void {
