@@ -20,7 +20,10 @@ const RAW = readFileSync(fileURLToPath(new URL('../src/ApexMaps.css', import.met
 const CSS = RAW.replace(/\/\*[\s\S]*?\*\//g, '')
 
 /** The `.apexmaps` block, where the light/default palette is declared. */
-const LIGHT_BLOCK = CSS.slice(CSS.indexOf('.apexmaps {'), CSS.indexOf('.apexmaps > .apexmaps-breadcrumb'))
+const LIGHT_BLOCK = CSS.slice(
+  CSS.indexOf('.apexmaps {'),
+  CSS.indexOf('.apexmaps > .apexmaps-breadcrumb'),
+)
 
 /** The `.apexmaps--dark` block. */
 const DARK_BLOCK = CSS.slice(CSS.indexOf('.apexmaps--dark {'), CSS.indexOf('.apexmaps-plot'))
@@ -37,7 +40,11 @@ describe('family tokens: the roles that hand off to --apx-*', () => {
 
   it('leaves the original default in place, so a page with no tokens is unchanged', () => {
     // Every token-backed declaration still names the value it always had.
-    const backed = [...LIGHT_BLOCK.matchAll(/--apexmaps-[\w-]+: var\(--apx-[\w-]+, ([^)]*(?:\([^)]*\))?[^)]*)\);/g)]
+    const backed = [
+      ...LIGHT_BLOCK.matchAll(
+        /--apexmaps-[\w-]+: var\(--apx-[\w-]+, ([^)]*(?:\([^)]*\))?[^)]*)\);/g,
+      ),
+    ]
     expect(backed).toHaveLength(4)
     for (const [, fallback] of backed) expect(fallback.trim()).not.toBe('')
   })

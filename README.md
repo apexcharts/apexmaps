@@ -43,7 +43,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Camera | `flyTo` (Van Wijk zoom-and-pan path), `easeTo`, `jumpTo`, `fitBounds`, `frameFeature`, `resetView`, interruptible and retargeting; on azimuthal projections a move to a place turns the sphere (quaternion slerp) instead of panning |
 | Components | Classed, gradient and nested-circle legends with a hover marker that tracks the pointer along the bar, HTML tooltips with edge flipping, collision-avoiding labels with halos, editorial annotations&nbsp;† |
 | Accessibility | ARIA roles, auto-generated description, roving-tabindex keyboard navigation, live-region announcements, optional data table, `prefers-reduced-motion` |
-| Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 78 kB gzipped core |
+| Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 82 kB gzipped core |
 | Frameworks | [`react-apexmaps`](wrappers/react), [`vue-apexmaps`](wrappers/vue) and [`ngx-apexmaps`](wrappers/angular), typed against this package's own options |
 
 † Licensed feature. It works without a key so you can evaluate it, with a watermark on the map. See
