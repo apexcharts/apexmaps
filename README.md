@@ -31,7 +31,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 
 | Area | Detail |
 |---|---|
-| Series | `choropleth`, `bubble` (proportional symbols), `marker` (seven shapes, categorical colour, clustering&nbsp;†), `arc` (great-circle connections, travelling `flow` beads)&nbsp;†, `line` (routes through given vertices)&nbsp;†, plus an automatic basemap whenever no feature series is present |
+| Series | `choropleth`, `bubble` (proportional symbols), `marker` (seven shapes, categorical colour, clustering&nbsp;†), `hexbin` (point density on a hexagonal lattice, count/sum/mean/min/max, refining with the zoom), `arc` (great-circle connections, travelling `flow` beads)&nbsp;†, `line` (routes through given vertices)&nbsp;†, plus an automatic basemap whenever no feature series is present |
 | Projections | 13 core projections with aliases (`equalEarth` default, `webMercator`, `epsg:3857`, `albersUsa`, `orthographic`, conics, azimuthals), spec objects with `rotate` / `parallels` / `clipAngle`, and `ApexMaps.registerProjection()`&nbsp;† for the rest of `d3-geo-projection` |
 | Geometry | 26 built-in packs: world countries and land, US states and counties, EU NUTS 0-3, and admin-1 for 15 more countries. Lazy, one request per pack, provenance and attribution attached |
 | Layouts | `layout: 'hex'` redraws a region set as a hex tile map (honeycomb, tilegram): one equal cell per region, keyed the way the boundary pack is keyed, so the same data and the same `joinBy` serve both. Toggling it **morphs**, region by region, so the reader can see which cell is which place. Seven ship (US states, Australia, Canada, Germany, Brazil, Japan, Europe), each scored against its boundary pack by `npm run check:layout`; `ApexMaps.registerLayout()` takes your own&nbsp;† |
@@ -147,6 +147,27 @@ equal cells instead of real boundaries: `us` (51), `jp` (47), `eu` (37), `br` (2
 `ca` (13) and `au` (8). Reach one with `layout: 'hex'` or by its own id (`us/states@hex`,
 `au/hex`). The layout is keyed the way its boundary pack is keyed, so one dataset serves both,
 and it resolves independently: asking for the honeycomb never downloads the boundaries.
+
+### Hexagons twice, for two different things
+
+`layout: 'hex'` and `type: 'hexbin'` both draw hexagons and are unrelated, which is worth
+saying once because the word does double duty:
+
+|  | `layout: 'hex'` | `type: 'hexbin'` |
+|---|---|---|
+| What a cell is | one **region**, placed by hand | one patch of the **projection** |
+| What it needs | a region set, and the layout to exist | points with coordinates |
+| Cell count | fixed: however many regions | whatever the data and the radius give |
+| Boundaries | replaced by it | ignored by it, so it sits on a basemap |
+| Reading it | which region, at equal weight | how much landed where |
+
+A hexbin is the answer to more points than pixels. Twenty thousand markers give you the shape
+of the data without its magnitude, because overlapping marks stop counting once they overlap.
+Binning aggregates instead: `count` by default and needing no value field, or `sum`, `mean`,
+`min`, `max` over one. The radius is in screen pixels, so the lattice **refines as the reader
+zooms** rather than magnifying, rebuilt at quantized levels so a pan never re-bins. The colour
+domain follows the bins, which means the class breaks move with the zoom and the legend moves
+with them; pass `scale.domain` to pin them when two maps have to be compared.
 
 Turning a layout on or off through `updateOptions` morphs the regions between the two
 representations rather than swapping them: each outline is resampled at equal arc length,
@@ -418,7 +439,7 @@ survives the next one.
 
 | Free, always | Licensed |
 |---|---|
-| `choropleth`, `bubble` and `marker` series, and the automatic basemap | Point clustering (`cluster`) |
+| `choropleth`, `bubble`, `marker` and `hexbin` series, and the automatic basemap | Point clustering (`cluster`) |
 | Every one of the 13 built-in projections, with spec objects | Projections you register yourself (`registerProjection`) |
 | The geometry registry, all 26 packs, provenance and attribution | Drilldown and the breadcrumb (`drilldown`) |
 | Real boundaries, in every pack and projection | Hex tile layouts (`layout: 'hex'`, `registerLayout`) |

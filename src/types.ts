@@ -449,6 +449,67 @@ export interface BubbleSeriesOptions extends SeriesCommon {
 }
 
 /**
+ * A point to be binned. Position only, plus whatever the aggregate reads.
+ *
+ * There is no `joinBy` here, unlike a bubble. A hexbin over region centroids is
+ * a mistake dressed as a map: it bins the *geometry*, so the answer is decided
+ * by how the regions were drawn rather than by where anything happened, and the
+ * result changes if the map does. Points are the input, and a caller who has
+ * regions wants a choropleth.
+ */
+export interface HexbinDatum {
+  lon?: number
+  lat?: number
+  /** Alias for `lon`, for data that came from a `[lat, lng]` world. */
+  lng?: number
+  /** `[lon, lat]`, for data that arrived as GeoJSON. */
+  coordinates?: LonLat
+  value?: number | null
+  name?: string
+  [key: string]: unknown
+}
+
+/** What a bin's colour reports about the points that landed in it. */
+export type HexbinAggregate = 'count' | 'sum' | 'mean' | 'min' | 'max'
+
+export interface HexbinSeriesOptions extends SeriesCommon {
+  type: 'hexbin'
+  data?: readonly HexbinDatum[]
+  /**
+   * Cell radius, centre to vertex, in **screen** pixels. Default 14.
+   *
+   * Screen and not world, so the cells stay the size you chose as the reader
+   * zooms and the lattice refines instead of magnifying. That is the whole point
+   * of binning rather than drawing the points: the resolution follows the reader.
+   */
+  radius?: number
+  /** A vertex up, or a vertex to the side. Default `'pointy'`. */
+  orientation?: 'pointy' | 'flat'
+  /**
+   * What the colour encodes. Default `'count'`, which needs no value field at
+   * all and is the honest default for "where are these things".
+   */
+  aggregate?: HexbinAggregate
+  /**
+   * How the aggregate becomes a colour.
+   *
+   * The domain is taken from the bins, which are rebuilt when the reader crosses
+   * a zoom level, so the class breaks move with it: the same colour means fewer
+   * points per cell when the cells are smaller. That is the honest reading of a
+   * density map and the legend follows it. Pass `domain` or `breaks` to pin the
+   * classes instead, which is what you want if two maps have to be compared.
+   */
+  scale?: ScaleOptions
+  /** Bins holding fewer points than this are not drawn. Default 1. */
+  minCount?: number
+  /**
+   * Shrink each cell towards its centre, as a fraction of the radius, so the
+   * lattice reads as cells rather than as one sheet. Default 0.
+   */
+  gap?: number
+}
+
+/**
  * An arc datum. `from` and `to` are required, because an arc without endpoints is
  * not an arc: catching that at compile time is precisely what the discriminated
  * union buys. Each may be a `[lon, lat]` pair or a geometry key to resolve against
@@ -679,6 +740,7 @@ export type Series =
   | ArcSeriesOptions
   | MarkerSeriesOptions
   | LineSeriesOptions
+  | HexbinSeriesOptions
 
 export type SeriesType = NonNullable<Series['type']>
 

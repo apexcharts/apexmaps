@@ -62,6 +62,8 @@ import { BubbleSeries } from './series/Bubble'
 import { MarkerSeries } from './series/Marker'
 import { ArcSeries } from './series/Arc'
 import { LineSeries } from './series/Line'
+import { HexbinSeries } from './series/Hexbin'
+import type { HexBin } from './geo/Hexbin'
 import { BaseFeatures } from './series/BaseFeatures'
 import { Legend } from './components/Legend'
 import type { LegendSection } from './components/Legend'
@@ -149,7 +151,13 @@ type ScreenRect = [ScreenPoint, ScreenPoint]
 
 /** Anything the renderer can draw. */
 type AnySeries =
-  ChoroplethSeries | BubbleSeries | ArcSeries | LineSeries | MarkerSeries | BaseFeatures
+  | ChoroplethSeries
+  | BubbleSeries
+  | ArcSeries
+  | LineSeries
+  | MarkerSeries
+  | HexbinSeries
+  | BaseFeatures
 
 /** The series kinds bound to geometry, which are the ones a drilldown applies to. */
 type FeatureSeries = ChoroplethSeries | BaseFeatures
@@ -172,6 +180,8 @@ interface ResolvedMark {
   feature?: NormalizedFeature
   /** Present only when the mark is a point cluster. */
   cluster?: Cluster
+  /** Present only when the mark is a hexbin cell. */
+  bin?: HexBin
   /** DOM key used by the renderer for this mark. */
   markKey: string | number
 }
@@ -221,7 +231,9 @@ class ApexMaps extends BaseChart {
   geo: NormalizedGeo | null = null
 
   /** Data series, excluding the basemap pseudo-series. */
-  series: (ChoroplethSeries | BubbleSeries | ArcSeries | LineSeries | MarkerSeries)[] = []
+  series: (
+    ChoroplethSeries | BubbleSeries | ArcSeries | LineSeries | MarkerSeries | HexbinSeries
+  )[] = []
   /** What actually gets drawn: the series, or the basemap when there are none. */
   renderTargets: AnySeries[] = []
   /** World-space label anchors per feature index. */
@@ -709,6 +721,15 @@ class ApexMaps extends BaseChart {
             }),
           )
           break
+        case 'hexbin':
+          this.series.push(
+            new HexbinSeries({
+              config: cfg,
+              index: i,
+              viewport: this.viewport,
+            }),
+          )
+          break
         case 'choropleth':
         case undefined:
           this.series.push(
@@ -816,6 +837,15 @@ class ApexMaps extends BaseChart {
         case 'marks':
           this.renderer.drawMarks({
             marks: (series as MarkerSeries).marks(this.viewport.camera.k),
+            seriesId: series.id,
+          })
+          break
+
+        case 'bins':
+          this.renderer.drawBins({
+            bins: (series as HexbinSeries).binSpecs(this.viewport.camera.k),
+            stroke: series.config.stroke,
+            opacity: series.config.opacity ?? 1,
             seriesId: series.id,
           })
           break
@@ -1013,6 +1043,21 @@ class ApexMaps extends BaseChart {
             title: series.legendTitle(),
             items: series.colorScale.legendItems(),
             continuous: false,
+            seriesIndex: series.index,
+          })
+        }
+        continue
+      }
+
+      if (series instanceof HexbinSeries) {
+        // Only after the lattice exists: the values being classed are the bin
+        // aggregates, so there is no scale to legend before the first draw.
+        if (series.colorScale) {
+          sections.push({
+            title: series.legendTitle(),
+            items: series.colorScale.legendItems(),
+            continuous: series.colorScale.continuous,
+            gradient: legendGradient(series.colorScale),
             seriesIndex: series.index,
           })
         }
@@ -1334,6 +1379,25 @@ class ApexMaps extends BaseChart {
         anchor: cluster.world,
         markKey: `cluster-${clusterAttr}`,
         cluster,
+      }
+    }
+
+    // A bin is not a data row either: it stands for the points inside a patch of
+    // the map, so what it reports is the aggregate, and its datum is the members.
+    if (series instanceof HexbinSeries) {
+      const bin = series.binAt(item)
+      if (!bin) return null
+      const key = `${bin.q},${bin.r}`
+      return {
+        series,
+        seriesIndex,
+        key,
+        name: series.legendTitle(),
+        value: series.valueOf(bin),
+        datum: bin.members.map((m) => series.itemAt(m)?.datum),
+        anchor: bin.world,
+        markKey: key,
+        bin,
       }
     }
 
@@ -2503,6 +2567,19 @@ class ApexMaps extends BaseChart {
       if (series instanceof MarkerSeries && series.needsRedraw(zoom)) {
         this.renderer?.drawMarks({ marks: series.marks(zoom), seriesId: series.id })
       }
+      // A hexbin's lattice is quantized the same way, and for the same reason.
+      // The legend goes with it: the cells are smaller, so they hold fewer
+      // points, so the class breaks move. A legend left on the old breaks would
+      // be a caption for a map that is no longer underneath it.
+      if (series instanceof HexbinSeries && series.needsRedraw(zoom)) {
+        this.renderer?.drawBins({
+          bins: series.binSpecs(zoom),
+          stroke: series.config.stroke,
+          opacity: series.config.opacity ?? 1,
+          seriesId: series.id,
+        })
+        this._drawLegend()
+      }
     }
     // Labels and annotation chips live in screen space, so they must be
     // re-laid-out, but only once per frame no matter how many camera writes
@@ -2649,7 +2726,10 @@ class ApexMaps extends BaseChart {
       if (
         series instanceof BubbleSeries ||
         series instanceof ArcSeries ||
-        series instanceof LineSeries
+        series instanceof LineSeries ||
+        // A hexbin bins in world space, so a new projection is new world
+        // coordinates and the whole lattice has to be rebuilt, not just moved.
+        series instanceof HexbinSeries
       ) {
         series.reproject(this.viewport)
       }

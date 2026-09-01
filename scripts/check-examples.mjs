@@ -110,7 +110,7 @@ for (const file of pages) {
         error: window.__demo.error,
         maps: window.__demo.maps.map(({ name, map }) => {
           const marks = map.element.querySelectorAll(
-            'path.apexmaps-feature, circle.apexmaps-bubble, g.apexmaps-mark, path.apexmaps-arc, path.apexmaps-line',
+            'path.apexmaps-feature, path.apexmaps-bin, circle.apexmaps-bubble, g.apexmaps-mark, path.apexmaps-arc, path.apexmaps-line',
           ).length
           return {
             name,

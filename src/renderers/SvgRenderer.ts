@@ -82,6 +82,22 @@ export interface SymbolSpec {
 }
 
 /**
+ * One cell of a hexbin lattice, already outlined in world space.
+ *
+ * The `d` arrives built rather than being derived here from a centre and a
+ * radius, because every cell in a layer is the same hexagon translated: the
+ * series builds the ring once and offsets it, which is what keeps ten thousand
+ * cells to roughly the cost of one.
+ */
+export interface BinSpec {
+  /** The cell's lattice coordinates, stable while the lattice is. */
+  key: string
+  item: number
+  d: string
+  fill: string
+}
+
+/**
  * A shaped, optionally labelled screen-space mark: a marker or a point cluster.
  *
  * Drawn as a `<g transform>` wrapping a path and an optional label, so however
@@ -359,6 +375,59 @@ export class SvgRenderer {
     // Unconditional: a series that *stops* painting has to have its defs cleared,
     // and that is exactly the pass where `paint` is absent.
     this.paints?.pruneSeries(seriesId, paintsSeen)
+  }
+
+  /**
+   * Draw (or update) hexbin cells: world-space filled polygons with an explicit
+   * outline.
+   *
+   * Close to `drawFeatures` and deliberately not folded into it. That one starts
+   * from a `NormalizedFeature` and asks the viewport to project it, which is the
+   * whole of what it does; a bin has no feature and no geometry to project,
+   * because its outline was computed in world space from a lattice. The shared
+   * part is four `setAttribute` calls.
+   */
+  drawBins({
+    bins,
+    stroke = {},
+    opacity = 1,
+    seriesId = 'h0',
+  }: {
+    bins: BinSpec[]
+    stroke?: StrokeOptions
+    opacity?: number
+    seriesId?: string
+  }): void {
+    if (!this.marksLayer) return
+    const group = this.ensureGroup(this.marksLayer, seriesId, 'apexmaps-series')
+    const seen = new Set<string>()
+
+    for (const spec of bins) {
+      const key = `${seriesId}:${spec.key}`
+      seen.add(key)
+
+      let path = this.pathsByKey.get(key)
+      if (!path) {
+        path = svg('path', {
+          class: 'apexmaps-bin',
+          dataset: { key: spec.key, item: spec.item, series: seriesId },
+        })
+        this.pathsByKey.set(key, path)
+        group.appendChild(path)
+      }
+
+      path.setAttribute('d', spec.d)
+      path.setAttribute('fill', spec.fill)
+      // Written every pass: a cell keeps its lattice key across a redraw, so the
+      // element is reused and a stale index would resolve events to the wrong bin.
+      path.setAttribute('data-item', String(spec.item))
+      path.setAttribute('stroke', stroke.color || 'none')
+      path.setAttribute('stroke-width', String(stroke.width ?? 0))
+      path.setAttribute('vector-effect', 'non-scaling-stroke')
+      if (opacity !== 1) path.setAttribute('opacity', String(opacity))
+    }
+
+    this.prune(this.pathsByKey, seriesId, seen)
   }
 
   /**

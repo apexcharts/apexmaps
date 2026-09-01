@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hexbin · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <div class="card">
+        <h1>Twenty thousand points, and what each way of drawing them says</h1>
+        <p class="note">
+          A hexbin is what to reach for when there are more points than pixels. Both maps below hold
+          the same 20,000 points. The left one draws every one of them and gives you the
+          <em>shape</em> of the data without its <em>magnitude</em>: you can see there are twelve
+          clusters and roughly where they are, and you cannot rank them or read a number off any of
+          them, because overlapping marks stop counting once they overlap. The right one lays a
+          lattice over the projection and colours each cell by how many landed in it, so the same
+          twelve clusters arrive with a legend that says which is which.
+        </p>
+        <div class="two">
+          <div>
+            <div class="label"><code>type: 'marker'</code> · 20,000 marks</div>
+            <div id="dots" class="plot"></div>
+          </div>
+          <div>
+            <div class="label"><code>type: 'hexbin'</code> · the same 20,000 points</div>
+            <div id="bins" class="plot"></div>
+          </div>
+        </div>
+        <p class="source">
+          <b>Synthetic points, real anchors.</b> The cluster centres are the coordinates of twelve US
+          metropolitan areas, which are facts; the scatter around them is generated from a hash of
+          the point index, so the page looks identical on every load. It is not a dataset and no
+          figure here claims otherwise.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Not the same hexagons as the other page</h2>
+        <p class="note">
+          Two features in this library draw hexagons and they have nothing to do with each other,
+          which is worth saying plainly because the word "hex" is doing double duty.
+        </p>
+        <div class="two">
+          <div>
+            <div class="label">A hex tile <strong>layout</strong> (<code>layout: 'hex'</code>)</div>
+            <p class="note">
+              A cartogram. One cell per <em>region</em>, placed by hand, and the hexagon is a
+              container for that region's identity: this cell <em>is</em> Texas. It replaces the
+              boundaries, the cell count is fixed at however many regions there are, and the whole
+              point is that every region gets equal room.
+            </p>
+          </div>
+          <div>
+            <div class="label">A hexbin <strong>series</strong> (<code>type: 'hexbin'</code>)</div>
+            <p class="note">
+              A density estimate. No regions in it at all: the cells are a lattice laid over the
+              projection, and each reports what landed inside it. It ignores the boundaries rather
+              than replacing them, so it sits on top of a basemap, and the cell count is whatever
+              the data and the radius work out to.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">The colour is a choice, and the aggregate is the choice</h2>
+        <p class="note">
+          <code>aggregate: 'count'</code> is the default and needs no value field at all, which is
+          right because "where are these things" is the question that brings anyone here. Give the
+          points a value and the same lattice reports its mean instead, and the two maps then say
+          different things: the left reads as the twelve clusters the points were drawn around, and
+          the right reads as a smooth field across the continent that owes nothing to how many points
+          are anywhere. Same cells, same data, two questions.
+        </p>
+        <div class="two">
+          <div>
+            <div class="label"><code>aggregate: 'count'</code> · how many</div>
+            <div id="count" class="plot"></div>
+          </div>
+          <div>
+            <div class="label">
+              <code>aggregate: 'mean', minCount: 5</code> · how much, on average
+            </div>
+            <div id="mean" class="plot"></div>
+          </div>
+        </div>
+        <p class="note" style="margin-top: 12px">
+          <code>minCount</code> is doing real work on the right. A mean over one point is that
+          point, and it shouts as loudly as a mean over a hundred; raising the floor to five is what
+          keeps the average from being decided by its thinnest cells. Rendering with debug on says so
+          out loud if you forget.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">The lattice belongs to the reader, not to the data</h2>
+        <p class="note">
+          The radius is in <strong>screen pixels</strong>, so the cells stay the size you chose and
+          the lattice refines as the reader zooms rather than magnifying. That is the difference
+          between binning and just drawing bigger hexagons: the resolution follows whoever is
+          looking. Cells are rebuilt at quantized zoom levels, which is the same policy point
+          clustering uses, so a pan never re-bins and a smooth zoom crosses a boundary a handful of
+          times rather than sixty times a second.
+        </p>
+        <div class="row" style="margin-bottom: 12px">
+          <button id="zoom-in">Zoom in</button>
+          <button id="zoom-out">Zoom out</button>
+          <button id="zoom-reset">Reset</button>
+          <span class="label" id="zoom-readout">1.0x · 0 cells</span>
+        </div>
+        <div id="zoomable" class="plot"></div>
+        <p class="note" style="margin-top: 12px">
+          <strong>Watch the legend as well as the map.</strong> Smaller cells hold fewer points, so
+          the class breaks move down with them: the same colour means a different number at a
+          different zoom, and the legend says so rather than quietly lying. Pass
+          <code>scale: { domain: [...] }</code> to pin the classes instead, which is what you want
+          when two maps have to be read against each other, and what you do not want as a default:
+          fixed classes leave every cell in the palest one two levels in.
+        </p>
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      const boot = (async () => {
+        /* ---- the point cloud ------------------------------------------------
+         * Real metro coordinates as the anchors; the scatter is a hash of the
+         * point index, so the page is byte-identical on every load and a
+         * screenshot diff means a rendering change rather than new dice.
+         */
+        const METROS = [
+          ['Los Angeles', -118.24, 34.05, 1.0],
+          ['New York', -74.01, 40.71, 1.1],
+          ['Chicago', -87.63, 41.88, 0.8],
+          ['Houston', -95.37, 29.76, 0.7],
+          ['Phoenix', -112.07, 33.45, 0.5],
+          ['San Francisco', -122.42, 37.77, 0.6],
+          ['Atlanta', -84.39, 33.75, 0.6],
+          ['Seattle', -122.33, 47.61, 0.5],
+          ['Denver', -104.99, 39.74, 0.4],
+          ['Miami', -80.19, 25.76, 0.5],
+          ['Minneapolis', -93.27, 44.98, 0.35],
+          ['Boston', -71.06, 42.36, 0.45],
+        ]
+
+        const POINTS = 20000
+        const unit = (key) => Demo.value(key, 0, 10000) / 10000
+        const points = []
+        for (let i = 0; i < POINTS; i++) {
+          const metro = METROS[Math.floor(unit(`m${i}`) * METROS.length)]
+          // Two independent draws, so the cloud is round rather than diagonal.
+          const angle = unit(`a${i}`) * Math.PI * 2
+          // Square-rooted, so density falls off from the centre instead of the
+          // cloud being a uniform disc with a hard edge.
+          const spread = Math.sqrt(unit(`r${i}`)) * 4.2 * metro[3]
+          const lon = metro[1] + Math.cos(angle) * spread * 1.3
+          const lat = metro[2] + Math.sin(angle) * spread
+          // The value varies smoothly with position and owes nothing to density,
+          // which is the whole point of the count-versus-mean card: with noise
+          // instead, the mean map would be structureless and the card would be
+          // claiming a contrast it had not drawn.
+          points.push({ lon, lat, value: Demo.field({ lon, lat, key: `v${i}` }) })
+        }
+
+        // No basemap series is declared anywhere on this page. A hexbin is not
+        // bound to geometry, so the library draws the coastline underneath it by
+        // itself: points floating in the void are not a map. Declaring an empty
+        // choropleth to get the same picture would also put its own empty scale
+        // in the legend, which is a caption for nothing.
+        const make = (id, series, extra = {}) =>
+          Demo.watch(
+            id,
+            new ApexMaps(document.getElementById(id), {
+              chart: { height: 400 },
+              geo: { map: 'us', fill: '#eef1f5' },
+              series: [series],
+              legend: { position: 'bottom' },
+              ...extra,
+            }),
+          )
+
+        /* ---- one point each, versus one cell each -------------------------- */
+        const dots = make('dots', {
+          type: 'marker',
+          name: 'One mark per point',
+          data: points,
+          shape: 'circle',
+          size: 4,
+          color: '#1d4ed8',
+          // Heavy enough that the overlap is the thing you see, which is the
+          // point being made. Drawn faint, 20,000 marks look like a light
+          // speckle and the card would be describing a problem it had hidden.
+          opacity: 0.5,
+          // Clustering off on purpose: this half of the comparison exists to show
+          // what 20,000 individual marks actually look like.
+          cluster: { enabled: false },
+        })
+
+        const bins = make('bins', {
+          type: 'hexbin',
+          name: 'Points per cell',
+          data: points,
+          radius: 11,
+          gap: 0.05,
+          scale: { palette: 'viridis', classes: 6 },
+          stroke: { color: '#ffffff', width: 0.4 },
+        })
+
+        /* ---- count against mean ------------------------------------------- */
+        const count = make('count', {
+          type: 'hexbin',
+          name: 'Points per cell',
+          data: points,
+          radius: 13,
+          gap: 0.05,
+          scale: { palette: 'blues', classes: 5 },
+        })
+
+        const mean = make('mean', {
+          type: 'hexbin',
+          name: 'Mean value',
+          data: points,
+          radius: 13,
+          gap: 0.05,
+          aggregate: 'mean',
+          minCount: 5,
+          scale: { palette: 'oranges', classes: 5 },
+        })
+
+        /* ---- the lattice follows the camera -------------------------------- */
+        const zoomable = make('zoomable', {
+          type: 'hexbin',
+          name: 'Points per cell',
+          data: points,
+          radius: 12,
+          gap: 0.05,
+          scale: { palette: 'magma', classes: 6 },
+        })
+
+        await Promise.all([
+          dots.render(),
+          bins.render(),
+          count.render(),
+          mean.render(),
+          zoomable.render(),
+        ])
+
+        const readout = document.getElementById('zoom-readout')
+        const report = () => {
+          const cells = zoomable.element.querySelectorAll('path.apexmaps-bin').length
+          readout.textContent = `${zoomable.viewport.camera.k.toFixed(1)}x · ${cells} cells`
+        }
+        report()
+
+        const step = (fn) => () => {
+          fn()
+          // The lattice is rebuilt on the camera change, so the count is read
+          // after the frame that redraws it rather than in the same tick.
+          requestAnimationFrame(() => requestAnimationFrame(report))
+        }
+        document.getElementById('zoom-in').addEventListener('click', step(() => zoomable.zoomIn()))
+        document.getElementById('zoom-out').addEventListener('click', step(() => zoomable.zoomOut()))
+        document
+          .getElementById('zoom-reset')
+          .addEventListener('click', step(() => zoomable.resetView()))
+
+        return true
+      })()
+
+      Demo.ready(boot)
+    </script>
+  </body>
+</html>

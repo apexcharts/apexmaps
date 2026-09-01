@@ -139,6 +139,14 @@
     opacity 150ms ease-out;
 }
 
+/* A hexbin cell transitions its fill like a region does, and nothing else. The
+   `d` is rewritten wholesale when the lattice is rebuilt, so there is no
+   in-between shape for a transition to run through: a cell at one zoom level is
+   not a moved version of a cell at the next, it is a different patch of map. */
+.apexmaps-bin {
+  transition: fill var(--apexmaps-anim, 220ms) ease-out;
+}
+
 /* While regions are in flight between two representations of the same set
    (`renderers/LayoutMorph`), the position-anchored overlay is taken out. Its
    labels and annotations are placed against the geometry that has already
@@ -203,6 +211,7 @@
 /* Hover feedback has to feel attached to the pointer: the data-update pace
    would read as lag here. */
 .apexmaps-feature.is-hovered,
+.apexmaps-bin.is-hovered,
 .apexmaps-bubble.is-hovered,
 .apexmaps-mark.is-hovered .apexmaps-mark-shape {
   transition-duration: 90ms;
@@ -230,6 +239,7 @@
    it wins over the series' own opacity attribute and uncovers it again when the
    class goes, with no per-mark bookkeeping. */
 .apexmaps-feature.is-muted,
+.apexmaps-bin.is-muted,
 .apexmaps-bubble.is-muted,
 .apexmaps-mark.is-muted {
   opacity: var(--apexmaps-muted-opacity, 0.25);
