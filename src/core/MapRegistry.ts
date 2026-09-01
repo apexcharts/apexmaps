@@ -17,6 +17,7 @@
 
 import type { GeoInput, MapSource } from '../types'
 import { similarity, normalizeKey } from '../data/Join'
+import { layoutToGeoJSON, layoutMeta, type LayoutPack } from '../geo/HexLayout'
 
 export interface MapMeta {
   /** e.g. 'Natural Earth 5.1.1'. */
@@ -32,6 +33,21 @@ export interface MapMeta {
   boundaries?: string
   /** Recommended join key. */
   keyField?: string
+  /**
+   * Property to label features with, when the name is the wrong label. A hex
+   * layout sets it to its key: a cell sized for Rhode Island cannot hold
+   * "Rhode Island", and the postal abbreviation is what every published hex map
+   * prints.
+   */
+  labelField?: string
+  /**
+   * True when the geometry is a diagram rather than a place: nothing sharpens
+   * on zoom and there is nothing off-screen to pan to, so both gestures default
+   * off and are given back to the page.
+   */
+  fixed?: boolean
+  /** Present when this pack was generated from a grid layout, not boundaries. */
+  layout?: Record<string, unknown>
   [key: string]: unknown
 }
 
@@ -65,6 +81,34 @@ export function registerMap(id: string, data: GeoInput | MapLoader, meta?: MapMe
   }
   if (!data) throw new TypeError(`ApexMaps: no geometry supplied for map "${id}"`)
   registry.set(id, { data, meta })
+}
+
+/**
+ * Register a grid layout under an id: one equal cell per region, at a
+ * hand-authored position.
+ *
+ * The layout becomes geometry immediately rather than behind a loader, because
+ * a table of integers is already in hand and generating fifty hexagons is
+ * cheaper than the closure that would defer it. What makes this different from
+ * `registerMap` with the same polygons is the meta: a layout states that it must
+ * not be projected, that it has nothing to zoom into, and that its cells are
+ * labelled by key, so a caller does not have to rediscover all three.
+ *
+ * ```js
+ * ApexMaps.registerLayout('nl/provinces@hex', {
+ *   keyField: 'code',
+ *   cells: { 'NL-GR': [4, 0], 'NL-FR': [3, 1] },
+ * })
+ * ```
+ */
+export function registerLayout(id: string, pack: LayoutPack, meta?: MapMeta): void {
+  if (typeof id !== 'string' || !id) {
+    throw new TypeError('ApexMaps: layout id must be a non-empty string')
+  }
+  registry.set(id, {
+    data: layoutToGeoJSON(pack),
+    meta: { ...layoutMeta(pack), ...meta, packId: id } as MapMeta,
+  })
 }
 
 export function hasMap(id: string): boolean {

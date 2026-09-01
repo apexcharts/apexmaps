@@ -46,6 +46,7 @@
     "check:size": "node scripts/check-size.mjs",
     "check:license": "node scripts/check-license-enforcement.mjs",
     "check:geo": "node scripts/check-geo-package.mjs",
+    "check:layout": "node scripts/check-hex-layout.mjs",
     "check:geo-source": "node scripts/check-geo-source.mjs",
     "check:wrappers": "node scripts/check-wrappers.mjs",
     "build:types": "tsc -p tsconfig.json",

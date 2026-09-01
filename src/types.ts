@@ -718,6 +718,28 @@ export interface ChartOptions {
 
 export interface GeoOptions {
   map?: MapSource | null
+  /**
+   * Draw the region set as a grid of equal cells instead of its real
+   * boundaries: a hex tile map, also called a honeycomb or tilegram.
+   *
+   * ```js
+   * geo: { map: 'us', layout: 'hex' }     // one hexagon per state
+   * geo: { map: 'us/states@hex' }         // the same thing, named directly
+   * ```
+   *
+   * A cartogram, not geography. Reach for it when the story is about people,
+   * votes or money and land area is actively misleading, or when every unit
+   * needs to be legible including the ones too small to see on a real map. The
+   * cost is that a reader who does not already know the country cannot navigate
+   * it, so it is a poor default and a strong deliberate choice.
+   *
+   * The layout resolves independently of the boundaries and is roughly fifty
+   * times smaller, so this form does not download geometry it never draws.
+   * Layouts exist for a subset of the packs; `ApexMaps.listMaps()` shows which,
+   * and an unavailable one is an error rather than a silent fall back to real
+   * boundaries, which would look like the option had been ignored.
+   */
+  layout?: 'hex' | null
   /** TopoJSON object name, when the topology holds several. */
   object?: string
   keyField?: string

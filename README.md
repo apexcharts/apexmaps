@@ -34,6 +34,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Series | `choropleth`, `bubble` (proportional symbols), `marker` (seven shapes, categorical colour, clustering&nbsp;†), `arc` (great-circle connections, travelling `flow` beads)&nbsp;†, `line` (routes through given vertices)&nbsp;†, plus an automatic basemap whenever no feature series is present |
 | Projections | 13 core projections with aliases (`equalEarth` default, `webMercator`, `epsg:3857`, `albersUsa`, `orthographic`, conics, azimuthals), spec objects with `rotate` / `parallels` / `clipAngle`, and `ApexMaps.registerProjection()`&nbsp;† for the rest of `d3-geo-projection` |
 | Geometry | 26 built-in packs: world countries and land, US states and counties, EU NUTS 0-3, and admin-1 for 15 more countries. Lazy, one request per pack, provenance and attribution attached |
+| Layouts | `layout: 'hex'` redraws a region set as a hex tile map (honeycomb, tilegram): one equal cell per region, keyed the way the boundary pack is keyed, so the same data and the same `joinBy` serve both. `us/states@hex` ships; `ApexMaps.registerLayout()` takes your own |
 | Data | GeoJSON, TopoJSON, bare geometry, feature arrays; automatic winding repair; join-key auto-detection |
 | Joins | Explicit `joinBy`, mismatch diagnostics with suggestions, FIPS leading-zero repair, opt-in `fuzzyJoin` |
 | Scales | quantile, equal interval, Jenks, threshold, linear, log, sqrt, ordinal; OkLab-sampled ramps; 17 palettes; automatic diverging selection; square-root size scales with nested-circle legends |
@@ -42,7 +43,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Camera | `flyTo` (Van Wijk zoom-and-pan path), `easeTo`, `jumpTo`, `fitBounds`, `frameFeature`, `resetView`, interruptible and retargeting; on azimuthal projections a move to a place turns the sphere (quaternion slerp) instead of panning |
 | Components | Classed, gradient and nested-circle legends with a hover marker that tracks the pointer along the bar, HTML tooltips with edge flipping, collision-avoiding labels with halos, editorial annotations&nbsp;† |
 | Accessibility | ARIA roles, auto-generated description, roving-tabindex keyboard navigation, live-region announcements, optional data table, `prefers-reduced-motion` |
-| Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 75 kB gzipped core |
+| Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 78 kB gzipped core |
 | Frameworks | [`react-apexmaps`](wrappers/react), [`vue-apexmaps`](wrappers/vue) and [`ngx-apexmaps`](wrappers/angular), typed against this package's own options |
 
 † Licensed feature. It works without a key so you can evaluate it, with a watermark on the map. See
@@ -108,6 +109,7 @@ broken by an unrelated one:
 | [basemap](examples/basemap.html) | Geometry with no data, and label collision |
 | [patterns](examples/patterns.html) | A tile per region, with the colour still leading |
 | [image-fill](examples/image-fill.html) | A picture per region, clipped to its own outline |
+| [honeycomb](examples/honeycomb.html) | One hexagon per state, and the same map toggled back to real boundaries |
 | [bubbles](examples/bubbles.html) | Square-root versus linear sizing, second colour encoding |
 | [markers](examples/markers.html) | Seven shapes, categorical colour, clustering |
 | [arcs](examples/arcs.html) | Great circles, antimeridian cutting, curvature, travelling flow |
@@ -443,7 +445,7 @@ whose view a pack carries.
 ## Development
 
 ```sh
-npm test                # vitest, 639 tests, including the real geometry packs and perf invariants
+npm test                # vitest, 682 tests, including the real geometry packs and perf invariants
 npm run test:coverage
 npm run lint
 npm run typecheck
@@ -452,6 +454,7 @@ npm run build           # rollup bundles + tsc declarations (cleans dist/ first)
 npm run check:size      # fail if a bundle crosses the 150 kB gzipped budget
 npm run check:license   # drive the BUILT bundle through licence enforcement (gates publishing)
 npm run check:geo       # verify the geo/ dataset and the library agree (gates publishing)
+npm run check:layout    # score every hand-authored hex layout against its boundary pack
 npm run check:geo-source # verify the default CDN geometry source actually serves geometry
 npm run examples        # build, then serve examples/ on :8084
 npm run check:examples  # load every demo in Chromium, fail on an error or an empty map

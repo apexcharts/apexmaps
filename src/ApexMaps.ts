@@ -17,15 +17,25 @@ import { BaseChart } from './core/BaseChart'
 import { buildConfig, applyResponsive, merge, mergeOptions } from './core/Config'
 import { A11y } from './core/A11y'
 import type { PremiumFeature } from './core/premium'
-import { resolveMap, registerMap, listMaps, mapMeta, attributionFor } from './core/MapRegistry'
+import {
+  resolveMap,
+  registerMap,
+  registerLayout,
+  listMaps,
+  mapMeta,
+  attributionFor,
+} from './core/MapRegistry'
 import {
   installCatalogue,
   setGeoSource,
   geoPacks,
+  geoLayouts,
+  layoutIdFor,
   type GeoFetcher,
   type GeoPack,
 } from './core/GeoCatalogue'
 import type { MapMeta } from './core/MapRegistry'
+import type { LayoutPack } from './geo/HexLayout'
 import { normalizeGeo } from './geo/GeoData'
 import { Viewport } from './geo/Viewport'
 import { Camera } from './geo/Camera'
@@ -82,6 +92,7 @@ import type {
   DrilldownContext,
   DrilldownOptions,
   GeoInput,
+  InteractionOptions,
   LegendOptions,
   LonLat,
   MapSource,
@@ -336,7 +347,7 @@ class ApexMaps extends BaseChart {
     this._mountShell()
     this._measure()
 
-    const resolved = await resolveMap(this.config.geo.map as MapSource)
+    const resolved = await resolveMap(this._mapSource())
 
     // destroy() may have run while the geometry loaded (a fast unmount, React
     // StrictMode's mount/unmount/mount). Finishing the tail would rebuild the
@@ -349,6 +360,7 @@ class ApexMaps extends BaseChart {
 
     this.geo = this._ingest(resolved.data)
     this.warnings.push(...this.geo.warnings)
+    this._noteLayoutCoverage()
 
     this._buildViewport()
     this._buildSeries()
@@ -364,6 +376,59 @@ class ApexMaps extends BaseChart {
     this.rendered = true
     this.emit('rendered', { instance: this })
     return this
+  }
+
+  /**
+   * Say so when a layout covers fewer regions than its boundary pack.
+   *
+   * A layout is a subset by nature: the US pack has 56 features and every
+   * published hex layout places 51, because no layout includes the inhabited
+   * territories. That is a decision, and a decision reported once is very
+   * different from data quietly going missing. Rows for an unplaced region are
+   * dropped by the join like any other unmatched key, so without this the only
+   * evidence is a number that fails to appear anywhere on the map.
+   */
+  private _noteLayoutCoverage(): void {
+    const layout = this.mapMeta?.layout as { of?: string } | undefined
+    if (!layout || !this.geo) return
+    const unplaced = (this.mapMeta?.layout as { unplaced?: string[] })?.unplaced
+    if (!unplaced?.length) return
+
+    this.warnings.push(
+      `this layout places ${this.geo.features.length} of the ${
+        this.geo.features.length + unplaced.length
+      } regions in ${layout.of ?? 'the boundary pack'}. ` +
+        `Deliberately absent: ${unplaced.join(', ')}. ` +
+        'Rows keyed to those regions will not appear.',
+    )
+  }
+
+  /**
+   * `geo.map`, redirected to a grid layout when `geo.layout` asks for one.
+   *
+   * Resolved here rather than by teaching `resolveMap` about layouts, because
+   * `geo.map` stays the thing the caller wrote: drilldown compares against it,
+   * `updateOptions` diffs it, and rewriting it in place would make a layout
+   * sticky in ways the caller never asked for.
+   */
+  private _mapSource(): MapSource {
+    const { map, layout } = this.config.geo
+    if (!layout || typeof map !== 'string') return map as MapSource
+
+    const id = layoutIdFor(map, layout)
+    if (id) return id
+
+    // Falling back to real boundaries here would draw a perfectly good map that
+    // silently is not the one that was asked for, which is the worst outcome.
+    const available = geoLayouts().map((l) => `"${l.of}"`)
+    throw new Error(
+      `ApexMaps: no "${layout}" layout exists for map "${map}". ` +
+        (available.length
+          ? `Layouts are available for ${available.join(', ')}. `
+          : 'No layouts are registered. ') +
+        'Author one with ApexMaps.registerLayout(id, { keyField, cells }), or drop geo.layout ' +
+        'to draw real boundaries.',
+    )
   }
 
   /**
@@ -877,7 +942,14 @@ class ApexMaps extends BaseChart {
       return
     }
 
-    const field = cfg.field ?? labelledSeries?.config?.labels?.field
+    // A pack may recommend what to label with. A hex layout does: its cells are
+    // sized for a key, so "District of Columbia" spills three cells wide and
+    // collision hiding then drops most of the labels on the map. Explicit
+    // config still wins, and so does a series that names its own field.
+    const field =
+      cfg.field ??
+      labelledSeries?.config?.labels?.field ??
+      (this.mapMeta?.labelField as string | undefined)
     const candidates: LabelCandidate[] = []
 
     for (const feature of this.geo.features) {
@@ -1067,6 +1139,27 @@ class ApexMaps extends BaseChart {
    * gesture handler reading an abandoned config is how "zoom.enabled: false set
    * later does nothing" happens.
    */
+  /**
+   * The interaction tree, with the pack's own recommendation folded in.
+   *
+   * A pack that declares itself `fixed` is a diagram rather than a place: a hex
+   * tilegram has no detail that sharpens on zoom and nothing off-screen to pan
+   * to, so both gestures default off and the wheel and the drag go back to the
+   * page. Read from `userOptions` rather than the resolved config for the same
+   * reason the projection default is: the resolved tree always carries the
+   * global defaults and cannot say whether the caller asked for them.
+   */
+  private _interactionOptions(): InteractionOptions {
+    const configured = this.config.interaction
+    if (!this.mapMeta?.fixed) return configured
+    const asked = this.userOptions.interaction ?? {}
+    return {
+      ...configured,
+      zoom: { ...configured.zoom, enabled: asked.zoom?.enabled ?? false },
+      pan: { ...configured.pan, enabled: asked.pan?.enabled ?? false },
+    }
+  }
+
   private _attachInteraction(): void {
     if (!this.camera || !this.plot) return
     this.zoomPan?.detach()
@@ -1088,7 +1181,7 @@ class ApexMaps extends BaseChart {
     this.globe?.stop()
     this.globe = new GlobeRotation({
       viewport: this.viewport,
-      options: this.config.interaction,
+      options: this._interactionOptions(),
       onChange: () => this._onRotate(),
       onEnd: () => this.emit('rotateEnd', { rotate: this.viewport.rotation }),
     })
@@ -1096,7 +1189,7 @@ class ApexMaps extends BaseChart {
     this.zoomPan = new ZoomPan({
       container: this.plot,
       camera: this.camera,
-      options: this.config.interaction,
+      options: this._interactionOptions(),
       emit: (event, payload) => this.emit(event as ApexMapsEventName, payload as never),
       onSelectBox: (box, phase, additive) => this._handleSelectBox(box, phase, additive),
       globe: this.globe,
@@ -1119,7 +1212,7 @@ class ApexMaps extends BaseChart {
    * object; normalising here means the component never has to know about both.
    */
   private _zoomControlsOptions(): ZoomControlsOptions {
-    const zoom = this.config.interaction.zoom ?? {}
+    const zoom = this._interactionOptions().zoom ?? {}
     if (zoom.enabled === false || zoom.controls === false) return { show: false }
     if (zoom.controls === true || zoom.controls == null) return { show: true }
     return zoom.controls
@@ -1564,7 +1657,7 @@ class ApexMaps extends BaseChart {
    * @returns Whether the key was consumed.
    */
   private _handleZoomKey(event: KeyboardEvent): boolean {
-    if (this.config.interaction.zoom?.enabled === false) return false
+    if (this._interactionOptions().zoom?.enabled === false) return false
     if (event.metaKey || event.ctrlKey || event.altKey) return false
 
     const target = event.target as Element | null
@@ -2580,7 +2673,13 @@ class ApexMaps extends BaseChart {
     this.userOptions = mergeOptions(this.userOptions, options ?? {})
     this.config = applyResponsive(buildConfig(this.userOptions), this.viewport.width)
 
-    const mapChanged = previous.geo?.map !== this.config.geo?.map
+    // Layout counts as a map change: `updateOptions({ geo: { layout: 'hex' } })`
+    // leaves `geo.map` alone but has to fetch and ingest different geometry, so
+    // comparing only `map` would change the config and redraw the old shapes.
+    // This is the path a geography-to-honeycomb toggle takes.
+    const mapChanged =
+      previous.geo?.map !== this.config.geo?.map ||
+      (previous.geo?.layout ?? null) !== (this.config.geo?.layout ?? null)
     const projectionChanged =
       JSON.stringify(previous.geo?.projection) !== JSON.stringify(this.config.geo?.projection)
     const sizeChanged =
@@ -2597,7 +2696,7 @@ class ApexMaps extends BaseChart {
         // relate to what is on screen. Drilling changes the map through its own
         // path, so it never reaches here.
         this._resetDrill()
-        const resolved = await resolveMap(this.config.geo.map as MapSource)
+        const resolved = await resolveMap(this._mapSource())
         // Same race as render(): see the guard there.
         if (this._destroyed) return this
         this.mapId = resolved.id
@@ -2632,7 +2731,15 @@ class ApexMaps extends BaseChart {
     // The interaction tree is plain data (no formatters), so a JSON comparison is
     // exact. Recreating drops any gesture mid-flight, which is why it only happens
     // when these options actually changed.
-    if (JSON.stringify(previous.interaction) !== JSON.stringify(this.config.interaction)) {
+    //
+    // A new map counts too, because the effective gestures are not read from the
+    // options alone: a pack can declare itself `fixed` and turn zoom and pan off.
+    // Swapping a hex layout for real boundaries leaves `interaction` identical
+    // and still has to give the gestures and the zoom controls back.
+    if (
+      mapChanged ||
+      JSON.stringify(previous.interaction) !== JSON.stringify(this.config.interaction)
+    ) {
       this._attachInteraction()
     }
 
@@ -3194,6 +3301,7 @@ class ApexMaps extends BaseChart {
       this._requirePremium('customProjection')
     }
 
+
     for (const series of config.series ?? []) {
       if (series.type === 'arc' || series.type === 'line') this._requirePremium('routes')
       // A `cluster` object present at all means clustering is on, so only an
@@ -3466,6 +3574,32 @@ class ApexMaps extends BaseChart {
     meta?: MapMeta,
   ): typeof ApexMaps {
     registerMap(id, geometry, meta)
+    return ApexMaps
+  }
+
+  /**
+   * Register a grid layout: one equal cell per region, at a hand-authored
+   * position.
+   *
+   * ```js
+   * ApexMaps.registerLayout('nl/provinces@hex', {
+   *   keyField: 'code',
+   *   cells: { 'NL-GR': [4, 0], 'NL-FR': [3, 1], 'NL-DR': [4, 1] },
+   *   names: { 'NL-GR': 'Groningen' },
+   * })
+   *
+   * // geo: { map: 'nl/provinces@hex' }
+   * ```
+   *
+   * `cells` is `key -> [col, row]` with row 0 north and col 0 west, keyed by
+   * whatever geometry field the boundary pack joins on, so one dataset works
+   * against either representation. Curating the table is the whole job: there is
+   * no canonical layout for any country, and a good one is a judgement about
+   * which real adjacencies matter most. `npm run check:layout` scores one
+   * against real centroids and borders.
+   */
+  static registerLayout(id: string, layout: LayoutPack, meta?: MapMeta): typeof ApexMaps {
+    registerLayout(id, layout, meta)
     return ApexMaps
   }
 

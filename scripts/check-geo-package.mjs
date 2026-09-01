@@ -103,18 +103,33 @@ for (const file of onDisk) {
 
 // A pack that parses but holds no geometry is the failure the demo smoke check
 // exists for at the library level; catching it here keeps it out of a release.
+//
+// Layouts are a second kind of pack: a table of grid positions rather than
+// TopoJSON, with no arcs and no objects, so the topology assertions below would
+// reject a perfectly good one. They get their own shape check, and
+// `npm run check:layout` scores their contents against the boundary pack.
 for (const [id, file] of declared) {
   const path = join(GEO_DIR, file)
   if (!existsSync(path)) continue
-  let topology
+  let parsed
   try {
-    topology = JSON.parse(readFileSync(path, 'utf8'))
+    parsed = JSON.parse(readFileSync(path, 'utf8'))
   } catch (error) {
     note(`geo/${file} is not valid JSON: ${error.message}`)
     continue
   }
-  if (topology.type !== 'Topology') note(`geo/${file} is not TopoJSON (type "${topology.type}")`)
-  const objects = Object.keys(topology.objects ?? {})
+
+  if (parsed.kind === 'layout') {
+    if (!parsed.keyField) {
+      note(`geo/${file} is a layout with no keyField, so "${id}" could not be joined`)
+    }
+    const cells = Object.keys(parsed.cells ?? {})
+    if (!cells.length) note(`geo/${file} declares no cells, so "${id}" would draw nothing`)
+    continue
+  }
+
+  if (parsed.type !== 'Topology') note(`geo/${file} is not TopoJSON (type "${parsed.type}")`)
+  const objects = Object.keys(parsed.objects ?? {})
   if (!objects.length)
     note(`geo/${file} declares no TopoJSON objects, so "${id}" would draw nothing`)
 }

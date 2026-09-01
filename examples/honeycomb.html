@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hex tile map · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+  </head>
+  <body>
+    <div class="grid">
+      <div class="card">
+        <h1>One hex per state</h1>
+        <p class="note">
+          A hex tile map is a cartogram, not geography: every region becomes one equal hexagon at a
+          hand-authored position, so Rhode Island is as legible as Texas and land area stops deciding
+          how loud a value looks. Built in a chart core it is a grid of tiles, which leaves the
+          reader supplying 51 hex coordinates alongside every value. Here it is a
+          <strong>layout</strong>: geometry keyed exactly the way the boundary pack is keyed, so one
+          dataset and one <code>joinBy</code> serve both, and the scale, legend, tooltip, labels,
+          selection and keyboard navigation are the machinery that already exists.
+        </p>
+        <div class="two">
+          <div>
+            <div class="label"><code>geo: { map: 'us', layout: 'hex' }</code></div>
+            <div id="hex" class="plot"></div>
+          </div>
+          <div>
+            <div class="label"><code>geo: { map: 'us' }</code> · the same series, same scale</div>
+            <div id="geo" class="plot"></div>
+          </div>
+        </div>
+        <div class="row" style="margin-top: 12px">
+          <button id="toggle">Redraw the left map on real boundaries</button>
+          <span class="label" id="toggle-state">layout: 'hex'</span>
+        </div>
+        <p class="source">
+          <b>Illustrative data.</b> A smooth function of longitude and latitude, not a real
+          indicator. The layout is hand-authored and verified against the boundary pack it claims to
+          represent: <code>npm run check:layout</code> scores order against state centroids and
+          adjacency against shared TopoJSON arcs.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Three things you did not have to configure</h2>
+        <p class="note">
+          A layout is a diagram, and it knows that about itself. Every one of these was set by hand
+          while prototyping, which is the evidence that none of them belongs to the caller:
+        </p>
+        <ul class="note">
+          <li>
+            <strong>The <code>identity</code> projection.</strong> The coordinates are a grid, so
+            projecting them would be meaningless. The pack recommends it the same way
+            <code>us/states@10m</code> recommends <code>albersUsa</code>.
+          </li>
+          <li>
+            <strong>Labels are keys, not names.</strong> A cell sized for Rhode Island cannot hold
+            "Rhode Island". With names, 22 of the 51 labels lost their collision fight and vanished;
+            with keys, all 51 fit. That is why hex layouts are keyed on the postal abbreviation.
+          </li>
+          <li>
+            <strong>No zoom, no pan, no zoom controls.</strong> Nothing sharpens on zoom and there is
+            nothing off-screen, so both gestures go back to the page. Compare the corner of the two
+            maps above.
+          </li>
+        </ul>
+        <p class="note">
+          Each is a default, not a rule: pass <code>geo.projection</code>,
+          <code>dataLabels.field</code> or <code>interaction.zoom.enabled</code> and yours wins.
+        </p>
+        <div class="two">
+          <div>
+            <div class="label">Same 51 regions, two representations</div>
+            <pre id="sizes">…</pre>
+          </div>
+          <div>
+            <div class="label">What the pack says about itself</div>
+            <pre id="meta">…</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top: 0">Author your own</h2>
+        <p class="note">
+          <code>registerLayout</code> takes a table of <code>key → [col, row]</code>, row 0 north and
+          col 0 west, keyed by whatever field your boundary pack joins on. There is no canonical
+          layout for any country, so curating the table <em>is</em> the work: it is a judgement about
+          which real adjacencies matter most, and the numbers below are how you tell whether the
+          judgement was good.
+        </p>
+        <div class="two">
+          <div>
+            <div class="label">A four-cell layout, registered in this page</div>
+            <div id="custom" class="plot"></div>
+          </div>
+          <div>
+            <pre>
+ApexMaps.registerLayout('demo/quad@hex', {
+  keyField: 'code',
+  cells: { NW: [0, 0], NE: [1, 0], SW: [0, 1], SE: [1, 1] },
+  names: { NW: 'North west', NE: 'North east',
+           SW: 'South west', SE: 'South east' },
+})
+
+// geo: { map: 'demo/quad@hex' }</pre
+            >
+            <p class="note" style="margin-top: 12px">
+              The generator rejects a malformed pack rather than drawing it: two regions on one cell,
+              a cell that is not <code>[col, row]</code>, or an offset convention that contradicts
+              the orientation. All three render something plausible and wrong, which is worse than a
+              throw.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      const boot = (async () => {
+        // One dataset, keyed the way both representations are keyed.
+        const places = await Demo.places('us-states-10m.json')
+        const data = places.map((place) => ({
+          key: place.props.abbr,
+          value: Demo.field(place),
+        }))
+
+        const series = [
+          {
+            name: 'Illustrative index',
+            joinBy: ['abbr', 'key'],
+            data,
+            scale: { palette: 'blues', classes: 5 },
+          },
+        ]
+        const shared = {
+          chart: { height: 380 },
+          series,
+          legend: { position: 'bottom', title: 'Illustrative index' },
+        }
+
+        const hex = Demo.watch(
+          'hex',
+          new ApexMaps(document.getElementById('hex'), {
+            ...shared,
+            geo: { map: 'us', layout: 'hex' },
+            dataLabels: { enabled: true, minFeatureArea: 0, collision: 'none' },
+          }),
+        )
+
+        const geo = Demo.watch(
+          'geo',
+          new ApexMaps(document.getElementById('geo'), { ...shared, geo: { map: 'us' } }),
+        )
+
+        /* ---- a four-cell layout of our own ---------------------------------- */
+        ApexMaps.registerLayout('demo/quad@hex', {
+          keyField: 'code',
+          cells: { NW: [0, 0], NE: [1, 0], SW: [0, 1], SE: [1, 1] },
+          names: {
+            NW: 'North west',
+            NE: 'North east',
+            SW: 'South west',
+            SE: 'South east',
+          },
+        })
+
+        const custom = Demo.watch(
+          'custom',
+          new ApexMaps(document.getElementById('custom'), {
+            chart: { height: 240 },
+            geo: { map: 'demo/quad@hex' },
+            series: [
+              {
+                name: 'Utilisation',
+                joinBy: ['code', 'key'],
+                data: Demo.rows(['NW', 'NE', 'SW', 'SE']),
+                scale: { palette: 'oranges', classes: 4 },
+              },
+            ],
+            dataLabels: { enabled: true, minFeatureArea: 0, collision: 'none' },
+          }),
+        )
+
+        await Promise.all([hex.render(), geo.render(), custom.render()])
+
+        /* ---- the toggle: geography and back, on one instance ---------------- */
+        let onHex = true
+        const button = document.getElementById('toggle')
+        const state = document.getElementById('toggle-state')
+        button.addEventListener('click', async () => {
+          onHex = !onHex
+          button.disabled = true
+          // `geo.layout` counts as a map change, so this refetches and reingests
+          // rather than redrawing the shapes it already had.
+          await hex.updateOptions({ geo: { map: 'us', layout: onHex ? 'hex' : null } })
+          state.textContent = onHex ? "layout: 'hex'" : 'layout: null'
+          button.textContent = onHex
+            ? 'Redraw the left map on real boundaries'
+            : 'Redraw the left map as a honeycomb'
+          button.disabled = false
+        })
+
+        /* ---- the two panels ------------------------------------------------- */
+        const layoutBytes = await fetch('../geo/us-states-hex.json')
+          .then((r) => r.arrayBuffer())
+          .then((b) => b.byteLength)
+        const boundaryBytes = await fetch('../geo/us-states-10m.json')
+          .then((r) => r.arrayBuffer())
+          .then((b) => b.byteLength)
+
+        document.getElementById('sizes').textContent = [
+          `us/states@hex   ${Demo.fmt.int(layoutBytes)} B   51 cells, 2 integers each`,
+          `us/states@10m   ${Demo.fmt.int(boundaryBytes)} B   56 features of real boundary`,
+          '',
+          `The layout is ${(boundaryBytes / layoutBytes).toFixed(0)}x smaller, and it resolves on`,
+          'its own: asking for the honeycomb never fetches the boundaries.',
+          'A hex map that downloaded geometry it does not draw would be',
+          'slower than the choropleth it replaced.',
+        ].join('\n')
+
+        const meta = ApexMaps.mapMeta('us/states@hex')
+        document.getElementById('meta').textContent = [
+          `levelName    ${meta.levelName}`,
+          `keyField     ${meta.keyField}`,
+          `labelField   ${meta.labelField}`,
+          `projection   ${meta.projection}`,
+          `fixed        ${meta.fixed}`,
+          `layout.of    ${meta.layout.of}`,
+          `unplaced     ${meta.layout.unplaced.join(', ')}`,
+          '',
+          'The five inhabited territories are deliberately absent: no',
+          'published one-hex-per-unit layout includes them. Rendering with',
+          'debug on reports the coverage, so a missing region reads as a',
+          'decision rather than as data that went astray.',
+        ].join('\n')
+
+        return true
+      })()
+
+      Demo.ready(boot)
+    </script>
+  </body>
+</html>

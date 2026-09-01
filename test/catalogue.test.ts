@@ -14,6 +14,7 @@ import { resolve } from 'node:path'
 import ApexMaps from '../src/ApexMaps'
 import {
   geoPacks,
+  geoLayouts,
   geoPack,
   setGeoSource,
   geoSource,
@@ -247,11 +248,22 @@ describe.skipIf(!hasDataset)('the built packs', () => {
 
   it('agrees with the catalogue, id for id and file for file', () => {
     const built = new Map(manifest.packs.map((p) => [p.id, p.file]))
-    for (const pack of geoPacks()) {
+    // Two kinds of pack, one manifest. Boundary packs come out of
+    // `npm run data:build`; grid layouts are hand-authored and verified by
+    // `npm run check:layout`, and the build preserves their rows rather than
+    // rebuilding them. Both have to be declared, and nothing may be built that
+    // is not declared: an undeclared file is unreachable, and an undeclared id
+    // is an HTTP 404 the moment someone names that map.
+    const declared = [...geoPacks(), ...geoLayouts()]
+    for (const pack of declared) {
       expect(built.has(pack.id), `${pack.id} declared but not built`).toBe(true)
       expect(built.get(pack.id)).toBe(pack.file)
     }
-    expect(manifest.packs.length).toBe(geoPacks().length)
+    const declaredIds = new Set(declared.map((p) => p.id))
+    for (const pack of manifest.packs) {
+      expect(declaredIds.has(pack.id), `${pack.id} built but not declared`).toBe(true)
+    }
+    expect(manifest.packs.length).toBe(declared.length)
   })
 
   it('repairs the ISO codes Natural Earth leaves as -99', () => {

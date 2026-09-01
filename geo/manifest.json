@@ -333,6 +333,22 @@
       "boundaries": "US Census legal boundaries"
     },
     {
+      "id": "us/states@hex",
+      "file": "us-states-hex.json",
+      "kind": "layout",
+      "of": "us/states@10m",
+      "features": 51,
+      "bytes": 4155,
+      "keyField": "abbr",
+      "levelName": "States",
+      "source": "hand-authored for ApexMaps, verified against Natural Earth 5.1.1 centroids and shared-arc adjacency",
+      "license": "public domain",
+      "attribution": "",
+      "vintage": "2026",
+      "boundaries": "50 states plus DC. The five inhabited territories in us/states@10m are unplaced: no published one-hex-per-unit layout includes them, and inventing positions would imply a geography that does not exist.",
+      "note": "Hand-authored grid layout, not built by data:build. Verified with npm run check:layout."
+    },
+    {
       "id": "world/countries@110m",
       "file": "world-countries-110m.json",
       "object": "countries",

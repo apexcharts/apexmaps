@@ -30,6 +30,7 @@
 
 import type { GeoInput } from '../types'
 import { registerMap, type MapMeta } from './MapRegistry'
+import { layoutToGeoJSON, type LayoutPack } from '../geo/HexLayout'
 
 /**
  * Geometry is versioned independently of the library: a patch release must not
@@ -392,6 +393,80 @@ const PACKS: GeoPack[] = [
   ...expand(ADMIN1, 'ne'),
 ]
 
+/* -------------------------------------------------------------- grid layouts */
+
+/**
+ * Hex tile layouts: one equal cell per region, at a hand-authored position.
+ *
+ * Deliberately a separate table from `PACKS`, not another `expand()` profile.
+ * A layout has no scale, no simplification level and no source geometry, so
+ * `detail` and the `@10m` id grammar do not apply to it; and `expand()` derives
+ * a detail-free alias from the part before the `@`, which for `us/states@hex`
+ * would be `us/states` and would fight the real boundary pack for that name.
+ *
+ * The `@hex` suffix reuses the id grammar's variant slot on purpose: `@10m` and
+ * `@hex` are both "which representation of this region set", and a reader who
+ * has seen one can guess the other.
+ *
+ * These files are hand-authored and verified against the boundary pack they
+ * claim to represent (`npm run check:layout`), so they are not produced by
+ * `npm run data:build` and that script must leave their manifest rows alone.
+ */
+interface LayoutRow {
+  id: string
+  file: string
+  /** Canonical id of the boundary pack whose keys these cells use. */
+  of: string
+  level: string
+  key: string
+  alias?: string | string[]
+  /**
+   * Keys in the boundary pack this layout leaves out.
+   *
+   * Declared here as well as in the file because the coverage warning has to be
+   * available before the file resolves, and because "which regions does this
+   * deliberately omit" is exactly the kind of decision that belongs in reviewed
+   * source rather than only in data. `npm run check:layout` fails if the two
+   * disagree.
+   */
+  unplaced?: string[]
+  note?: string
+}
+
+const LAYOUTS: LayoutRow[] = [
+  {
+    id: 'us/states@hex',
+    file: 'us-states-hex.json',
+    of: 'us/states@10m',
+    level: 'States',
+    key: 'abbr',
+    alias: ['us/hex', 'us/states/hex'],
+    unplaced: ['AS', 'GU', 'MP', 'PR', 'VI'],
+    note: '50 states plus DC. The five inhabited territories in us/states@10m are unplaced: no published one-hex-per-unit layout includes them.',
+  },
+]
+
+/** Every layout, for documentation and the id-agreement checks. */
+export function geoLayouts(): LayoutRow[] {
+  return LAYOUTS.slice()
+}
+
+/**
+ * The layout id for a boundary pack, or undefined if it has none.
+ *
+ * Accepts an alias, so `geo: { map: 'us', layout: 'hex' }` resolves the same way
+ * `geo: { map: 'us/states@10m', layout: 'hex' }` does.
+ */
+export function layoutIdFor(mapIdOrAlias: string, layout: string): string | undefined {
+  if (layout !== 'hex') return undefined
+  const pack = geoPack(mapIdOrAlias)
+  const canonical = pack?.id ?? mapIdOrAlias
+  const row = LAYOUTS.find(
+    (l) => l.of === canonical || l.id === mapIdOrAlias || l.alias?.includes(mapIdOrAlias),
+  )
+  return row?.id
+}
+
 /** Every pack, for documentation, tests and `listMaps()` output. */
 export function geoPacks(): GeoPack[] {
   return PACKS.slice()
@@ -440,40 +515,66 @@ export function geoSource(): string | GeoFetcher {
  */
 const byFile = new Map<string, Promise<GeoInput>>()
 
-function load(pack: GeoPack): Promise<GeoInput> {
-  const existing = byFile.get(pack.file)
+/**
+ * One dataset file, through whatever source is configured.
+ *
+ * Shared by boundary packs and layouts because the fetch, the two failure
+ * messages and the self-hosting escape hatch are identical for both; only what
+ * happens to the parsed JSON afterwards differs.
+ */
+async function fetchFile(file: string, id: string, pack?: GeoPack): Promise<unknown> {
+  if (typeof currentSource === 'function') return currentSource(file, pack as GeoPack)
+
+  const base = currentSource.endsWith('/') ? currentSource : `${currentSource}/`
+  const url = `${base}${file}`
+  if (typeof fetch !== 'function') {
+    throw new Error(
+      `ApexMaps: cannot load "${id}" because fetch is unavailable here. ` +
+        'Pass geometry directly, or give ApexMaps.setGeoSource() a loader function.',
+    )
+  }
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(
+      `ApexMaps: could not load map "${id}" from ${url} (HTTP ${response.status}). ` +
+        'The geometry dataset ships separately from the library: install it with ' +
+        '`npm i apexmaps-geo` and call ApexMaps.setGeoSource(), self-host the files, ' +
+        'or pass geometry to geo.map directly.',
+    )
+  }
+  return response.json()
+}
+
+/** Dedupe by file, then hand the parsed JSON to `finish`. */
+function loadOnce(file: string, run: () => Promise<GeoInput>): Promise<GeoInput> {
+  const existing = byFile.get(file)
   if (existing) return existing
 
-  const promise = (async () => {
-    if (typeof currentSource === 'function') return currentSource(pack.file, pack)
-
-    const base = currentSource.endsWith('/') ? currentSource : `${currentSource}/`
-    const url = `${base}${pack.file}`
-    if (typeof fetch !== 'function') {
-      throw new Error(
-        `ApexMaps: cannot load "${pack.id}" because fetch is unavailable here. ` +
-          'Pass geometry directly, or give ApexMaps.setGeoSource() a loader function.',
-      )
-    }
-    const response = await fetch(url)
-    if (!response.ok) {
-      throw new Error(
-        `ApexMaps: could not load map "${pack.id}" from ${url} (HTTP ${response.status}). ` +
-          'The geometry dataset ships separately from the library: install it with ' +
-          '`npm i apexmaps-geo` and call ApexMaps.setGeoSource(), self-host the files, ' +
-          'or pass geometry to geo.map directly.',
-      )
-    }
-    return (await response.json()) as GeoInput
-  })().catch((error) => {
+  const promise = run().catch((error) => {
     // A failed load must not be cached, or a transient offline moment poisons the
     // pack for the life of the page.
-    byFile.delete(pack.file)
+    byFile.delete(file)
     throw error
   })
 
-  byFile.set(pack.file, promise)
+  byFile.set(file, promise)
   return promise
+}
+
+function load(pack: GeoPack): Promise<GeoInput> {
+  return loadOnce(pack.file, async () => (await fetchFile(pack.file, pack.id, pack)) as GeoInput)
+}
+
+/**
+ * A layout file is a table of grid positions, so it becomes geometry here rather
+ * than in ingest. What reaches the registry is an ordinary FeatureCollection,
+ * which is the reason a layout needs no special case anywhere downstream.
+ */
+function loadLayout(row: LayoutRow): Promise<GeoInput> {
+  return loadOnce(row.file, async () => {
+    const pack = (await fetchFile(row.file, row.id)) as LayoutPack
+    return layoutToGeoJSON({ ...pack, id: row.id, keyField: pack.keyField ?? row.key }) as GeoInput
+  })
 }
 
 /* -------------------------------------------------------------- registration */
@@ -525,6 +626,32 @@ function register(): void {
       if (canonical.has(alias) || claimed.has(alias)) continue
       claimed.add(alias)
       registerMap(alias, () => load(pack), { ...meta, aliasOf: pack.id })
+    }
+  }
+
+  // Layouts register after the boundary packs so that a layout alias can never
+  // take a name a real pack already answers to.
+  for (const row of LAYOUTS) {
+    const ids = [row.id, ...(row.alias ? (Array.isArray(row.alias) ? row.alias : [row.alias]) : [])]
+    for (const id of ids) {
+      if (id !== row.id && (canonical.has(id) || claimed.has(id))) continue
+      claimed.add(id)
+      // The recommendations are stated here, not read out of the file, because
+      // meta has to be right before the fetch resolves: `_buildViewport` reads
+      // the projection, and being a grid rather than a place is a property of
+      // the declaration, not of its contents.
+      registerMap(id, () => loadLayout(row), {
+        levelName: row.level,
+        keyField: row.key,
+        projection: 'identity',
+        labelField: row.key,
+        fixed: true,
+        layout: { grid: 'hex', of: row.of, unplaced: row.unplaced },
+        packId: row.id,
+        file: row.file,
+        ...(id === row.id ? {} : { aliasOf: row.id }),
+        ...(row.note ? { note: row.note } : {}),
+      })
     }
   }
 }

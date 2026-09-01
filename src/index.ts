@@ -77,5 +77,13 @@ export type {
 
 export type { ExportOptions } from './export/Exporter'
 export type { MapMeta } from './core/MapRegistry'
+export type {
+  LayoutPack,
+  LayoutOptions,
+  LayoutGrid,
+  LayoutOrientation,
+  LayoutOffset,
+  LayoutCell,
+} from './geo/HexLayout'
 export type { Palette, PaletteKind } from './scales/Palettes'
 export type { JoinResult, JoinSuggestion } from './data/Join'

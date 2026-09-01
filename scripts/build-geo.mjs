@@ -221,9 +221,38 @@ for (const pack of selected) {
   }
 }
 
+/**
+ * Hand-authored packs survive the rebuild.
+ *
+ * Grid layouts (`kind: 'layout'`) are tables of cell positions curated by hand
+ * and verified with `npm run check:layout`; nothing here builds them, so
+ * overwriting the manifest with only what this run produced would silently drop
+ * their rows and `npm run check:geo` would then fail on ids whose files are
+ * still sitting in geo/.
+ */
+const preserved = []
+const manifestPath = join(OUT_DIR, 'manifest.json')
+if (existsSync(manifestPath)) {
+  try {
+    const existing = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    for (const pack of existing.packs ?? []) {
+      if (pack.kind === 'layout' && existsSync(join(OUT_DIR, pack.file))) preserved.push(pack)
+    }
+  } catch {
+    warnings.push('the existing manifest.json could not be read, so hand-authored rows were lost')
+  }
+}
+if (preserved.length) {
+  console.log(
+    `\n  kept ${preserved.length} hand-authored layout row(s): ` +
+      preserved.map((p) => p.id).join(', '),
+  )
+}
+manifest.push(...preserved)
+
 manifest.sort((a, b) => a.id.localeCompare(b.id))
 writeFileSync(
-  join(OUT_DIR, 'manifest.json'),
+  manifestPath,
   `${JSON.stringify({ generated: 'npm run data:build', packs: manifest }, null, 2)}\n`,
 )
 
