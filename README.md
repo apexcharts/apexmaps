@@ -431,8 +431,8 @@ To brand dark mode, override the `--apexmaps-*` tokens under `.apexmaps--dark`
 ## Licensing
 
 Dual licensed on the same terms as the rest of the family: a free **Community License** for
-individuals, non-profits, educators and organizations under $2M USD annual revenue, and a paid
-Commercial or OEM license above that. One key works across every Apex product, so an ApexCharts or
+individuals, non-profits, educators and organizations under $2M USD in annual revenue, budget or
+funding, and a paid Commercial or OEM license at or above that. One key works across every Apex product, so an ApexCharts or
 ApexGrid customer does not buy a second one for maps. See [LICENSE](LICENSE).
 
 What is licensed is a **set of features**, not map count, map size, or geometry downloads. There is
