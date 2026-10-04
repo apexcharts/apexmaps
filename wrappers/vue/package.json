@@ -48,7 +48,7 @@
   "bugs": {
     "url": "https://github.com/apexcharts/apexmaps/issues"
   },
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "SEE LICENSE IN LICENSE.md",
   "devDependencies": {
     "@vue/test-utils": "^2.4.11",
     "apexmaps": "file:../..",
