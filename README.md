@@ -2,11 +2,12 @@
 
 Interactive geographic data visualization and storytelling for the ApexCharts ecosystem.
 
-> **Status: phase 1, pre-alpha (0.3.0).** Written in TypeScript. The engine, six series
-> (choropleth, bubble, marker, hexbin, arc, line), hex tile layouts and the morph between them,
-> projections, joins, scales, pattern and image fills, legend, tooltip, labels, annotations, camera,
-> geometry registry, drilldown, clustering, selection and accessibility layer are working and
-> tested. The story engine and tiles are not built yet.
+> **Status: stable since 1.0.0.** Written in TypeScript, and the public API follows semantic
+> versioning: breaking changes wait for a major. The engine, six series (choropleth, bubble,
+> marker, hexbin, arc, line), hex tile layouts and the morph between them, projections, joins,
+> scales, pattern and image fills, legend, tooltip, labels, annotations, camera, geometry registry,
+> drilldown, clustering, selection and accessibility layer are shipped and tested. The story engine
+> and tiles are not built yet.
 
 ```js
 import ApexMaps from 'apexmaps'
@@ -212,11 +213,10 @@ ApexMaps.setGeoSource((file) => import(`apexmaps-geo/${file}`).then((m) => m.def
 ApexMaps.setGeoSource('https://cdn.example.com/apexmaps-geo/')                         // self-hosted
 ```
 
-> **Status:** `apexmaps-geo@1.0.0` is published, and the 26 boundary packs load from the default
-> CDN source with no configuration. The seven hex layout files are not in that release yet, so
-> `layout: 'hex'` needs `setGeoSource()` pointed at a copy that has them until the next dataset
-> publish. `npm run check:geo` reads this repository's own `geo/` directory, so it cannot tell you
-> this: check the CDN before relying on a pack in production.
+> **Status:** `apexmaps-geo@1.1.0` is published, so the 26 boundary packs and the seven hex layout
+> files load from the default CDN source with no configuration. `npm run check:geo` reads this
+> repository's own `geo/` directory, not the CDN: when a new pack lands here, check the CDN has it
+> before relying on it in production.
 
 ## Performance
 
