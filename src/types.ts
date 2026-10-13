@@ -710,7 +710,12 @@ export interface ArcSeriesOptions extends SeriesCommon {
   endpoints?: { show?: boolean; radius?: number; color?: string }
   /** Send beads along the route, from `from` towards `to`. `true` for defaults. */
   flow?: boolean | FlowOptions
-  /** Resolve string endpoints against geometry keys. */
+  /**
+   * The geometry field string endpoints are matched against, in place of the
+   * map's own key: `'name'` lets an endpoint read `'France'` on a map keyed by
+   * ISO-3. Only the geometry side of the spec applies, since an endpoint is
+   * already the key and there is no data field to read it from.
+   */
   joinBy?: JoinSpec
 }
 

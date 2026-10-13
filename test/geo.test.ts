@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeGeo, indexByKey } from '../src/geo/GeoData'
+import { normalizeGeo } from '../src/geo/GeoData'
 import {
   createProjection,
   listProjections,
@@ -224,11 +224,6 @@ describe('normalizeGeo', () => {
   it('rejects unusable input', () => {
     expect(() => normalizeGeo(null)).toThrow()
     expect(() => normalizeGeo('nope')).toThrow()
-  })
-
-  it('indexes features by key', () => {
-    const geo = normalizeGeo(CCW_SQUARE)
-    expect(indexByKey(geo.features).get('AAA')?.name).toBe('Alpha')
   })
 })
 

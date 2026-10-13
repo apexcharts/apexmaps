@@ -20,7 +20,7 @@
  * @module series/Arc
  */
 
-import { indexByKey } from '../geo/GeoData'
+import { featuresByKey, joinFields } from '../data/Join'
 import { bezierArc, greatCircleLine, greatCircleMidpoint } from '../geo/Geodesic'
 import { createScale, Scale } from '../scales/Scale'
 import { createSizeScale, SizeScale } from '../scales/SizeScale'
@@ -30,6 +30,7 @@ import type {
   ArcSeriesOptions,
   LonLat,
   MarkItem,
+  NormalizedFeature,
   NormalizedGeo,
   WorldPoint,
 } from '../types'
@@ -92,7 +93,10 @@ export class ArcSeries {
     this.id = `s${index}`
 
     const rows = (config.data ?? []) as readonly ArcDatum[]
-    const byKey = indexByKey(geo.features)
+    // Keyed the way a bubble or marker join keys geometry, so `joinBy` means the
+    // same thing on every series. Only its geometry side applies: an endpoint is
+    // already the key, so there is no data field to read it from.
+    const byKey = featuresByKey(geo.features, joinFields(config.joinBy).geo)
     const valueField = config.valueField ?? 'value'
 
     const values: (number | null)[] = []
@@ -320,13 +324,16 @@ export class ArcSeries {
   /** Resolve an endpoint that may be coordinates or a geometry key. */
   private resolveEndpoint(
     value: unknown,
-    byKey: Map<string, { geometry: unknown; name?: string }>,
+    byKey: Map<string, NormalizedFeature[]>,
   ): { lonLat: LonLat; label?: string } | null {
     const coords = readLonLat(value)
     if (coords) return { lonLat: coords }
 
     if (typeof value === 'string') {
-      const feature = byKey.get(value)
+      const group = byKey.get(value)
+      // A key several features share resolves to the last of them, as a bubble's
+      // centroid does.
+      const feature = group?.[group.length - 1]
       if (!feature) return null
       const lonLat = Viewport.centroid({
         type: 'Feature',

@@ -392,10 +392,3 @@ function findDuplicateKeys(features: NormalizedFeature[]): string[] {
   }
   return [...dupes]
 }
-
-/** Build a lookup of key to feature. */
-export function indexByKey(features: NormalizedFeature[]): Map<string, NormalizedFeature> {
-  const map = new Map<string, NormalizedFeature>()
-  for (const f of features) if (f.key) map.set(f.key, f)
-  return map
-}

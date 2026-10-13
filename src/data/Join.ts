@@ -255,6 +255,43 @@ export function resolveDataKeyField(data: readonly unknown[], explicit?: string)
 }
 
 /**
+ * The geometry and data fields a `JoinSpec` names. Either may be absent: no
+ * geometry field means the key GeoData resolved, and no data field means the one
+ * `resolveDataKeyField` detects.
+ */
+export function joinFields(joinBy?: JoinSpec): { geo?: string; data?: string } {
+  if (typeof joinBy === 'string') return { geo: joinBy, data: joinBy }
+  if (Array.isArray(joinBy)) return { geo: joinBy[0], data: joinBy[1] }
+  if (joinBy && typeof joinBy === 'object') return { geo: joinBy.geo, data: joinBy.data }
+  return {}
+}
+
+/**
+ * Features grouped by join key: the `geoField` property when one is named, else
+ * the key GeoData resolved.
+ *
+ * A key maps to a *list*, because published geometry shares keys: Australia's
+ * external territories are separate admin-0 features carrying `AUS`. Keeping
+ * only the last one would leave mainland Australia in no-data grey while
+ * colouring an uninhabited island, silently, which is the failure this module
+ * exists to prevent.
+ */
+export function featuresByKey(
+  features: NormalizedFeature[],
+  geoField?: string,
+): Map<string, NormalizedFeature[]> {
+  const out = new Map<string, NormalizedFeature[]>()
+  for (const f of features) {
+    const key = geoField ? String(readField(f.properties, geoField) ?? f.key ?? '') : f.key
+    if (!key) continue
+    const group = out.get(key)
+    if (group) group.push(f)
+    else out.set(key, [f])
+  }
+  return out
+}
+
+/**
  * Join data rows to normalized features.
  *
  */
@@ -277,38 +314,12 @@ export function resolveJoin({
 }): JoinResult {
   const rows = Array.isArray(data) ? data : []
 
-  let geoField: string | undefined
-  let dataField: string | undefined
-  if (typeof joinBy === 'string') {
-    geoField = joinBy
-    dataField = joinBy
-  } else if (Array.isArray(joinBy)) {
-    geoField = joinBy[0]
-    dataField = joinBy[1]
-  } else if (joinBy && typeof joinBy === 'object') {
-    geoField = joinBy.geo
-    dataField = joinBy.data
-  }
-
+  const { geo: geoField, data: dataField } = joinFields(joinBy)
   const dataKeyField = resolveDataKeyField(rows, dataField)
 
-  // Feature keys: honour an explicit geo field, else use the key GeoData resolved.
-  //
-  // A key maps to a *list*, because published geometry shares keys: Australia's
-  // external territories are separate admin-0 features carrying `AUS`. Keeping
-  // only the last one would leave mainland Australia in no-data grey while
-  // colouring an uninhabited island, silently, which is the failure this module
-  // exists to prevent.
-  const featureByKey = new Map<string, NormalizedFeature[]>()
+  const featureByKey = featuresByKey(features, geoField)
   let keyedFeatures = 0
-  for (const f of features) {
-    const key = geoField ? String(readField(f.properties, geoField) ?? f.key ?? '') : f.key
-    if (!key) continue
-    const group = featureByKey.get(key)
-    if (group) group.push(f)
-    else featureByKey.set(key, [f])
-    keyedFeatures++
-  }
+  for (const group of featureByKey.values()) keyedFeatures += group.length
 
   const featureKeys = [...featureByKey.keys()]
   const paddedWidth = detectPaddedNumericWidth(featureKeys)

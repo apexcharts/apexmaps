@@ -13,6 +13,7 @@ import { resolve } from 'node:path'
 import ApexMaps from '../src/ApexMaps'
 import { SizeScale } from '../src/scales/SizeScale'
 import { greatCircle, angularDistance, bezierArc, segmentsFor } from '../src/geo/Geodesic'
+import { setGeoSource, DEFAULT_GEO_SOURCE, _resetGeoLoads } from '../src/core/GeoCatalogue'
 
 const WORLD = JSON.parse(
   readFileSync(resolve(process.cwd(), 'node_modules/world-atlas/countries-110m.json'), 'utf8'),
@@ -572,6 +573,106 @@ describe('arc series', () => {
       ],
     })
     expect(map.warnings.join(' ')).toContain('could not be resolved')
+  })
+
+  /*
+   * `joinBy` was declared on the arc series and never read: endpoints only ever
+   * matched the pack's own key. The test above did not notice, because world-atlas
+   * is keyed by name, so `joinBy: 'name'` there agrees with the key it ignored. The
+   * world/countries pack is keyed by ISO-3, which is what makes the option matter.
+   */
+  describe('joinBy on the world/countries pack', () => {
+    beforeEach(() => {
+      setGeoSource((file) =>
+        Promise.resolve(JSON.parse(readFileSync(resolve(process.cwd(), 'geo', file), 'utf8'))),
+      )
+    })
+
+    afterEach(() => {
+      setGeoSource(DEFAULT_GEO_SOURCE)
+      _resetGeoLoads()
+    })
+
+    const pack = { map: 'world/countries', projection: 'equalEarth' }
+    const byCode = {
+      type: 'arc' as const,
+      name: 'By code',
+      data: [{ from: 'BRA', to: 'FRA', value: 1 }],
+    }
+
+    it('resolves endpoints against the pack key when joinBy is absent', async () => {
+      await render({ geo: pack, series: [byCode] })
+      expect(map.series[0].items).toHaveLength(1)
+      expect(map.series[0].items[0].toLabel).toBe('France')
+    })
+
+    it.each([
+      ['a field name', 'name'],
+      ['a [geo, data] pair', ['name', 'country']],
+      ['a { geo } object', { geo: 'name' }],
+    ])('resolves endpoints against the field named by %s', async (_label, joinBy) => {
+      await render({
+        geo: pack,
+        series: [
+          byCode,
+          {
+            type: 'arc',
+            name: 'By name',
+            joinBy,
+            data: [{ from: 'Brazil', to: 'France', value: 1 }],
+          },
+        ],
+      })
+      expect(el.querySelectorAll('path.apexmaps-arc')).toHaveLength(2)
+      const [code, name] = [map.series[0].items[0], map.series[1].items[0]]
+      expect(name.to).toEqual(code.to)
+      expect(name.from).toEqual(code.from)
+      expect(map.warnings.join(' ')).not.toContain('could not be resolved')
+    })
+
+    it('lands a joined endpoint where a bubble with the same joinBy lands', async () => {
+      await render({
+        geo: pack,
+        series: [
+          {
+            type: 'arc',
+            name: 'Routes',
+            joinBy: 'name',
+            data: [{ from: 'Brazil', to: 'France', value: 1 }],
+          },
+          { type: 'bubble', name: 'Hubs', joinBy: 'name', data: [{ name: 'France', value: 1 }] },
+        ],
+      })
+      expect(map.series[0].items[0].to).toEqual(map.series[1].items[0].lonLat)
+    })
+
+    it('replaces the pack key rather than adding to it', async () => {
+      await render({ geo: pack, series: [{ ...byCode, joinBy: 'name' }] })
+      expect(map.series[0].items).toHaveLength(0)
+      expect(map.warnings.join(' ')).toContain('1 arc datum(s) had an endpoint')
+    })
+
+    it('still drops and reports an endpoint the joinBy field does not hold', async () => {
+      await render({
+        geo: pack,
+        series: [
+          {
+            type: 'arc',
+            name: 'Routes',
+            joinBy: 'name',
+            data: [
+              { from: 'Brazil', to: 'France', value: 1 },
+              { from: 'Brazil', to: 'Frnace', value: 2 },
+            ],
+          },
+        ],
+      })
+      expect(el.querySelectorAll('path.apexmaps-arc')).toHaveLength(1)
+      expect(map.series[0].items[0].toLabel).toBe('France')
+      expect(map.warnings.join(' ')).toContain(
+        '1 arc datum(s) had an endpoint that could not be resolved',
+      )
+    })
   })
 
   it('draws deduplicated endpoint dots when asked', async () => {
