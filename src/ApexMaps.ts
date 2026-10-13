@@ -114,7 +114,7 @@ import type {
   ZoomControlsOptions,
 } from './types'
 
-const VERSION = '1.0.0'
+const VERSION = '1.0.1'
 
 /**
  * How long a level change takes to settle, in ms.
