@@ -443,6 +443,14 @@
   flex: 0 0 auto;
 }
 
+/* A pixel map's swatch is four of its dots on the legend's own background, so
+   there is no chip for a border to outline. */
+.apexmaps-legend-swatch.is-dots {
+  border: 0;
+  border-radius: 0;
+  line-height: 0;
+}
+
 /* Holds a 12px inline tile rather than a background colour, so the radius has to
    clip it and the border must not push it off centre. */
 .apexmaps-legend-swatch.is-patterned {

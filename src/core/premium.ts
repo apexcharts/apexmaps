@@ -18,6 +18,9 @@
  * imagery), and drawing the geography as something other than itself (grid
  * layouts) are the licensed tier.
  *
+ * `pixelMap` is priced with `gridLayout`: both keep the choropleth's data and
+ * replace the way the geography is drawn, which is the line above.
+ *
  * `hexbin` is priced with `clustering` rather than with the free point series:
  * both take raw points and hand back an aggregate the reader cannot get back to
  * the originals from, which is a step past drawing the points themselves.
@@ -60,6 +63,7 @@ export const PREMIUM_FEATURES = [
   'linkGroup',
   'morph',
   'patternFill',
+  'pixelMap',
   'presentation',
   'routes',
   'story',

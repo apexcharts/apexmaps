@@ -179,6 +179,11 @@ export interface LegendItem {
    * to set here.
    */
   pattern?: ResolvedPattern
+  /**
+   * The dot a pixel map draws, so the swatch is a few of its dots rather than a
+   * flat chip. Filled in by the series, like `pattern`.
+   */
+  mark?: PixelShape
 }
 
 export interface SizeLegendEntry {
@@ -386,19 +391,18 @@ export interface SeriesFillOptions {
   image?: ImageFillOptions
 }
 
-export interface ChoroplethSeriesOptions extends SeriesCommon {
-  type?: 'choropleth'
+/**
+ * What every series that colours a region by its value shares: the join, the
+ * scale, normalisation and drilldown. A choropleth paints the region's outline
+ * with that colour and a pixel map paints a lattice of dots inside it, and
+ * nothing upstream of the paint differs between the two.
+ */
+interface RegionSeriesOptions extends SeriesCommon {
   joinBy?: JoinSpec
   data?: readonly unknown[]
   /** Apply normalised and alias matches, reporting each substitution. */
   fuzzyJoin?: boolean
   scale?: ScaleOptions
-  /**
-   * Pattern or image fills, on top of what `scale` decided.
-   *
-   * Licensed feature: works without a key for evaluation, with a watermark.
-   */
-  fill?: SeriesFillOptions
   /**
    * Divide the value by another field before mapping, e.g. `'population'`. The
    * legend retitles itself, because a choropleth of counts across unequal areas
@@ -416,6 +420,94 @@ export interface ChoroplethSeriesOptions extends SeriesCommon {
    * Licensed feature: works without a key for evaluation, with a watermark.
    */
   drilldown?: DrilldownOptions
+}
+
+export interface ChoroplethSeriesOptions extends RegionSeriesOptions {
+  type?: 'choropleth'
+  /**
+   * Pattern or image fills, on top of what `scale` decided.
+   *
+   * Licensed feature: works without a key for evaluation, with a watermark.
+   */
+  fill?: SeriesFillOptions
+}
+
+/** The mark a pixel map draws at each lattice point. */
+export type PixelShape = 'circle' | 'square' | 'diamond' | 'hexagon'
+
+/**
+ * A choropleth drawn as a lattice of dots: every region is the set of lattice
+ * points that fall inside it, each painted the region's colour.
+ *
+ * The data side is the choropleth's, unchanged: one row per region, joined the
+ * same way, classed by the same scale, with the same legend, tooltip, selection
+ * and drilldown. What changes is the mark. Each region is still one element on
+ * the page, so hover and keyboard focus treat it as one region, and the gaps
+ * between its dots answer to the pointer as the region they sit in.
+ *
+ * Licensed feature: works without a key for evaluation, with a watermark.
+ */
+export interface PixelSeriesOptions extends RegionSeriesOptions {
+  type: 'pixel'
+  /** Default `'circle'`. */
+  shape?: PixelShape
+  /**
+   * What the lattice is fixed to. Default `'geo'`.
+   *
+   * `'geo'` fixes it to the ground. It is laid evenly over the map as the map
+   * opens, and from then on every dot is a place: zooming in enlarges the dots,
+   * a resize moves them with the land, and nothing is resampled. On a globe,
+   * where the map as it opens is only one hemisphere, it is laid on the sphere
+   * itself instead, in rows along the parallels, so it turns with the world.
+   * This is the only grid a globe accepts, because one fixed to the screen
+   * would have to be resampled on every frame of a spin.
+   *
+   * `'screen'` lays it on the screen, so the dots are evenly spaced whatever the
+   * projection does to the ground underneath. It is resampled as the reader
+   * zooms, at the same quantized levels clustering and hexbins use, so a zoom
+   * refines the lattice instead of magnifying it and a pan never resamples it.
+   */
+  grid?: 'geo' | 'screen'
+  /**
+   * Distance from one dot to the next: **degrees** on a `'geo'` grid (measured
+   * at the middle of the map), **screen pixels** on a `'screen'` one.
+   *
+   * Defaults to about 120 dots across the map on a geo grid, rounded to a
+   * readable step, so a world map gets 3° and a single country gets a fraction
+   * of one. On a screen grid the default is 8px.
+   */
+  spacing?: number
+  /**
+   * Size of each dot: a percentage of `spacing` (`'80%'`, the default), or a
+   * number of pixels at the zoom the map opened at.
+   *
+   * At `'100%'` the shapes the lattice was chosen for meet their neighbours
+   * exactly: squares make a solid grid, and hexagons and diamonds tile. Larger
+   * values are clamped there, because past it neighbouring dots overlap and
+   * which one ends up on top is an accident of drawing order.
+   */
+  size?: number | `${number}%`
+  /**
+   * How the rows sit against each other. Left out, the shape decides: squares
+   * line up in a `'square'` grid, and circles, hexagons and diamonds are
+   * `'staggered'`, with every other row shifted half a step so the dots pack.
+   *
+   * Row spacing follows from the two together, so each shape tiles cleanly: a
+   * staggered lattice of hexagons or circles packs its rows closer than its
+   * columns, and staggered diamonds interlock at half a step.
+   */
+  lattice?: 'square' | 'staggered'
+  /**
+   * On a globe, thin each row towards the poles so every dot covers the same
+   * area of ground. Default true.
+   *
+   * Without it, a row near the pole has as many dots as the equator, on a
+   * parallel a fraction of the length, and they crowd into a band. Globe only:
+   * a flat map's lattice is laid on the map as drawn, which on an equal-area
+   * projection is equal-area already, and the option is reported and ignored
+   * anywhere else.
+   */
+  equalArea?: boolean
 }
 
 /** A bubble datum: either an explicit position, or a join key resolved to a centroid. */
@@ -746,6 +838,7 @@ export type Series =
   | MarkerSeriesOptions
   | LineSeriesOptions
   | HexbinSeriesOptions
+  | PixelSeriesOptions
 
 export type SeriesType = NonNullable<Series['type']>
 

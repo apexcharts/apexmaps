@@ -16,8 +16,9 @@
 
 import { html, svg, remove, empty } from '../utils/dom'
 import { patternSwatch } from '../renderers/Paint'
+import { dotPath, dotTail } from '../geo/PixelGrid'
 import { formatNumber } from '../scales/Scale'
-import type { LegendItem, LegendOptions, SizeLegendEntry } from '../types'
+import type { LegendItem, LegendOptions, PixelShape, SizeLegendEntry } from '../types'
 
 /** Matches `.apexmaps-legend-swatch` in the stylesheet, less its 1px border. */
 const SWATCH_SIZE = 12
@@ -144,6 +145,7 @@ export class Legend {
    * matches against the map is what the map drew.
    */
   private swatch(item: LegendItem): HTMLElement {
+    if (item.mark) return dotSwatch(item.mark, item.color)
     const el = html('span', {
       class: `apexmaps-legend-swatch${item.pattern ? ' is-patterned' : ''}`,
       style: item.pattern ? undefined : { background: item.color },
@@ -421,4 +423,33 @@ export class Legend {
     this.muted.clear()
     this.bars.clear()
   }
+}
+
+/**
+ * A swatch for a pixel map: four of the map's own dots in the class colour.
+ *
+ * A flat chip would ask the reader to match a solid patch against a field of
+ * dots on a background, which is a different colour to the eye: the dots are
+ * the colour and the gaps between them are not. Four dots on the same
+ * background are the thing being matched.
+ */
+function dotSwatch(shape: PixelShape, color: string): HTMLElement {
+  const el = html('span', {
+    class: 'apexmaps-legend-swatch is-dots',
+    'aria-hidden': 'true',
+  })
+  const tail = dotTail(shape, 3, 2)
+  let d = ''
+  for (const [x, y] of [
+    [3.5, 3.5],
+    [10.5, 3.5],
+    [3.5, 10.5],
+    [10.5, 10.5],
+  ]) {
+    d += dotPath(x, y, tail, 2)
+  }
+  el.appendChild(
+    svg('svg', { width: 14, height: 14, viewBox: '0 0 14 14' }, [svg('path', { d, fill: color })]),
+  )
+  return el
 }

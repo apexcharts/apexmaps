@@ -217,6 +217,15 @@ export function seriesDefaults(type: SeriesType): Record<string, unknown> {
         stroke: { color: '#ffffff', width: 0.5, opacity: 1 },
         opacity: 1,
       }
+    case 'pixel':
+      // Classed like a choropleth, because it is one. No outline: a border round
+      // every dot thickens the ink until it reads as a darker class.
+      return {
+        ...base,
+        scale: { type: 'quantile', classes: 5 },
+        stroke: { color: 'none', width: 0, opacity: 1 },
+        opacity: 1,
+      }
     case 'bubble':
       // Slightly transparent so overlapping bubbles stay readable as overlaps.
       return { ...base, stroke: { color: '#ffffff', width: 1 }, opacity: 0.85 }

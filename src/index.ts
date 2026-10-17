@@ -53,6 +53,8 @@ export type {
   Padding,
   PatternFillOptions,
   PatternType,
+  PixelSeriesOptions,
+  PixelShape,
   PointAnnotation,
   PaletteName,
   ProjectionName,

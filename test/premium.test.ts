@@ -128,6 +128,10 @@ const ACTIVATES: Partial<Record<PremiumFeature, Record<string, unknown>>> = {
       },
     ],
   },
+  // The same row a choropleth would take: the gate is on the mark, not the data.
+  pixelMap: {
+    series: [{ type: 'pixel', data: [{ key: 'AAA', value: 1 }] }],
+  },
   routes: {
     series: [{ type: 'arc', data: [{ from: [0, 0], to: [8, 8] }] }],
   },
@@ -150,6 +154,7 @@ const TURNS_OFF: Partial<Record<PremiumFeature, Record<string, unknown>>> = {
   imageFill: { series: BASE.series },
   linkGroup: { link: { group: '' } },
   patternFill: { series: BASE.series },
+  pixelMap: { series: BASE.series },
   routes: { series: BASE.series },
   story: { chart: { context: 'dashboard' } },
 }

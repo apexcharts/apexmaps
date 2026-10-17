@@ -63,6 +63,7 @@ import { MarkerSeries } from './series/Marker'
 import { ArcSeries } from './series/Arc'
 import { LineSeries } from './series/Line'
 import { HexbinSeries } from './series/Hexbin'
+import { PixelSeries } from './series/Pixel'
 import type { HexBin } from './geo/Hexbin'
 import { BaseFeatures } from './series/BaseFeatures'
 import { Legend } from './components/Legend'
@@ -730,6 +731,19 @@ class ApexMaps extends BaseChart {
             }),
           )
           break
+        case 'pixel':
+          this.series.push(
+            new PixelSeries({
+              config: cfg,
+              geo,
+              index: i,
+              viewport: this.viewport,
+              rotation: this.viewport.rotatable ? this._initialRotation : undefined,
+              theme: this.config.theme,
+              dark: this._isDark(),
+            }),
+          )
+          break
         case 'choropleth':
         case undefined:
           this.series.push(
@@ -817,14 +831,7 @@ class ApexMaps extends BaseChart {
     for (const series of this.renderTargets) {
       switch (series.kind) {
         case 'features':
-          this.renderer.drawFeatures({
-            features: this.geo.features,
-            fill: (f) => series.fillFor(f),
-            paint: series.painted ? (f) => series.paintFor(f) : undefined,
-            stroke: series.config.stroke,
-            opacity: series.config.opacity ?? 1,
-            seriesId: series.id,
-          })
+          this._drawFeatureSeries(series)
           break
 
         case 'symbols':
@@ -869,6 +876,19 @@ class ApexMaps extends BaseChart {
         }
       }
     }
+  }
+
+  private _drawFeatureSeries(series: FeatureSeries): void {
+    if (!this.renderer || !this.geo) return
+    this.renderer.drawFeatures({
+      features: this.geo.features,
+      fill: (f) => series.fillFor(f),
+      paint: series.painted ? (f) => series.paintFor(f) : undefined,
+      shapeFor: series instanceof PixelSeries ? (f) => series.shapeFor(f) : undefined,
+      stroke: series.config.stroke,
+      opacity: series.config.opacity ?? 1,
+      seriesId: series.id,
+    })
   }
 
   private _drawBaseLayers(): void {
@@ -1337,7 +1357,22 @@ class ApexMaps extends BaseChart {
 
   /** Resolve a DOM event target to a mark, uniformly across series types. */
   private _resolveMark(event: Event): ResolvedMark | null {
-    const hit = event.target as Element | null
+    return this._markAt(event.target as Element | null)
+  }
+
+  /**
+   * Whether a pointer crossing between two elements stayed on one mark: a
+   * marker's shape and its hit circle, an arc and its hit path, a pixel map's
+   * dots and the outline under them. Crossing inside a mark is not leaving it,
+   * and treating it as leaving clears the hover and sets it again, which blinks
+   * the tooltip once per dot as a pointer moves across a pixel map.
+   */
+  private _staysOnMark(mark: ResolvedMark, other: EventTarget | null): boolean {
+    const next = this._markAt(other as Element | null)
+    return !!next && next.series === mark.series && next.markKey === mark.markKey
+  }
+
+  private _markAt(hit: Element | null): ResolvedMark | null {
     if (!hit?.getAttribute) return null
 
     // A shaped mark is a group holding a path, a label and a hit circle, so the
@@ -1441,6 +1476,7 @@ class ApexMaps extends BaseChart {
   private _handleMarkPointerOver(event: Event): void {
     const mark = this._resolveMark(event)
     if (!mark) return
+    if (this._staysOnMark(mark, (event as PointerEvent).relatedTarget)) return
     // While a proximity hover owns the pointer, crossing into a feature
     // underneath must not steal it: the reader is still inside the nearby
     // mark's catchment, and the tooltip they are reading belongs to it. A
@@ -1464,7 +1500,9 @@ class ApexMaps extends BaseChart {
   }
 
   private _handleMarkPointerOut(event: Event): void {
-    if (!this._resolveMark(event)) return
+    const mark = this._resolveMark(event)
+    if (!mark) return
+    if (this._staysOnMark(mark, (event as PointerEvent).relatedTarget)) return
     if (this._proximity) return
     this._clearHover()
   }
@@ -2580,6 +2618,15 @@ class ApexMaps extends BaseChart {
         })
         this._drawLegend()
       }
+      // A screen-grid pixel map resamples at the same levels, and also when a pan
+      // carries the viewport out of the area it sampled. Its classes do not move,
+      // because the values are the regions' and not the dots', so the legend
+      // stays as it is.
+      if (series instanceof PixelSeries && series.needsRedraw()) {
+        series.reproject()
+        this._drawFeatureSeries(series)
+        this._applySelectionStyles()
+      }
     }
     // Labels and annotation chips live in screen space, so they must be
     // re-laid-out, but only once per frame no matter how many camera writes
@@ -2729,7 +2776,9 @@ class ApexMaps extends BaseChart {
         series instanceof LineSeries ||
         // A hexbin bins in world space, so a new projection is new world
         // coordinates and the whole lattice has to be rebuilt, not just moved.
-        series instanceof HexbinSeries
+        series instanceof HexbinSeries ||
+        // A pixel map's dots are projected points, for the same reason.
+        series instanceof PixelSeries
       ) {
         series.reproject(this.viewport)
       }
@@ -3426,6 +3475,9 @@ class ApexMaps extends BaseChart {
       // Priced with clustering, not with the free point series: both summarise
       // points into an aggregate the reader cannot get back to the originals from.
       if (series.type === 'hexbin') this._requirePremium('hexbin')
+      // Priced with the grid layouts: both draw the geography as something
+      // other than its own outline.
+      if (series.type === 'pixel') this._requirePremium('pixelMap')
       // Configured counts as used: the reader can drill whether or not they have
       // clicked yet, exactly as with a link group.
       if ('drilldown' in series && series.drilldown) this._requirePremium('drilldown')

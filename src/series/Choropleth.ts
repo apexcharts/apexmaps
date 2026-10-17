@@ -26,15 +26,23 @@ import type {
   LegendItem,
   NormalizedFeature,
   NormalizedGeo,
+  PixelSeriesOptions,
+  SeriesFillOptions,
 } from '../types'
 
 export class ChoroplethSeries {
-  static readonly type = 'choropleth' as const
+  /*
+   * Widened to admit `series/Pixel`, which is this series with a different
+   * mark. Everything that asks `instanceof ChoroplethSeries` (the legend, the
+   * legend arrow, the accessible summary) is asking about the join and the
+   * scale, and gets the right answer for both.
+   */
+  static readonly type: 'choropleth' | 'pixel' = 'choropleth'
   static readonly kind = 'features' as const
 
-  readonly type = 'choropleth' as const
+  readonly type: 'choropleth' | 'pixel' = 'choropleth'
   readonly kind = 'features' as const
-  readonly config: ChoroplethSeriesOptions
+  readonly config: ChoroplethSeriesOptions | PixelSeriesOptions
   readonly geo: NormalizedGeo
   readonly index: number
   readonly id: string
@@ -55,7 +63,7 @@ export class ChoroplethSeries {
     dark = false,
   }: {
     /** Series config, already merged with defaults. */
-    config: ChoroplethSeriesOptions
+    config: ChoroplethSeriesOptions | PixelSeriesOptions
     geo: NormalizedGeo
     /** Series index, used for the stable series id. */
     index: number
@@ -163,7 +171,7 @@ export class ChoroplethSeries {
    * six things on a five-class map.
    */
   paintFor(feature: NormalizedFeature): FeaturePaint | null {
-    const fill = this.config.fill
+    const fill = this.fillOptions
     if (!fill?.pattern && !fill?.image) return null
 
     const value = this.valueFor(feature)
@@ -205,7 +213,13 @@ export class ChoroplethSeries {
 
   /** Whether any feature could be textured, which decides how cheap a redraw can be. */
   get painted(): boolean {
-    return !!(this.config.fill?.pattern || this.config.fill?.image)
+    const fill = this.fillOptions
+    return !!(fill?.pattern || fill?.image)
+  }
+
+  /** Pattern and image fills. A pixel map has none: its dots are the texture. */
+  protected get fillOptions(): SeriesFillOptions | undefined {
+    return 'fill' in this.config ? this.config.fill : undefined
   }
 
   /** Returns the new muted state. */
@@ -234,7 +248,7 @@ export class ChoroplethSeries {
   legendItems(options?: { includeNull?: boolean; format?: (v: number) => string }): LegendItem[] {
     const hasNull = [...this.values.values()].some((v) => v == null)
     const items = this.scale.legendItems({ includeNull: hasNull, ...options })
-    return this.config.fill?.pattern ? items.map((item, i) => this._patternedItem(item, i)) : items
+    return this.fillOptions?.pattern ? items.map((item, i) => this._patternedItem(item, i)) : items
   }
 
   /**
@@ -246,7 +260,7 @@ export class ChoroplethSeries {
    * and for a continuous scale, whose legend is a bar rather than swatches.
    */
   private _patternedItem(item: LegendItem, index: number): LegendItem {
-    const pattern = this.config.fill?.pattern
+    const pattern = this.fillOptions?.pattern
     if (!pattern || item.isNull || this.scale.continuous) return item
 
     // The value the class stands for. A function form asks about a feature, and the

@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pixel map · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+    <style>
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px 28px;
+        margin: 4px 0 14px;
+      }
+      .control {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+      .control input[type='range'] {
+        width: 140px;
+      }
+      .control .readout {
+        flex: 0 0 auto;
+        min-width: 44px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap wrap--wide" style="padding-top: 40px">
+      <div class="stack-lg">
+        <section class="figure figure--bleed figure--night">
+          <p class="kicker kicker--accent">Pixel map</p>
+          <div class="figure__head">
+            <div>
+              <h1 class="title title--lg">The same choropleth, sampled into dots</h1>
+              <p class="dek">
+                One row per country, joined and classed exactly as a choropleth would be. The
+                difference is the mark: a lattice is laid over the map, every point that lands
+                inside a country becomes one of its dots, and the borders are never drawn. You read
+                them where one colour gives way to the next.
+              </p>
+            </div>
+            <div class="stats">
+              <div>
+                <div class="stat__value" id="stat-regions">177</div>
+                <div class="stat__label">Countries</div>
+              </div>
+              <div>
+                <div class="stat__value" id="stat-dots">0</div>
+                <div class="stat__label">Dots</div>
+              </div>
+              <div>
+                <div class="stat__value" id="stat-nodes">0</div>
+                <div class="stat__label">SVG paths</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="controls">
+            <div class="control">
+              <span class="label">Shape</span>
+              <div class="seg" id="shape" role="group" aria-label="Shape">
+                <button data-value="circle" aria-pressed="true">Circle</button>
+                <button data-value="square" aria-pressed="false">Square</button>
+                <button data-value="hexagon" aria-pressed="false">Hexagon</button>
+                <button data-value="diamond" aria-pressed="false">Diamond</button>
+              </div>
+            </div>
+            <div class="control">
+              <span class="label">Grid on</span>
+              <div class="seg" id="grid" role="group" aria-label="Grid">
+                <button data-value="geo" aria-pressed="true">The globe</button>
+                <button data-value="screen" aria-pressed="false">The screen</button>
+              </div>
+            </div>
+            <div class="control">
+              <span class="label">Lattice</span>
+              <div class="seg" id="lattice" role="group" aria-label="Lattice">
+                <button data-value="" aria-pressed="true">By shape</button>
+                <button data-value="staggered" aria-pressed="false">Staggered</button>
+                <button data-value="square" aria-pressed="false">Square</button>
+              </div>
+            </div>
+            <div class="control">
+              <label class="label" for="spacing">Spacing</label>
+              <input id="spacing" type="range" min="1" max="6" step="0.5" value="3" />
+              <span class="readout" id="spacing-readout">3°</span>
+            </div>
+            <div class="control">
+              <label class="label" for="size">Size</label>
+              <input id="size" type="range" min="30" max="100" step="5" value="80" />
+              <span class="readout" id="size-readout">80%</span>
+            </div>
+            <div class="control">
+              <label class="label" for="projection">Projection</label>
+              <select id="projection">
+                <option value="equalEarth" selected>Equal Earth</option>
+                <option value="naturalEarth">Natural Earth</option>
+                <option value="mercator">Mercator</option>
+                <option value="conicEqualArea">Conic equal-area</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="plot" id="map"></div>
+          <p class="source">
+            <span
+              ><b>Illustrative data.</b> A smooth field over the globe, identical on every
+              load.</span
+            >
+            <span><b>Geometry</b> Natural Earth 1:110m, built-in registry</span>
+            <span><b>Projection</b> as selected, cropped below 58&deg;S</span>
+          </p>
+        </section>
+
+        <div class="two">
+          <section class="card">
+            <p class="kicker">What was passed</p>
+            <h2>A choropleth with a different mark</h2>
+            <p class="note">
+              The data, the join and the scale are the choropleth's, so an existing choropleth
+              becomes a pixel map by changing its type. The legend, tooltips, selection, keyboard
+              focus and drilldown come with it, because each country is still one element: its dots
+              are one path, and the outline underneath them is an invisible hit target, so the gaps
+              between dots belong to the country they sit in.
+            </p>
+            <pre>
+series: [{
+  type: 'pixel',
+  joinBy: 'name',
+  data,
+  shape: 'circle',   // 'square' | 'hexagon' | 'diamond'
+  grid: 'geo',       // or 'screen'
+  spacing: 3,        // degrees on 'geo', pixels on 'screen'
+  size: '80%',       // of spacing, or a number of pixels
+}]</pre
+            >
+          </section>
+
+          <section class="card">
+            <p class="kicker">Shape and lattice</p>
+            <h2>Every shape tiles at 100%</h2>
+            <p class="note">
+              The lattice follows the shape unless you pick one. Squares sit in a square grid,
+              circles and hexagons stagger every other row by half a step and pack the rows closer
+              together, and diamonds interlock at half a step, which is a square grid turned
+              through 45°. Push the size slider to 100% and each one closes up without a seam:
+              hexagons into a honeycomb, diamonds into a lattice, squares into a solid grid.
+            </p>
+            <p class="note">
+              Sizes past 100% are clamped. Beyond it neighbours overlap, and which one ends up on
+              top is decided by drawing order rather than by anything on the map.
+            </p>
+          </section>
+        </div>
+
+        <section class="card">
+          <p class="kicker">Two grids</p>
+          <h2>Fixed to the ground, or to the screen</h2>
+          <p class="note">
+            Both start from the same even lattice. <code>grid: 'geo'</code> lays it over the map
+            once, as the map opens, and from then on every dot is a place: zoom in and the dots grow
+            with the land under them, because a dot stands for the same patch of ground wherever the
+            camera goes. <code>grid: 'screen'</code> keeps the lattice on the screen instead, so
+            zooming in refines it rather than magnifying it. It is resampled at the same quantized
+            zoom levels clustering and hexbins use, so a pan never resamples and a smooth zoom
+            crosses a level a handful of times.
+          </p>
+          <div class="row" style="margin-bottom: 12px">
+            <button id="zoom-in">Zoom in on Europe</button>
+            <button id="zoom-reset">Reset</button>
+          </div>
+          <div class="two">
+            <div>
+              <div class="label"><code>grid: 'geo'</code> · the dots belong to the ground</div>
+              <div id="geo-grid" class="plot"></div>
+            </div>
+            <div>
+              <div class="label"><code>grid: 'screen'</code> · the dots belong to the reader</div>
+              <div id="screen-grid" class="plot"></div>
+            </div>
+          </div>
+          <p class="note" style="margin-top: 12px">
+            Because the geo lattice is laid on the map as drawn, it is even on any projection, and
+            on an equal-area one like Equal Earth every dot also covers the same area of ground.
+            On Mercator the dots are just as even and the ground under them is not: a dot in
+            Greenland stands for a fraction of the land a dot in Brazil does. That is Mercator's
+            distortion rather than the lattice's, and a pixel map makes it unusually easy to see.
+          </p>
+        </section>
+
+        <section class="figure figure--night">
+          <p class="kicker">On a globe</p>
+          <h2>The lattice turns with the world</h2>
+          <p class="note">
+            A globe only accepts the geo grid, and lays it on the sphere rather than on the map,
+            because the map as it opens is one hemisphere and the reader can turn to the other.
+            Rows run along the parallels and each wraps the world exactly once, so there is no seam
+            to roll into view, and <code>equalArea</code> (on by default) thins them towards the
+            poles so a dot covers the same ground at 60°N as at the equator. A spin reprojects
+            points sampled once, with no resampling. Dots shrink towards the horizon as the
+            surface turns away. Drag to spin it.
+          </p>
+          <div id="globe" class="plot"></div>
+        </section>
+
+        <section class="card">
+          <p class="kicker">Small places</p>
+          <h2>No country disappears for being small</h2>
+          <p class="note">
+            At this spacing most of Europe's microstates fall between lattice points. A pixel map that left
+            them out would be a choropleth silently dropping rows, so a region that catches no point
+            takes the nearest free one, or borrows one from a neighbour that has dots to spare.
+            Luxembourg, Malta and Liechtenstein each get a dot here. Hover them.
+          </p>
+          <div id="europe" class="plot"></div>
+          <p class="note" style="margin-top: 12px">
+            When a region is wedged between neighbours that hold only one dot themselves, there is
+            nothing to borrow, and the map says so in development mode rather than hiding it: the
+            diagnostics name every region left out and suggest a smaller spacing.
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      /*
+       * Slate to gold. On a dark ground the lowest class has to stay visible as
+       * land rather than sinking into the water, so the ramp starts from a
+       * blue-grey a few steps above the background instead of from black.
+       */
+      const RAMP = ['#34425a', '#56627a', '#8a8467', '#c09a4f', '#f0b43c']
+      const FONT = '-apple-system, BlinkMacSystemFont, Inter, "Segoe UI", Roboto, sans-serif'
+
+      const tooltip = {
+        formatter: ({ name, value }) =>
+          `<div style="font-weight:640;margin-bottom:2px">${name}</div>` +
+          `<div style="font-variant-numeric:tabular-nums;font-size:15px;font-weight:600">${
+            value == null ? 'No data' : Demo.fmt.one(value)
+          }</div>`,
+      }
+
+      /** The rendered dot count, read off the page rather than taken on trust. */
+      const countDots = (element) => {
+        let dots = 0
+        const paths = element.querySelectorAll('path.apexmaps-pixels')
+        for (const path of paths) dots += (path.getAttribute('d').match(/M/g) || []).length
+        return { dots, paths: paths.length }
+      }
+
+      const pressed = (group, value) => {
+        for (const button of document.querySelectorAll(`#${group} button`)) {
+          button.setAttribute('aria-pressed', String(button.dataset.value === value))
+        }
+      }
+
+      Demo.ready(
+        Promise.all([
+          Demo.places('world-countries-110m.json'),
+          Demo.places('eu-nuts0-20m.json'),
+        ]).then(([world, europe]) => {
+          const data = world.map((place) => ({ name: place.name, value: Demo.field(place) }))
+
+          /* ---- the hero, with every option on a control ------------------- */
+
+          const state = {
+            shape: 'circle',
+            grid: 'geo',
+            lattice: '',
+            spacing: { geo: 3, screen: 8 },
+            size: 80,
+            projection: 'equalEarth',
+          }
+
+          const heroSeries = () => ({
+            type: 'pixel',
+            name: 'Index',
+            joinBy: 'name',
+            data,
+            shape: state.shape,
+            grid: state.grid,
+            // Left out rather than passed empty, so the shape decides.
+            ...(state.lattice ? { lattice: state.lattice } : {}),
+            spacing: state.spacing[state.grid],
+            size: `${state.size}%`,
+            scale: { palette: RAMP },
+          })
+
+          const heroElement = document.getElementById('map')
+          const hero = Demo.watch(
+            'pixel',
+            new ApexMaps(heroElement, {
+              chart: { height: 520, fontFamily: FONT },
+              theme: { mode: 'dark' },
+              geo: {
+                map: 'world/countries@110m',
+                projection: state.projection,
+                view: { fit: Demo.INHABITED, padding: 10 },
+              },
+              series: [heroSeries()],
+              legend: {
+                title: 'Composite index (illustrative)',
+                align: 'center',
+                formatter: (item) =>
+                  item.isNull ? 'No data' : `${Math.round(item.from)} to ${Math.round(item.to)}`,
+              },
+              tooltip,
+            }),
+          )
+
+          const refreshStats = () => {
+            const { dots, paths } = countDots(heroElement)
+            document.getElementById('stat-dots').textContent = Demo.fmt.int(dots)
+            // Dots plus the invisible outline under each country.
+            document.getElementById('stat-nodes').textContent = Demo.fmt.int(paths * 2)
+          }
+
+          const syncSpacing = () => {
+            const input = document.getElementById('spacing')
+            const geo = state.grid === 'geo'
+            input.min = geo ? '1' : '4'
+            input.max = geo ? '6' : '20'
+            input.step = geo ? '0.5' : '1'
+            input.value = String(state.spacing[state.grid])
+            document.getElementById('spacing-readout').textContent = geo
+              ? `${state.spacing.geo}°`
+              : `${state.spacing.screen}px`
+          }
+
+          const redraw = () => {
+            hero.updateSeries([heroSeries()])
+            refreshStats()
+          }
+
+          for (const group of ['shape', 'grid', 'lattice']) {
+            document.getElementById(group).addEventListener('click', (event) => {
+              const button = event.target.closest('button')
+              if (!button) return
+              state[group] = button.dataset.value
+              pressed(group, button.dataset.value)
+              if (group === 'grid') syncSpacing()
+              redraw()
+            })
+          }
+
+          document.getElementById('spacing').addEventListener('input', (event) => {
+            state.spacing[state.grid] = Number(event.target.value)
+            syncSpacing()
+            redraw()
+          })
+
+          document.getElementById('size').addEventListener('input', (event) => {
+            state.size = Number(event.target.value)
+            document.getElementById('size-readout').textContent = `${state.size}%`
+            redraw()
+          })
+
+          document.getElementById('projection').addEventListener('change', async (event) => {
+            state.projection = event.target.value
+            await hero.updateOptions({
+              geo: { projection: state.projection },
+              series: [heroSeries()],
+            })
+            refreshStats()
+          })
+
+          syncSpacing()
+
+          /* ---- geo grid against screen grid -------------------------------- */
+
+          const pair = (id, grid) =>
+            Demo.watch(
+              id,
+              new ApexMaps(document.getElementById(id), {
+                chart: { height: 340, fontFamily: FONT },
+                geo: {
+                  map: 'world/countries@110m',
+                  view: { fit: Demo.INHABITED, padding: 8 },
+                },
+                series: [
+                  {
+                    type: 'pixel',
+                    name: 'Index',
+                    joinBy: 'name',
+                    data,
+                    grid,
+                    // Matched at the opening view, so the two start out alike and
+                    // only the zoom tells them apart.
+                    spacing: grid === 'geo' ? 3 : 6,
+                    scale: { palette: 'teal' },
+                  },
+                ],
+                legend: { show: false },
+                tooltip,
+              }),
+            )
+
+          const geoGrid = pair('geo-grid', 'geo')
+          const screenGrid = pair('screen-grid', 'screen')
+
+          document.getElementById('zoom-in').addEventListener('click', () => {
+            for (const map of [geoGrid, screenGrid]) {
+              map.camera.flyTo({ center: [12, 50], zoom: 3.5 })
+            }
+          })
+          document.getElementById('zoom-reset').addEventListener('click', () => {
+            for (const map of [geoGrid, screenGrid]) map.resetView()
+          })
+
+          /* ---- the globe ---------------------------------------------------- */
+
+          const globe = Demo.watch(
+            'globe',
+            new ApexMaps(document.getElementById('globe'), {
+              chart: { height: 480, fontFamily: FONT },
+              theme: { mode: 'dark' },
+              geo: {
+                map: 'world/countries@110m',
+                projection: { name: 'orthographic', rotate: [-20, -25, 0] },
+                view: { fit: 'world', padding: 12 },
+                sphere: { show: true, fill: '#0d121b', stroke: 'rgba(255,255,255,0.08)' },
+              },
+              series: [
+                {
+                  type: 'pixel',
+                  name: 'Index',
+                  joinBy: 'name',
+                  data,
+                  shape: 'hexagon',
+                  spacing: 2.5,
+                  size: '88%',
+                  scale: { palette: RAMP },
+                },
+              ],
+              legend: { show: false },
+              tooltip,
+            }),
+          )
+
+          /* ---- small places ------------------------------------------------- */
+
+          const europeData = europe
+            .filter((place) => place.props.nuts_id)
+            .map((place) => ({ key: place.props.nuts_id, value: Demo.field(place) }))
+
+          const smalls = Demo.watch(
+            'europe',
+            new ApexMaps(document.getElementById('europe'), {
+              chart: { height: 460, fontFamily: FONT },
+              geo: { map: 'eu/nuts0@20m' },
+              series: [
+                {
+                  type: 'pixel',
+                  name: 'Index',
+                  joinBy: ['nuts_id', 'key'],
+                  data: europeData,
+                  spacing: 0.75,
+                  shape: 'square',
+                  size: '78%',
+                  scale: { palette: 'viridis' },
+                },
+              ],
+              legend: { show: false },
+              tooltip,
+            }),
+          )
+
+          return Promise.all([
+            hero.render().then(refreshStats),
+            geoGrid.render(),
+            screenGrid.render(),
+            globe.render(),
+            smalls.render(),
+          ])
+        }),
+      )
+    </script>
+  </body>
+</html>

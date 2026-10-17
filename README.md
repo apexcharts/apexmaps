@@ -3,8 +3,8 @@
 Interactive geographic data visualization and storytelling for the ApexCharts ecosystem.
 
 > **Status: stable since 1.0.0.** Written in TypeScript, and the public API follows semantic
-> versioning: breaking changes wait for a major. The engine, six series (choropleth, bubble,
-> marker, hexbin, arc, line), hex tile layouts and the morph between them, projections, joins,
+> versioning: breaking changes wait for a major. The engine, seven series (choropleth, pixel,
+> bubble, marker, hexbin, arc, line), hex tile layouts and the morph between them, projections, joins,
 > scales, pattern and image fills, legend, tooltip, labels, annotations, camera, geometry registry,
 > drilldown, clustering, selection and accessibility layer are shipped and tested. The story engine
 > and tiles are not built yet.
@@ -33,7 +33,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 
 | Area | Detail |
 |---|---|
-| Series | `choropleth`, `bubble` (proportional symbols), `marker` (seven shapes, categorical colour, clustering&nbsp;†), `hexbin` (point density on a hexagonal lattice, count/sum/mean/min/max, refining with the zoom)&nbsp;†, `arc` (great-circle connections, travelling `flow` beads)&nbsp;†, `line` (routes through given vertices)&nbsp;†, plus an automatic basemap whenever no feature series is present |
+| Series | `choropleth`, `pixel` (a choropleth drawn as a lattice of dots, squares, hexagons or diamonds, fixed to the ground or to the screen)&nbsp;†, `bubble` (proportional symbols), `marker` (seven shapes, categorical colour, clustering&nbsp;†), `hexbin` (point density on a hexagonal lattice, count/sum/mean/min/max, refining with the zoom)&nbsp;†, `arc` (great-circle connections, travelling `flow` beads)&nbsp;†, `line` (routes through given vertices)&nbsp;†, plus an automatic basemap whenever no feature series is present |
 | Projections | 13 core projections with aliases (`equalEarth` default, `webMercator`, `epsg:3857`, `albersUsa`, `orthographic`, conics, azimuthals), spec objects with `rotate` / `parallels` / `clipAngle`, and `ApexMaps.registerProjection()`&nbsp;† for the rest of `d3-geo-projection` |
 | Geometry | 26 built-in packs: world countries and land, US states and counties, EU NUTS 0-3, and admin-1 for 15 more countries. Lazy, one request per pack, provenance and attribution attached |
 | Layouts | `layout: 'hex'` redraws a region set as a hex tile map (honeycomb, tilegram): one equal cell per region, keyed the way the boundary pack is keyed, so the same data and the same `joinBy` serve both. Toggling it **morphs**, region by region, so the reader can see which cell is which place. Seven ship (US states, Australia, Canada, Germany, Brazil, Japan, Europe), each scored against its boundary pack by `npm run check:layout`; `ApexMaps.registerLayout()` takes your own&nbsp;† |
@@ -113,6 +113,7 @@ broken by an unrelated one:
 | [image-fill](examples/image-fill.html) | A picture per region, clipped to its own outline |
 | [honeycomb](examples/honeycomb.html) | One hexagon per state, and the same map toggled back to real boundaries |
 | [hexbin](examples/hexbin.html) | Twenty thousand points binned, and what drawing every one of them costs |
+| [pixel](examples/pixel.html) | A choropleth sampled into dots: four shapes, two grids, a globe, and no small country lost |
 | [bubbles](examples/bubbles.html) | Square-root versus linear sizing, second colour encoding |
 | [markers](examples/markers.html) | Seven shapes, categorical colour, clustering |
 | [arcs](examples/arcs.html) | Great circles, antimeridian cutting, curvature, travelling flow |
@@ -217,6 +218,24 @@ ApexMaps.setGeoSource('https://cdn.example.com/apexmaps-geo/')                  
 > files load from the default CDN source with no configuration. `npm run check:geo` reads this
 > repository's own `geo/` directory, not the CDN: when a new pack lands here, check the CDN has it
 > before relying on it in production.
+
+## Pixel maps
+
+`type: 'pixel'` is a choropleth with a different mark: the same rows, join and scale, drawn as
+a lattice of dots inside each region instead of a fill. Every lattice point that lands in a
+region becomes one of its dots, whole, and the borders are never drawn.
+
+```js
+series: [{ type: 'pixel', joinBy: 'name', data, shape: 'hexagon', spacing: 2.5 }]
+```
+
+`shape` is `circle`, `square`, `hexagon` or `diamond`, and the lattice follows it so every shape
+tiles at `size: '100%'`. `grid: 'geo'` (the default) lays the lattice over the map once and keeps
+each dot as a place, so zooming magnifies it; on a globe it is laid on the sphere and turns with
+it. `grid: 'screen'` keeps it on the screen and refines it as the reader zooms. A region too
+small to catch a lattice point still gets one dot, and each region stays one element, so the
+legend, tooltip, selection, keyboard focus and drilldown all work as they do on a choropleth.
+More in [the feature notes](docs/features.md#pixel-maps).
 
 ## Performance
 
@@ -447,7 +466,7 @@ survives the next one.
 | `choropleth`, `bubble` and `marker` series, and the automatic basemap | Point clustering (`cluster`) and point density (`type: 'hexbin'`) |
 | Every one of the 13 built-in projections, with spec objects | Projections you register yourself (`registerProjection`) |
 | The geometry registry, all 26 packs, provenance and attribution | Drilldown and the breadcrumb (`drilldown`) |
-| Real boundaries, in every pack and projection | Hex tile layouts (`layout: 'hex'`, `registerLayout`) |
+| Real boundaries, in every pack and projection | Hex tile layouts (`layout: 'hex'`, `registerLayout`) and pixel maps (`type: 'pixel'`) |
 | Tooltips, legends, labels, data labels, states and themes | Editorial annotations (`annotations`) |
 | Zoom, pan, pinch, hover, click and box selection, the camera API | `arc` and `line` route series |
 | Joins, including `fuzzyJoin`, and the join diagnostics | Linked selection across maps (`link: { group }`) |

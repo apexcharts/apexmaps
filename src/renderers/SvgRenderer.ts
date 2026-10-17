@@ -303,11 +303,19 @@ export class SvgRenderer {
    * The flat colour is still written, to `data-fill`, because a paint is a
    * document reference and the places that need to *reason* about the colour
    * (darkening on hover, seeding a drilldown) cannot read one out of `url(#id)`.
+   *
+   * `shapeFor` replaces the outline with a shape of the series' own, which is how
+   * a pixel map draws a region as its dots. The region is still one path, so
+   * everything that addresses a feature by its element keeps working, and its
+   * real outline is drawn underneath as an invisible hit target: without it the
+   * gaps between dots belong to nothing, and a pointer moving across a country
+   * would leave it and re-enter it at every gap.
    */
   drawFeatures({
     features,
     fill,
     paint,
+    shapeFor,
     stroke = {},
     opacity = 1,
     seriesId = 's0',
@@ -315,6 +323,7 @@ export class SvgRenderer {
     features: NormalizedFeature[]
     fill: (feature: NormalizedFeature) => string
     paint?: (feature: NormalizedFeature) => FeaturePaint | null
+    shapeFor?: (feature: NormalizedFeature) => string | null
     stroke?: StrokeOptions
     opacity?: number
     seriesId?: string
@@ -325,11 +334,38 @@ export class SvgRenderer {
     const paintsSeen = new Set<string>()
 
     for (const feature of features) {
-      const d = this.viewport.pathFor(feature)
+      const outline = this.viewport.pathFor(feature)
+      const d = shapeFor ? shapeFor(feature) : outline
       if (!d) continue
 
       const key = `${seriesId}:${feature.key || feature.index}`
       seen.add(key)
+
+      if (shapeFor && outline) {
+        const hitKey = `${seriesId}:hit:${feature.key || feature.index}`
+        seen.add(hitKey)
+        let hit = this.pathsByKey.get(hitKey)
+        if (!hit) {
+          hit = svg('path', {
+            class: 'apexmaps-feature-hit',
+            fill: 'transparent',
+            stroke: 'none',
+            dataset: {
+              key: feature.key,
+              index: feature.index,
+              item: feature.index,
+              series: seriesId,
+            },
+          })
+          this.pathsByKey.set(hitKey, hit)
+          // Under every dot in the series, not just under its own: a dot that
+          // overhangs its border onto a neighbour's outline should still answer
+          // as its own region.
+          group.insertBefore(hit, group.firstChild)
+        }
+        hit.setAttribute('d', outline)
+      }
+
       let path = this.pathsByKey.get(key)
 
       if (!path) {
@@ -357,6 +393,9 @@ export class SvgRenderer {
         : null
 
       path.setAttribute('d', d)
+      // Toggled every pass rather than set once: a series that changes type
+      // under the same id keeps its elements, because both kinds draw features.
+      path.classList.toggle('apexmaps-pixels', !!shapeFor)
       path.setAttribute('fill', ref ?? color)
       if (ref) {
         path.setAttribute('data-paint', ref)
@@ -942,6 +981,9 @@ export class SvgRenderer {
     const found = new Map<string, SVGPathElement>()
     for (const el of this.pathsByKey.values()) {
       if (!el.classList.contains('apexmaps-feature')) continue
+      // A region drawn as two hundred dots has no outline to walk into a cell
+      // and out again, so a layout morph leaves it to change in one step.
+      if (el.classList.contains('apexmaps-pixels')) continue
       const key = el.getAttribute('data-key')
       if (key) found.set(key, el as SVGPathElement)
     }
