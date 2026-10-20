@@ -235,7 +235,7 @@ each dot as a place, so zooming magnifies it; on a globe it is laid on the spher
 it. `grid: 'screen'` keeps it on the screen and refines it as the reader zooms. A region too
 small to catch a lattice point still gets one dot, and each region stays one element, so the
 legend, tooltip, selection, keyboard focus and drilldown all work as they do on a choropleth.
-More in [the feature notes](docs/features.md#pixel-maps).
+[pixel.html](examples/pixel.html) puts every option on a control panel.
 
 ## Performance
 
