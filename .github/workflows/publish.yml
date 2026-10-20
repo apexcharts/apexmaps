@@ -31,6 +31,11 @@
 #   git commit -am "release: 0.3.0"
 #   git push
 #
+# The release commit's body opens the GitHub release notes, so write it for
+# users: what the release lets them do, a short code sample, anything they must
+# act on. Notes for maintainers go after a line reading `Housekeeping`, which
+# scripts/release-notes.mjs stops at.
+#
 # Why a core release also sweeps up the wrappers, which apexstock's equivalent
 # does not: the wrappers pin the core with a caret, and under 0.x a caret does
 # not cross a minor, so a core minor forces all three wrappers out with a
@@ -252,14 +257,23 @@ jobs:
           # does not truncate the library's notes.
           PREV=$(git describe --tags --abbrev=0 --match 'v*' "$TAG^" 2>/dev/null || echo '')
           if [ -n "$PREV" ]; then
-            NOTES=$(git log "$PREV..$TAG" --pretty=format:'- %s' --no-merges)
+            # Commit authors by their GitHub handle, which git does not know.
+            # One call. Losing it costs the credits, never the release.
+            gh api "repos/${GITHUB_REPOSITORY}/compare/${PREV}...${TAG}" \
+              --jq '[.commits[] | {key: .sha, value: (.author.login // "")}] | from_entries' \
+              > /tmp/authors.json || echo '{}' > /tmp/authors.json
+            # The same notes as the ApexCharts core library: the release commit's
+            # body as the opening, then one line per feat and fix. The script
+            # says how to write that body. dist/ was built above, which is what
+            # the bundle-size sentence measures.
+            node scripts/release-notes.mjs "$PREV" "$TAG" /tmp/authors.json > /tmp/notes.md
           else
-            NOTES=$(git log "$TAG" --pretty=format:'- %s' --no-merges)
+            git log "$TAG" --pretty=format:'- %s' --no-merges > /tmp/notes.md
           fi
           PRERELEASE=
           case "$VERSION" in *-*) PRERELEASE=--prerelease ;; esac
           # Unquoted on purpose: empty must expand to no argument at all.
-          gh release create "$TAG" --title "$TAG" --notes "$NOTES" $PRERELEASE
+          gh release create "$TAG" --title "💎 Version $VERSION" --notes-file /tmp/notes.md $PRERELEASE
 
   # One wrapper, released on its own. A single job rather than a matrix of three
   # that no-ops twice: the subject names exactly one package.
