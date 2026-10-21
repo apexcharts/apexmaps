@@ -120,6 +120,6 @@ describe('theme.mode', () => {
   it('flips the label halo with the theme rather than staying white', async () => {
     await render({ theme: { mode: 'dark' }, dataLabels: { enabled: true } })
     const label = el.querySelector('.apexmaps-label')
-    expect(label?.getAttribute('stroke')).toContain('--apexmaps-halo')
+    expect(label?.getAttribute('stroke')).toContain('--_apexmaps-halo')
   })
 })

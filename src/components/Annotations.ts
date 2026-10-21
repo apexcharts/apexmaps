@@ -196,9 +196,9 @@ export class Annotations {
         kind: 'area',
         world: [centre[0], centre[1]],
         d,
-        fill: annotation.fill ?? 'var(--apexmaps-focus, #2563eb)',
+        fill: annotation.fill ?? 'var(--_apexmaps-focus, #2563eb)',
         fillOpacity: annotation.fillOpacity ?? 0.12,
-        stroke: annotation.stroke ?? { color: 'var(--apexmaps-focus, #2563eb)', width: 1.5 },
+        stroke: annotation.stroke ?? { color: 'var(--_apexmaps-focus, #2563eb)', width: 1.5 },
         ...common(annotation),
       })
     })
@@ -291,7 +291,7 @@ export class Annotations {
             class: 'apexmaps-annotation-marker',
             d: markerPath(shape, markerSize),
             transform: `translate(${sx},${sy})`,
-            fill: marker.fill ?? 'var(--apexmaps-focus, #2563eb)',
+            fill: marker.fill ?? 'var(--_apexmaps-focus, #2563eb)',
             stroke: marker.stroke?.color ?? '#ffffff',
             'stroke-width': marker.stroke?.width ?? 1.5,
           }),
@@ -359,7 +359,7 @@ export class Annotations {
           y1: sy,
           x2: cx,
           y2: cy,
-          stroke: spec.color ?? 'var(--apexmaps-fg-muted, #6b7280)',
+          stroke: spec.color ?? 'var(--_apexmaps-fg-muted, #6b7280)',
           'stroke-width': spec.width ?? 1,
           'stroke-dasharray': spec.dashArray ?? '3 2',
         }),
@@ -375,8 +375,8 @@ export class Annotations {
           width,
           height,
           rx: label.borderRadius ?? 3,
-          fill: label.background ?? 'var(--apexmaps-surface, #ffffff)',
-          stroke: label.borderColor ?? 'var(--apexmaps-border, rgba(0,0,0,0.12))',
+          fill: label.background ?? 'var(--_apexmaps-surface, #ffffff)',
+          stroke: label.borderColor ?? 'var(--_apexmaps-border, rgba(0,0,0,0.12))',
           'stroke-width': label.borderWidth ?? 1,
         }),
       )
@@ -392,7 +392,7 @@ export class Annotations {
       'dominant-baseline': 'central',
       'font-size': fontSize,
       'font-weight': label.fontWeight ?? 500,
-      fill: label.color ?? 'var(--apexmaps-fg, currentColor)',
+      fill: label.color ?? 'var(--_apexmaps-fg, currentColor)',
     })
 
     lines.forEach((line, i) => {
@@ -458,7 +458,7 @@ function normalizeLabel(label: AnnotationLabel | string | undefined): Annotation
 
 function outlineStroke(outline: FeatureAnnotation['outline']): StrokeOptions | undefined {
   if (!outline) return undefined
-  const base: StrokeOptions = { color: 'var(--apexmaps-focus, #2563eb)', width: 2 }
+  const base: StrokeOptions = { color: 'var(--_apexmaps-focus, #2563eb)', width: 2 }
   return outline === true ? base : { ...base, ...outline }
 }
 

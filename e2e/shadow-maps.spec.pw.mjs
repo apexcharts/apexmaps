@@ -27,12 +27,8 @@ const BUNDLE = path.resolve(here, '../dist/apexmaps.min.js')
 // light: theme vars on a wrapper div. shadow: vars on the host. nested: two
 // open roots, vars on the OUTER host only.
 const MODES = ['light', 'shadow', 'nested']
-// Known to fail in every mode, so not a shadow DOM defect: `.apexmaps`
-// redeclares every --apexmaps-* on the container, so a value set above it
-// never wins, against the README's "or anywhere above it" (plans/34 X2,
-// awaiting the theming decision). Listed so the run stays green; it reports
-// an unexpected pass once fixed, so the entry cannot outlive the bug.
-const KNOWN_FAILING = new Set(['apexmapsVarAbove'])
+// Rows known to fail, each with the reason; empty means every row must pass.
+const KNOWN_FAILING = new Set([])
 const THEME = {
   '--apexmaps-surface': 'rgb(1, 2, 3)',
   '--apx-accent': 'rgb(10, 20, 30)',

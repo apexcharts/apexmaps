@@ -374,8 +374,9 @@ ApexMaps.catalogue()                            // every built-in pack, with pro
 ## Theming
 
 The map's chrome is styled with CSS custom properties under the `--apexmaps-*`
-namespace. Set any of them on the container (or anywhere above it) and the map
-follows, with no configuration:
+namespace. Set any of them on the container or anywhere above it (`:root`, a
+dashboard panel, the host element of a web component the map renders inside)
+and the map follows, with no configuration:
 
 ```css
 .my-map {
@@ -430,7 +431,9 @@ the two can disagree: a page with a light brand surface plus `theme.mode:
 guess, the dark palette stays self-contained and always legible.
 
 To brand dark mode, override the `--apexmaps-*` tokens under `.apexmaps--dark`
-(or on the container), which still wins over everything.
+(or on the container), which still wins over everything. A `--apexmaps-*` value
+you set applies in both modes wherever you set it, so give a token a separate
+dark value under `.apexmaps--dark` when the two should differ.
 
 ## Opinionated defaults, and why
 

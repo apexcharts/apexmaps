@@ -13,6 +13,13 @@
  *
  *   --apexmaps-* set by the host  >  --apx-* family token  >  built-in default
  *
+ * The public `--apexmaps-*` names are never declared here, only read. The map
+ * reads private `--_apexmaps-*` copies, each set from its public name with the
+ * default as the fallback. A declaration on the element would beat anything
+ * inherited from above it, whatever the selector, so declaring the public
+ * names (as this file used to) meant a theme set on `:root`, a dashboard panel
+ * or a web component's shadow host never reached the map.
+ *
  * The dark palette deliberately takes no tokens. A single set of `--apx-*`
  * values describes one appearance, and applying a light brand surface to the
  * palette chosen for dark mode is how you get white text on white. Dark stays
@@ -20,26 +27,26 @@
  */
 
 .apexmaps {
-  --apexmaps-fg: var(--apx-fore, #1f2933);
-  --apexmaps-fg-muted: #6b7280;
+  --_apexmaps-fg: var(--apexmaps-fg, var(--apx-fore, #1f2933));
+  --_apexmaps-fg-muted: var(--apexmaps-fg-muted, #6b7280);
   /* Not token-backed: the light default is transparent on purpose, so the
      host's own card shows through. Painting it with `--apx-surface` would
      cover a tinted card that was deliberately chosen. */
-  --apexmaps-bg: transparent;
-  --apexmaps-surface: var(--apx-surface, #ffffff);
-  --apexmaps-border: var(--apx-grid, rgba(0, 0, 0, 0.12));
-  --apexmaps-shadow: 0 4px 16px rgba(15, 23, 42, 0.14);
-  --apexmaps-focus: var(--apx-accent, #2563eb);
+  --_apexmaps-bg: var(--apexmaps-bg, transparent);
+  --_apexmaps-surface: var(--apexmaps-surface, var(--apx-surface, #ffffff));
+  --_apexmaps-border: var(--apexmaps-border, var(--apx-grid, rgba(0, 0, 0, 0.12)));
+  --_apexmaps-shadow: var(--apexmaps-shadow, 0 4px 16px rgba(15, 23, 42, 0.14));
+  --_apexmaps-focus: var(--apexmaps-focus, var(--apx-accent, #2563eb));
   /* The label halo, so it flips with the theme rather than staying white over a
      dark map. */
-  --apexmaps-halo: rgba(255, 255, 255, 0.85);
-  --apexmaps-radius: 6px;
-  --apexmaps-font-size: 12px;
+  --_apexmaps-halo: var(--apexmaps-halo, rgba(255, 255, 255, 0.85));
+  --_apexmaps-radius: var(--apexmaps-radius, 6px);
+  --_apexmaps-font-size: var(--apexmaps-font-size, 12px);
 
   position: relative;
-  color: var(--apexmaps-fg);
-  background: var(--apexmaps-bg);
-  font-size: var(--apexmaps-font-size);
+  color: var(--_apexmaps-fg);
+  background: var(--_apexmaps-bg);
+  font-size: var(--_apexmaps-font-size);
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
 
@@ -82,14 +89,14 @@
 .apexmaps--dark {
   /* No `--apx-*` fallbacks here on purpose — see the note at the top of the
      file. This palette must stay readable whatever the page's tokens describe. */
-  --apexmaps-fg: #e5e7eb;
-  --apexmaps-fg-muted: #9ca3af;
-  --apexmaps-bg: #111827;
-  --apexmaps-surface: #1f2937;
-  --apexmaps-border: rgba(255, 255, 255, 0.16);
-  --apexmaps-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-  --apexmaps-focus: #60a5fa;
-  --apexmaps-halo: rgba(17, 24, 39, 0.85);
+  --_apexmaps-fg: var(--apexmaps-fg, #e5e7eb);
+  --_apexmaps-fg-muted: var(--apexmaps-fg-muted, #9ca3af);
+  --_apexmaps-bg: var(--apexmaps-bg, #111827);
+  --_apexmaps-surface: var(--apexmaps-surface, #1f2937);
+  --_apexmaps-border: var(--apexmaps-border, rgba(255, 255, 255, 0.16));
+  --_apexmaps-shadow: var(--apexmaps-shadow, 0 4px 16px rgba(0, 0, 0, 0.5));
+  --_apexmaps-focus: var(--apexmaps-focus, #60a5fa);
+  --_apexmaps-halo: var(--apexmaps-halo, rgba(17, 24, 39, 0.85));
 }
 
 .apexmaps-plot {
@@ -112,7 +119,7 @@
 }
 
 .apexmaps-svg:focus-visible {
-  outline: 2px solid var(--apexmaps-focus);
+  outline: 2px solid var(--_apexmaps-focus);
   outline-offset: 2px;
 }
 
@@ -255,9 +262,9 @@
 }
 
 .apexmaps-select-box {
-  fill: var(--apexmaps-focus);
+  fill: var(--_apexmaps-focus);
   fill-opacity: 0.1;
-  stroke: var(--apexmaps-focus);
+  stroke: var(--_apexmaps-focus);
   stroke-width: 1;
   stroke-dasharray: 3 2;
   pointer-events: none;
@@ -320,12 +327,12 @@
   pointer-events: none;
   max-width: 260px;
   padding: 8px 10px;
-  border: 1px solid var(--apexmaps-border);
-  border-radius: var(--apexmaps-radius);
-  background: var(--apexmaps-surface);
-  box-shadow: var(--apexmaps-shadow);
-  font-size: var(--apexmaps-font-size);
-  color: var(--apexmaps-fg);
+  border: 1px solid var(--_apexmaps-border);
+  border-radius: var(--_apexmaps-radius);
+  background: var(--_apexmaps-surface);
+  box-shadow: var(--_apexmaps-shadow);
+  font-size: var(--_apexmaps-font-size);
+  color: var(--_apexmaps-fg);
 }
 
 .apexmaps-tooltip-title {
@@ -334,7 +341,7 @@
 }
 
 .apexmaps-tooltip-key {
-  color: var(--apexmaps-fg-muted);
+  color: var(--_apexmaps-fg-muted);
   font-size: 0.9em;
   font-variant-numeric: tabular-nums;
   margin-bottom: 4px;
@@ -348,7 +355,7 @@
 }
 
 .apexmaps-tooltip-label {
-  color: var(--apexmaps-fg-muted);
+  color: var(--_apexmaps-fg-muted);
 }
 
 .apexmaps-tooltip-value {
@@ -394,7 +401,7 @@
 
 .apexmaps-legend-title {
   font-weight: 600;
-  color: var(--apexmaps-fg);
+  color: var(--_apexmaps-fg);
 }
 
 .apexmaps-legend-items {
@@ -423,11 +430,11 @@
 }
 
 .apexmaps-legend-item:hover {
-  background: var(--apexmaps-border);
+  background: var(--_apexmaps-border);
 }
 
 .apexmaps-legend-item:focus-visible {
-  outline: 2px solid var(--apexmaps-focus);
+  outline: 2px solid var(--_apexmaps-focus);
   outline-offset: 1px;
 }
 
@@ -439,7 +446,7 @@
   width: 14px;
   height: 14px;
   border-radius: 3px;
-  border: 1px solid var(--apexmaps-border);
+  border: 1px solid var(--_apexmaps-border);
   flex: 0 0 auto;
 }
 
@@ -483,13 +490,13 @@
 .apexmaps-legend-gradient {
   height: 10px;
   border-radius: 3px;
-  border: 1px solid var(--apexmaps-border);
+  border: 1px solid var(--_apexmaps-border);
 }
 
 .apexmaps-legend-gradient-labels {
   display: flex;
   justify-content: space-between;
-  color: var(--apexmaps-fg-muted);
+  color: var(--_apexmaps-fg-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -539,7 +546,7 @@
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
-  color: var(--apexmaps-fg);
+  color: var(--_apexmaps-fg);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   order: -1;
@@ -551,7 +558,7 @@
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-top: 6px solid var(--apexmaps-fg);
+  border-top: 6px solid var(--_apexmaps-fg);
 }
 
 /* --- vertical bar, for a legend on the left or the right ------------------- */
@@ -599,7 +606,7 @@
   border: 0;
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
-  border-left: 6px solid var(--apexmaps-fg);
+  border-left: 6px solid var(--_apexmaps-fg);
 }
 
 .apexmaps-legend--vertical .apexmaps-legend-gradient-labels {
@@ -662,7 +669,7 @@
   align-items: center;
   gap: 2px;
   padding: 0 2px 8px;
-  font-size: var(--apexmaps-font-size);
+  font-size: var(--_apexmaps-font-size);
 }
 
 .apexmaps-breadcrumb-item {
@@ -670,23 +677,23 @@
   border: 0;
   border-radius: 4px;
   background: none;
-  color: var(--apexmaps-fg-muted);
+  color: var(--_apexmaps-fg-muted);
   font: inherit;
   cursor: pointer;
 }
 
 .apexmaps-breadcrumb-item:hover {
-  background: var(--apexmaps-border);
-  color: var(--apexmaps-fg);
+  background: var(--_apexmaps-border);
+  color: var(--_apexmaps-fg);
 }
 
 .apexmaps-breadcrumb-item:focus-visible {
-  outline: 2px solid var(--apexmaps-focus);
+  outline: 2px solid var(--_apexmaps-focus);
   outline-offset: 1px;
 }
 
 .apexmaps-breadcrumb-sep {
-  color: var(--apexmaps-fg-muted);
+  color: var(--_apexmaps-fg-muted);
   opacity: 0.7;
 }
 
@@ -709,10 +716,10 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--apexmaps-border);
-  border-radius: var(--apexmaps-radius);
-  background: var(--apexmaps-surface);
-  box-shadow: var(--apexmaps-shadow);
+  border: 1px solid var(--_apexmaps-border);
+  border-radius: var(--_apexmaps-radius);
+  background: var(--_apexmaps-surface);
+  box-shadow: var(--_apexmaps-shadow);
   /* Recessive until wanted: the map is the content, and a control sitting at full
      strength over the geography competes with it. Overridable per instance with
      `--apexmaps-zoom-idle-opacity`, and 1 turns the behaviour off. */
@@ -781,7 +788,7 @@
      already spends contrast on being faded while idle, and an icon is a non-text
      UI component: 3:1 against its own background is the floor, and muted plus
      faded lands on the wrong side of it. */
-  color: var(--apexmaps-fg);
+  color: var(--_apexmaps-fg);
   cursor: pointer;
   /* iOS paints a grey block over a tapped control, which on a 28px button in the
      corner of a map reads as a rendering fault. The hover rule is the feedback. */
@@ -789,17 +796,17 @@
 }
 
 .apexmaps-zoom-button + .apexmaps-zoom-button {
-  border-top: 1px solid var(--apexmaps-border);
+  border-top: 1px solid var(--_apexmaps-border);
 }
 
 /* The cell, not the group, so a hover says which control is under the pointer.
    The group's own fade is a different signal: "the whole thing is live now". */
 .apexmaps-zoom-button:hover:not(:disabled) {
-  background: var(--apexmaps-border);
+  background: var(--_apexmaps-border);
 }
 
 .apexmaps-zoom-button:focus-visible {
-  outline: 2px solid var(--apexmaps-focus);
+  outline: 2px solid var(--_apexmaps-focus);
   outline-offset: -2px;
 }
 

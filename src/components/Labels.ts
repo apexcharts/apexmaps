@@ -159,7 +159,7 @@ export class Labels {
         text.setAttribute('paint-order', 'stroke')
         text.setAttribute(
           'stroke',
-          style.haloColor || 'var(--apexmaps-halo, rgba(255,255,255,0.85))',
+          style.haloColor || 'var(--_apexmaps-halo, rgba(255,255,255,0.85))',
         )
         text.setAttribute('stroke-width', String(style.haloWidth ?? 2.5))
         text.setAttribute('stroke-linejoin', 'round')
