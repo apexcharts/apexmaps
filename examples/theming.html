@@ -53,9 +53,12 @@
         <p class="note">
           <code>theme.mode</code> is <code>'light'</code>, <code>'dark'</code> or <code>'auto'</code>.
           Dark mode is a class on the container rather than only a media query, so a dashboard can force
-          it independently of the operating system, and <code>'auto'</code> follows
-          <code>prefers-color-scheme</code>. The palette is unchanged: what changes is the chrome, the
-          no-data colour and the text.
+          it independently of the operating system. <code>'auto'</code> resolves
+          <code>prefers-color-scheme</code> at render and does not subscribe to it: the buttons below call
+          <code>updateOptions</code>, which is what re-resolves it, so a map left alone keeps the mode it
+          opened with even after the OS preference changes. To follow the OS, re-apply the mode from a
+          <code>matchMedia('(prefers-color-scheme: dark)')</code> change listener. The palette is
+          unchanged: what changes is the chrome, the no-data colour and the text.
         </p>
         <div class="row">
           <button data-mode="light">light</button>
