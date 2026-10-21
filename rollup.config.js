@@ -11,8 +11,10 @@ const production = !process.env.ROLLUP_WATCH
 const EXTENSIONS = ['.ts', '.js', '.json']
 
 /**
- * Inlines `import './ApexMaps.css'` as an injected <style> tag and also emits
- * the raw stylesheet to dist so consumers can import it separately.
+ * Inlines `import css from './ApexMaps.css'` as the stylesheet's text, which
+ * each map injects into its own root when it mounts (the document head, or the
+ * shadow root it renders in), and also emits the raw stylesheet to dist so
+ * consumers can import it separately.
  */
 function cssInline(emitAsset = true) {
   let collected = ''
@@ -28,16 +30,9 @@ function cssInline(emitAsset = true) {
       const css = fs.readFileSync(id, 'utf8')
       collected += css
       const json = JSON.stringify(css)
-      // Guard on `document`: the bundle must stay importable under SSR.
-      return `
-        if (typeof document !== 'undefined' && !document.getElementById('apexmaps-styles')) {
-          var s = document.createElement('style')
-          s.id = 'apexmaps-styles'
-          s.textContent = ${json}
-          document.head.appendChild(s)
-        }
-        export default ${json}
-      `
+      // Text only, no side effect: injecting at module load put the sheet in
+      // document.head, which a map inside a shadow root never sees.
+      return `export default ${json}`
     },
     generateBundle() {
       if (!collected || !emitAsset) return

@@ -9,10 +9,10 @@
  * @module ApexMaps
  */
 
-import { LicenseManager, Watermark } from 'apex-commons'
+import { injectStyle, LicenseManager, Watermark } from 'apex-commons'
 import { geoGraticule } from 'd3-geo'
 
-import './ApexMaps.css'
+import css from './ApexMaps.css'
 import { BaseChart } from './core/BaseChart'
 import { buildConfig, applyResponsive, merge, mergeOptions } from './core/Config'
 import { A11y } from './core/A11y'
@@ -257,6 +257,9 @@ class ApexMaps extends BaseChart {
    */
   private _destroyed = false
 
+  /** Releases this map's use of the injected stylesheet. */
+  private _releaseCss: (() => void) | null = null
+
   /** Levels drilled into, outermost first. Empty at the top level. */
   readonly drillPath: { key: string; name?: string; mapId?: string }[] = []
 
@@ -470,6 +473,10 @@ class ApexMaps extends BaseChart {
 
   private _mountShell(): void {
     const { chart } = this.config
+    // The stylesheet goes into the root the map renders in (the document head,
+    // or its shadow root, which a head stylesheet never reaches), once per
+    // root. The last map destroyed in that root removes it.
+    if (!this._releaseCss) this._releaseCss = injectStyle(this.element, 'apexmaps-styles', css)
     this.element.classList.add('apexmaps')
     this.element.classList.toggle('apexmaps--dark', this._isDark())
     this._applyStateVars()
@@ -3740,6 +3747,8 @@ class ApexMaps extends BaseChart {
   /** Tear down: listeners, observers, animation frames, DOM. */
   override destroy(): void {
     this._destroyed = true
+    this._releaseCss?.()
+    this._releaseCss = null
     if (this._renderRaf !== null) cancelAnimationFrame(this._renderRaf)
     if (this._resizeRaf !== null) cancelAnimationFrame(this._resizeRaf)
     if (this._rotateRaf !== null) cancelAnimationFrame(this._rotateRaf)
