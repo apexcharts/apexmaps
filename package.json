@@ -1,6 +1,6 @@
 {
   "name": "apexmaps",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "type": "module",
   "description": "Interactive geographic data visualization and storytelling for the ApexCharts ecosystem",
   "main": "dist/apexmaps.cjs",
