@@ -199,7 +199,7 @@ describe('the zone contract', () => {
 
     // A camera move from outside the zone, as a pointer listener's would be.
     TestBed.inject(NgZone).runOutsideAngular(() =>
-      fixture.componentInstance.map()!.camera.panBy(10, 0),
+      fixture.componentInstance.map()!.camera!.panBy(10, 0),
     )
 
     expect(seen).toEqual([false])
