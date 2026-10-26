@@ -539,3 +539,71 @@ describe('cluster count legibility', () => {
     expect(countLabel()?.getAttribute('fill')).toBe('#1a1a1a')
   })
 })
+
+describe('markers follow the projection', () => {
+  /**
+   * Reported against 1.1.1 (#1): a marker series stayed at the pixel positions it
+   * had before a resize, while a bubble series fed the same coordinates moved.
+   * `_reprojectSeries` listed every point series except markers, so a resize (and
+   * a globe turning, which runs the same method) never reached them.
+   */
+  const cities = [
+    { lon: -20, lat: 10, name: 'West', value: 1 },
+    { lon: 0, lat: 0, name: 'Middle', value: 1 },
+    { lon: 25, lat: -12, name: 'East', value: 1 },
+  ] as MarkerDatum[]
+
+  const twice = (projection: 'equirectangular' | 'orthographic' = 'equirectangular') =>
+    ({
+      geo: { map: WORLD, projection },
+      series: [
+        { type: 'bubble' as const, name: 'Bubbles', data: cities },
+        { type: 'marker' as const, name: 'Markers', data: cities },
+      ],
+    }) as ApexMapsOptions
+
+  // Bubble centres and marker translations, in the same screen space, by key.
+  function positions() {
+    const bubbles = [...el.querySelectorAll<SVGCircleElement>('circle.apexmaps-bubble')].map(
+      (c) => [Number(c.getAttribute('cx')), Number(c.getAttribute('cy'))],
+    )
+    const markers = markGroups().map((g) => {
+      const [, x, y] = /translate\(([^,]+),([^)]+)\)/.exec(g.getAttribute('transform') ?? '') ?? []
+      return [Number(x), Number(y)]
+    })
+    return { bubbles, markers }
+  }
+
+  function expectAligned() {
+    const { bubbles, markers } = positions()
+    expect(markers).toHaveLength(cities.length)
+    expect(bubbles).toHaveLength(cities.length)
+    markers.forEach(([x, y], i) => {
+      expect(x).toBeCloseTo(bubbles[i][0], 3)
+      expect(y).toBeCloseTo(bubbles[i][1], 3)
+    })
+  }
+
+  it('sit on their bubbles after a resize', async () => {
+    await render(twice())
+    expectAligned()
+    const before = positions().markers
+
+    await map!.updateOptions({ chart: { width: 400, height: 250 } })
+
+    expect(positions().markers).not.toEqual(before)
+    expectAligned()
+  })
+
+  it('turn with the globe', async () => {
+    await render(twice('orthographic'))
+    expectAligned()
+    const before = positions().markers
+
+    map!.rotateTo([15, 5, 0])
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(positions().markers).not.toEqual(before)
+    expectAligned()
+  })
+})

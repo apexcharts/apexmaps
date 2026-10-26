@@ -2781,6 +2781,9 @@ class ApexMaps extends BaseChart {
         series instanceof BubbleSeries ||
         series instanceof ArcSeries ||
         series instanceof LineSeries ||
+        // Markers cache world positions like bubbles do, and also drop their
+        // cluster cache here, so the next draw reclusters against the new ones.
+        series instanceof MarkerSeries ||
         // A hexbin bins in world space, so a new projection is new world
         // coordinates and the whole lattice has to be rebuilt, not just moved.
         series instanceof HexbinSeries ||
