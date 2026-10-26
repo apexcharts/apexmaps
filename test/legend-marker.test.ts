@@ -243,6 +243,51 @@ describe('legend.position', () => {
     expect(plot().style.width).toBe('800px')
   })
 
+  /**
+   * Reported against 1.1.1 (#3): at a container width ending in .5px or more the
+   * plot was rounded up, plot plus legend overflowed the row by under a pixel,
+   * and the row's `flex-wrap` moved the legend below the map.
+   */
+  it('never sizes the plot wider than the room beside a side legend', async () => {
+    for (const width of [800, 800.4, 800.5, 800.9]) {
+      sizeContainer(width, 300.5)
+      await render({ chart: { width: '100%', height: '100%' }, legend: { position: 'right' } })
+      expect(plot().style.width, `${width}px`).toBe('620px')
+      expect(plot().style.height, `${width}px`).toBe('300px')
+      map?.destroy()
+      map = null
+    }
+  })
+
+  it('relayouts when the container shrinks by part of a pixel', async () => {
+    let notify = () => {}
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(cb: () => void) {
+          notify = cb
+        }
+        observe() {}
+        disconnect() {}
+      },
+    )
+    sizeContainer(801, 300)
+    await render({ chart: { width: '100%', height: 300 }, legend: { position: 'right' } })
+    expect(plot().style.width).toBe('621px')
+
+    // Half a pixel narrower: a 621px plot no longer fits beside the legend.
+    sizeContainer(800.5, 300)
+    notify()
+    await new Promise((r) => setTimeout(r, 10))
+    expect(plot().style.width).toBe('620px')
+
+    // A pixel wider is not worth a relayout: the plot still fits.
+    sizeContainer(801.5, 300)
+    notify()
+    await new Promise((r) => setTimeout(r, 10))
+    expect(plot().style.width).toBe('620px')
+  })
+
   it('re-measures the plot when the legend moves after render', async () => {
     sizeContainer(800)
     await render({ chart: { width: '100%', height: 300 }, legend: { position: 'bottom' } })

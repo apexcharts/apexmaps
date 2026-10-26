@@ -527,14 +527,7 @@ class ApexMaps extends BaseChart {
   }
 
   private _measure(): void {
-    const { chart } = this.config
-    const rect = this.element.getBoundingClientRect()
-    // A legend down the side takes its column out of the container before the
-    // plot is sized. Measuring the container and then putting a legend beside
-    // the plot is how a map ends up wider than the element it was given.
-    const available = Math.max(1, (rect.width || 0) - this._reservedLegendWidth())
-    const width = Math.max(1, Math.round(resolveSize(chart.width, available, 600)))
-    const height = Math.max(1, Math.round(resolveSize(chart.height, rect.height || 0, 400)))
+    const { width, height } = this._plotSize()
 
     // Responsive overrides resolve against the measured width, so a legend
     // position or a label threshold can differ on mobile.
@@ -545,6 +538,27 @@ class ApexMaps extends BaseChart {
       this.plot.style.height = `${height}px`
     }
     this._applyLegendLayout()
+  }
+
+  /**
+   * The plot's whole-pixel size in the container as it is now.
+   *
+   * A legend down the side takes its column out of the container before the
+   * plot is sized. Measuring the container and then putting a legend beside
+   * the plot is how a map ends up wider than the element it was given.
+   *
+   * Floored, not rounded: in a 600.5px row a side legend leaves 420.5px, and a
+   * 421px plot beside it overflows the row by half a pixel, which the root's
+   * `flex-wrap` answers by moving the legend onto a line of its own.
+   */
+  private _plotSize(): { width: number; height: number } {
+    const { chart } = this.config
+    const rect = this.element.getBoundingClientRect()
+    const available = Math.max(1, (rect.width || 0) - this._reservedLegendWidth())
+    return {
+      width: Math.max(1, Math.floor(resolveSize(chart.width, available, 600))),
+      height: Math.max(1, Math.floor(resolveSize(chart.height, rect.height || 0, 400))),
+    }
   }
 
   /** Column width a left or right legend claims, and zero for top or bottom. */
@@ -2656,9 +2670,11 @@ class ApexMaps extends BaseChart {
     if (!isFluid) return
 
     this._resizeObserver = new ResizeObserver(() => {
-      const rect = this.element.getBoundingClientRect()
-      const width = Math.max(1, Math.round(resolveSize(this.config.chart.width, rect.width, 600)))
-      if (Math.abs(width - this.viewport.width) < 2) return
+      // Measured the way `_measure` will, legend column and all, or a side legend
+      // makes every notification look like a 180px change. A pixel more room is
+      // ignored, but any less is not: the plot no longer fits beside the legend.
+      const growth = this._plotSize().width - this.viewport.width
+      if (growth >= 0 && growth < 2) return
 
       // Relayout writes layout (the plot's own width and height), and writing layout
       // inside a ResizeObserver callback re-entering the same observer is what
