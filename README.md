@@ -44,7 +44,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Interaction | Anchored wheel zoom, inertial pan, pinch, double-click zoom, on-screen zoom controls, versor globe dragging on `orthographic`, hover states, click and box selection with dimming, cross-map linked selection&nbsp;†, legend class muting, drilldown with automatic parent detection and a breadcrumb&nbsp;† |
 | Camera | `flyTo` (Van Wijk zoom-and-pan path), `easeTo`, `jumpTo`, `fitBounds`, `frameFeature`, `resetView`, interruptible and retargeting; on azimuthal projections a move to a place turns the sphere (quaternion slerp) instead of panning |
 | Components | Classed, gradient and nested-circle legends with a hover marker that tracks the pointer along the bar, HTML tooltips with edge flipping, collision-avoiding labels with halos, editorial annotations&nbsp;† |
-| Accessibility | ARIA roles, auto-generated description, roving-tabindex keyboard navigation, live-region announcements, optional data table, `prefers-reduced-motion` |
+| Accessibility | ARIA roles, auto-generated description, roving-tabindex keyboard navigation, live-region announcements, optional data table, `prefers-reduced-motion`, and every string the map writes itself (zoom buttons, breadcrumb, table headings, announcements) translatable through `locale` |
 | Platform | TypeScript source with a discriminated `Series` union, ESM / UMD / IIFE builds, emitted declarations, SSR-safe import, 82 kB gzipped core |
 | Frameworks | [`react-apexmaps`](wrappers/react), [`vue-apexmaps`](wrappers/vue) and [`ngx-apexmaps`](wrappers/angular), typed against this package's own options |
 
@@ -338,6 +338,7 @@ const map = new ApexMaps(element, {
   },
   tooltip: { formatter: ({ name, value }) => `${name}: ${value}` },
   a11y: { enabled: true, description: 'auto', dataTable: false },
+  locale: { zoomControls: { zoomIn: 'Agrandir', zoomOut: 'Réduire', reset: 'Réinitialiser' } },
 })
 
 await map.render()

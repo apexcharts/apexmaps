@@ -510,6 +510,30 @@ describe('drilldown', () => {
     expect(el.querySelector('.apexmaps-breadcrumb').textContent).toContain('United States')
   })
 
+  it('names the trail and announces the level in the configured locale', async () => {
+    await render()
+    await map.drillTo('CA')
+    expect(el.querySelector('.apexmaps-breadcrumb').getAttribute('aria-label')).toBe(
+      'Drilldown trail',
+    )
+    expect(map.a11y.liveRegion.textContent).toMatch(
+      /^Showing \d+ counties in .+\. Press Escape to go back\.$/,
+    )
+
+    map.destroy()
+    await render({
+      locale: {
+        breadcrumb: { label: 'ドリルダウンの経路' },
+        drilldown: { announceIn: '{where}の{level}を{count}件表示中' },
+      },
+    })
+    await map.drillTo('CA')
+    expect(el.querySelector('.apexmaps-breadcrumb').getAttribute('aria-label')).toBe(
+      'ドリルダウンの経路',
+    )
+    expect(map.a11y.liveRegion.textContent).toMatch(/^.+のcountiesを\d+件表示中$/)
+  })
+
   it('omits the trail when asked to', async () => {
     await render({
       series: [

@@ -180,6 +180,7 @@ export class PixelSeries extends ChoroplethSeries {
     rotation,
     theme,
     dark = false,
+    noData,
   }: {
     config: PixelSeriesOptions
     geo: NormalizedGeo
@@ -194,8 +195,9 @@ export class PixelSeries extends ChoroplethSeries {
     rotation?: Rotation
     theme?: { palette?: string }
     dark?: boolean
+    noData?: string
   }) {
-    super({ config, geo, index, theme, dark })
+    super({ config, geo, index, theme, dark, noData })
     this.viewport = viewport
     this.openingRotation = rotation
 

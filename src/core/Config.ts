@@ -171,6 +171,9 @@ export function defaults(): ResolvedOptions {
       keyboardFeatureLimit: 500,
     },
 
+    /** The map's own text. Empty: `core/Locale` holds the English defaults. */
+    locale: {},
+
     annotations: { points: [], features: [], areas: [] },
 
     /** Cross-filter group shared with other Apex products. */

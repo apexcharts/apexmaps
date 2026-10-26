@@ -15,6 +15,7 @@
  */
 
 import { html, empty, remove } from '../utils/dom'
+import { DEFAULT_LOCALE } from '../core/Locale'
 
 export interface Crumb {
   label: string
@@ -33,7 +34,7 @@ export class Breadcrumb {
   }
 
   /** Render a trail, or remove it when there is nothing to go back to. */
-  render(crumbs: readonly Crumb[]): void {
+  render(crumbs: readonly Crumb[], label = DEFAULT_LOCALE.breadcrumb.label): void {
     if (crumbs.length < 2) {
       remove(this.nav)
       this.nav = null
@@ -41,14 +42,12 @@ export class Breadcrumb {
     }
 
     if (!this.nav) {
-      this.nav = html('nav', {
-        class: 'apexmaps-breadcrumb',
-        'aria-label': 'Drilldown trail',
-      })
+      this.nav = html('nav', { class: 'apexmaps-breadcrumb' })
       // First child, so the trail sits above the plot however the host has
       // ordered the legend.
       this.container.insertBefore(this.nav, this.container.firstChild)
     }
+    this.nav.setAttribute('aria-label', label)
     empty(this.nav)
 
     crumbs.forEach((crumb, i) => {

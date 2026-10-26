@@ -22,6 +22,7 @@
 
 import { html, svg, remove } from '../utils/dom'
 import type { ZoomControlsOptions, ZoomControlsPosition } from '../types'
+import { DEFAULT_LOCALE, type ResolvedLocale } from '../core/Locale'
 
 const DEFAULT_POSITION: ZoomControlsPosition = 'top-right'
 
@@ -39,6 +40,8 @@ export class ZoomControls {
   readonly onStep: (direction: 1 | -1) => void
   readonly onReset: () => void
   options: ZoomControlsOptions
+  /** Accessible names and tooltips, from `locale.zoomControls`. */
+  labels: ResolvedLocale['zoomControls']
 
   private root: HTMLElement | null = null
   private inButton: HTMLButtonElement | null = null
@@ -53,17 +56,20 @@ export class ZoomControls {
   constructor({
     container,
     options,
+    labels = DEFAULT_LOCALE.zoomControls,
     onStep,
     onReset,
   }: {
     container: HTMLElement
     options: ZoomControlsOptions
+    labels?: ResolvedLocale['zoomControls']
     /** `1` steps in, `-1` steps out, by the configured zoom step. */
     onStep: (direction: 1 | -1) => void
     onReset: () => void
   }) {
     this.container = container
     this.options = options
+    this.labels = labels
     this.onStep = onStep
     this.onReset = onReset
   }
@@ -81,25 +87,21 @@ export class ZoomControls {
     if (this.root && Boolean(this.resetButton) !== wantReset) this.destroy()
 
     if (!this.root) {
-      this.root = html('div', {
-        class: 'apexmaps-zoom',
-        role: 'group',
-        'aria-label': 'Zoom',
-      })
+      this.root = html('div', { class: 'apexmaps-zoom', role: 'group' })
       // Furniture, not geography: whatever the pointer does here, the map beneath
       // must not also read it as a gesture.
       for (const type of ['pointerdown', 'dblclick', 'click'] as const) {
         this.root.addEventListener(type, (event) => event.stopPropagation())
       }
 
-      this.inButton = this._button('Zoom in', plusIcon(), () => this.onStep(1))
-      this.outButton = this._button('Zoom out', minusIcon(), () => this.onStep(-1))
+      this.inButton = this._button(plusIcon(), () => this.onStep(1))
+      this.outButton = this._button(minusIcon(), () => this.onStep(-1))
       this.root.appendChild(this.inButton)
       this.root.appendChild(this.outButton)
       if (wantReset) {
         // Zooming in eight times at the default step passes 40x, and at that scale
         // no gesture takes the reader back to the whole map in one move.
-        this.resetButton = this._button('Reset view', homeIcon(), () => this.onReset())
+        this.resetButton = this._button(homeIcon(), () => this.onReset())
         this.root.appendChild(this.resetButton)
       }
       this.container.appendChild(this.root)
@@ -109,6 +111,12 @@ export class ZoomControls {
       'class',
       `apexmaps-zoom apexmaps-zoom--${this.options.position ?? DEFAULT_POSITION}`,
     )
+    // Written on every render rather than at build, so a locale changed by
+    // `updateOptions` retitles the buttons without rebuilding them.
+    this.root.setAttribute('aria-label', this.labels.group)
+    label(this.inButton, this.labels.zoomIn)
+    label(this.outButton, this.labels.zoomOut)
+    label(this.resetButton, this.labels.reset)
     this._synced = ''
     this.sync(state)
   }
@@ -134,13 +142,8 @@ export class ZoomControls {
     if (this.resetButton) this.resetButton.disabled = !state.moved
   }
 
-  private _button(label: string, icon: SVGElement, onClick: () => void): HTMLButtonElement {
-    const button = html('button', {
-      type: 'button',
-      class: 'apexmaps-zoom-button',
-      'aria-label': label,
-      title: label,
-    })
+  private _button(icon: SVGElement, onClick: () => void): HTMLButtonElement {
+    const button = html('button', { type: 'button', class: 'apexmaps-zoom-button' })
     button.appendChild(icon)
     button.addEventListener('click', onClick)
     return button
@@ -161,6 +164,13 @@ export class ZoomControls {
  * puts the weight, the width and the optical centre of every control outside our
  * hands; `currentColor` strokes keep them consistent and theme-aware.
  */
+/** The accessible name and the hover tooltip, which say the same thing. */
+function label(button: HTMLButtonElement | null, text: string): void {
+  if (!button) return
+  button.setAttribute('aria-label', text)
+  button.setAttribute('title', text)
+}
+
 function icon(children: (Element | null)[]): SVGElement {
   return svg(
     'svg',

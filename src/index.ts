@@ -45,6 +45,7 @@ export type {
   LineDatum,
   LineSeriesOptions,
   LegendOptions,
+  LocaleOptions,
   LonLat,
   MapSource,
   MarkerDatum,

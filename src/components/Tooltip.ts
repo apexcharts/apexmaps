@@ -84,21 +84,20 @@ export class Tooltip {
     datum,
     series,
     format,
+    noData = 'No data',
   }: {
     feature: { key?: string; name?: string }
     value: number | null
     datum: unknown
     series?: { config?: { name?: string }; scale?: { nullLabel?: string } }
     format?: (v: number) => string
+    /** `locale.noData`, for a series with no scale to carry its own label. */
+    noData?: string
   }): string {
     const title = feature.name || feature.key || 'Unknown'
     const seriesName = series?.config?.name
     const formatted =
-      value == null
-        ? (series?.scale?.nullLabel ?? 'No data')
-        : format
-          ? format(value)
-          : String(value)
+      value == null ? (series?.scale?.nullLabel ?? noData) : format ? format(value) : String(value)
 
     const rows: string[] = []
     rows.push(`<div class="apexmaps-tooltip-title">${escapeHtml(title)}</div>`)

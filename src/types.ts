@@ -1106,6 +1106,77 @@ export interface A11yOptions {
   keyboardFeatureLimit?: number
 }
 
+/**
+ * The text the map writes itself, for a page that is not in English.
+ *
+ * Everything else a reader sees or hears is the host's already: series names,
+ * legend titles, `a11y.label` and `a11y.description`, a breadcrumb's
+ * `rootLabel`. These are the strings left over, the ones the map has to supply
+ * because nobody else does. Each key falls back to its English default, so a
+ * page can translate the buttons and leave the rest alone.
+ *
+ * Templates take `{name}` placeholders, filled in where the text is used, so
+ * a translation can put the count or the place wherever its grammar wants it.
+ */
+export interface LocaleOptions {
+  zoomControls?: {
+    /** The group's accessible name. Default `'Zoom'`. */
+    group?: string
+    /** Default `'Zoom in'`. Used for the accessible name and the tooltip. */
+    zoomIn?: string
+    /** Default `'Zoom out'`. */
+    zoomOut?: string
+    /** Default `'Reset view'`. */
+    reset?: string
+  }
+  breadcrumb?: {
+    /** The trail's accessible name. Default `'Drilldown trail'`. */
+    label?: string
+    /**
+     * The first crumb, when neither `drilldown.breadcrumb.rootLabel` nor the
+     * map's own level name gives one. Default `'All areas'`.
+     */
+    root?: string
+  }
+  /** The hidden table `a11y.dataTable` adds. */
+  dataTable?: {
+    /** Caption when the series has no name. Default `'Map data'`. */
+    caption?: string
+    /** First column on a region map. Default `'Area'`. */
+    area?: string
+    /** First column on a point, line or arc map. Default `'Item'`. */
+    item?: string
+    /** Value column when the series has no name. Default `'Value'`. */
+    value?: string
+  }
+  /**
+   * What a region or point with no value reads as: in the tooltip, the data
+   * table, the keyboard announcement and the legend's no-data entry. A series'
+   * own `scale.nullLabel` still wins for its legend. Default `'No data'`.
+   */
+  noData?: string
+  /**
+   * Accessible name of the bubble size legend. `{sizes}` is the list of sizes
+   * it shows. Default `'Circle sizes: {sizes}'`.
+   */
+  sizeLegend?: string
+  /** Announced to screen readers after a drill down or up. */
+  drilldown?: {
+    /**
+     * At the top level. `{count}` areas, `{level}` the level's name.
+     * Default `'Showing {count} {level}.'`
+     */
+    announce?: string
+    /**
+     * Below the top level. `{where}` is the trail, joined with commas.
+     * Default `'Showing {count} {level} in {where}. Press Escape to go back.'`
+     */
+    announceIn?: string
+    /** `{level}` when the map does not name its level. Default `'areas'`. */
+    areas?: string
+  }
+}
+
 export interface ResponsiveRule {
   breakpoint: number
   options: ApexMapsOptions
@@ -1223,6 +1294,8 @@ export interface ApexMapsOptions {
   theme?: { mode?: 'light' | 'dark' | 'auto'; palette?: PaletteName }
   interaction?: InteractionOptions
   a11y?: A11yOptions
+  /** The map's own built-in text. See {@link LocaleOptions}. */
+  locale?: LocaleOptions
   /** Licensed feature: works without a key for evaluation, with a watermark. */
   annotations?: AnnotationOptions
   /**

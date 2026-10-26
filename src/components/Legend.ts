@@ -18,6 +18,7 @@ import { html, svg, remove, empty } from '../utils/dom'
 import { patternSwatch } from '../renderers/Paint'
 import { dotPath, dotTail } from '../geo/PixelGrid'
 import { formatNumber } from '../scales/Scale'
+import { DEFAULT_LOCALE, fillTemplate } from '../core/Locale'
 import type { LegendItem, LegendOptions, PixelShape, SizeLegendEntry } from '../types'
 
 /** Matches `.apexmaps-legend-swatch` in the stylesheet, less its 1px border. */
@@ -47,6 +48,8 @@ export class Legend {
   readonly container: HTMLElement
   /** Re-pointed at the live config on every draw; see `_syncComponentOptions`. */
   options: LegendOptions
+  /** `locale.sizeLegend`: the size key's accessible name, `{sizes}` filled in. */
+  sizeLabel = DEFAULT_LOCALE.sizeLegend
   readonly onToggle: (classIndex: number, muted: boolean, seriesIndex: number) => void
   el: HTMLElement | null = null
   /** Muted class indices, keyed by series index. */
@@ -382,7 +385,9 @@ export class Legend {
         height,
         viewBox: `0 0 ${width} ${height}`,
         role: 'img',
-        'aria-label': `Circle sizes: ${sizes.map((s) => s.label).join(', ')}`,
+        'aria-label': fillTemplate(this.sizeLabel, {
+          sizes: sizes.map((s) => s.label).join(', '),
+        }),
       },
       children,
     )

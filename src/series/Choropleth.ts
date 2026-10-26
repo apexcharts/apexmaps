@@ -48,6 +48,12 @@ export class ChoroplethSeries {
   readonly id: string
   readonly theme: { palette?: string }
   readonly dark: boolean
+  /**
+   * `locale.noData` when the caller set one. Left undefined otherwise, so the
+   * English announcement keeps its mid-sentence "no data" rather than taking
+   * the capitalised legend label.
+   */
+  readonly noData: string | undefined
   readonly warnings: string[] = []
   /** Class indices muted via the legend. */
   readonly mutedClasses = new Set<number>()
@@ -61,6 +67,7 @@ export class ChoroplethSeries {
     index,
     theme,
     dark = false,
+    noData,
   }: {
     /** Series config, already merged with defaults. */
     config: ChoroplethSeriesOptions | PixelSeriesOptions
@@ -70,6 +77,8 @@ export class ChoroplethSeries {
     theme?: { palette?: string }
     /** Dark mode, already resolved from `theme.mode` (`'auto'` included). */
     dark?: boolean
+    /** `locale.noData`, only when the caller set it. */
+    noData?: string
   }) {
     this.config = config
     this.geo = geo
@@ -77,6 +86,7 @@ export class ChoroplethSeries {
     this.id = `s${index}`
     this.theme = theme ?? {}
     this.dark = dark
+    this.noData = noData
 
     this.join = resolveJoin({
       features: geo.features,
@@ -99,6 +109,7 @@ export class ChoroplethSeries {
       // No-data follows the theme, so the legend's last swatch and every
       // unmatched feature stay no-data rather than reading as the top class.
       nullColor: s.nullColor ?? (this.dark ? DARK_NULL_COLOR : undefined),
+      nullLabel: s.nullLabel ?? this.noData,
     }
   }
 
@@ -293,7 +304,7 @@ export class ChoroplethSeries {
   describe(feature: NormalizedFeature): string {
     const name = feature.name ?? feature.key
     const value = this.valueFor(feature)
-    if (value == null) return `${name}, no data`
+    if (value == null) return `${name}, ${this.noData ?? 'no data'}`
     const label = this.legendTitle() ?? 'value'
     return `${name}, ${label} ${Number.isInteger(value) ? value.toLocaleString() : value.toFixed(2)}`
   }

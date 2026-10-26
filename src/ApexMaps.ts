@@ -86,6 +86,7 @@ import { html, remove, resolveSize, pointerPosition, hasDom } from './utils/dom'
 import { FLOW_BUDGET, motionBudget, prefersReducedMotion, resolveSpeed } from './utils/motion'
 import { darken } from './scales/Color'
 import { formatNumber } from './scales/Scale'
+import { resolveLocale, fillTemplate, type ResolvedLocale } from './core/Locale'
 import type { Scale } from './scales/Scale'
 import type { JoinResult } from './data/Join'
 import type { Cluster } from './geo/Cluster'
@@ -510,6 +511,7 @@ class ApexMaps extends BaseChart {
     this.zoomControls = new ZoomControls({
       container: this.plot,
       options: this._zoomControlsOptions(),
+      labels: this._text.zoomControls,
       onStep: (direction) => this._zoomStep(direction),
       onReset: () => void this.resetView(),
     })
@@ -762,6 +764,7 @@ class ApexMaps extends BaseChart {
               rotation: this.viewport.rotatable ? this._initialRotation : undefined,
               theme: this.config.theme,
               dark: this._isDark(),
+              noData: this.config.locale?.noData,
             }),
           )
           break
@@ -774,6 +777,7 @@ class ApexMaps extends BaseChart {
               index: i,
               theme: this.config.theme,
               dark: this._isDark(),
+              noData: this.config.locale?.noData,
             }),
           )
           break
@@ -993,7 +997,10 @@ class ApexMaps extends BaseChart {
     this._applyLegendLayout()
     if (this.labels) this.labels.options = this.config.dataLabels
     if (this.annotations) this.annotations.options = this.config.annotations
-    if (this.legend) this.legend.options = this.config.legend
+    if (this.legend) {
+      this.legend.options = this.config.legend
+      this.legend.sizeLabel = this._text.sizeLegend
+    }
     if (this.tooltip) this.tooltip.options = this.config.tooltip
   }
 
@@ -1189,10 +1196,12 @@ class ApexMaps extends BaseChart {
     }
     this.a11y.setNavigationOrder(this.geo.features, (f) => this.anchors.get(f.index)?.world)
 
+    const text = this._text
+
     if (primary instanceof ChoroplethSeries) {
       this.a11y.renderTable({
-        caption: primary.legendTitle() ?? 'Map data',
-        columns: ['Area', primary.legendTitle() ?? 'Value'],
+        caption: primary.legendTitle() ?? text.dataTable.caption,
+        columns: [text.dataTable.area, primary.legendTitle() ?? text.dataTable.value],
         rows: this.geo.features.map((f) => {
           const v = primary.valueFor(f)
           return [String(f.name ?? f.key), v == null ? primary.scale.nullLabel : v]
@@ -1209,11 +1218,11 @@ class ApexMaps extends BaseChart {
       )
       if (dataSeries?.items.length) {
         this.a11y.renderTable({
-          caption: dataSeries.legendTitle() ?? 'Map data',
-          columns: ['Item', dataSeries.legendTitle() ?? 'Value'],
+          caption: dataSeries.legendTitle() ?? text.dataTable.caption,
+          columns: [text.dataTable.item, dataSeries.legendTitle() ?? text.dataTable.value],
           rows: dataSeries.items.map((item) => [
             String(item.name ?? item.key),
-            item.value == null ? 'No data' : item.value,
+            item.value == null ? text.noData : item.value,
           ]),
         })
       }
@@ -1292,6 +1301,7 @@ class ApexMaps extends BaseChart {
     // the same lie as an enabled `+` at maximum scale.
     if (this.zoomControls) {
       this.zoomControls.options = this._zoomControlsOptions()
+      this.zoomControls.labels = this._text.zoomControls
       this.zoomControls.render(this._zoomControlsState())
     }
   }
@@ -2315,7 +2325,7 @@ class ApexMaps extends BaseChart {
     const rootLabel =
       (typeof setting === 'object' ? setting.rootLabel : undefined) ??
       (this._drillStack[0]?.mapMeta?.levelName as string | undefined) ??
-      'All areas'
+      this._text.breadcrumb.root
 
     const crumbs: Crumb[] = [{ label: rootLabel, up: this.drillPath.length }]
     this.drillPath.forEach((level, i) => {
@@ -2324,16 +2334,15 @@ class ApexMaps extends BaseChart {
         up: this.drillPath.length - 1 - i,
       })
     })
-    this.breadcrumb.render(crumbs)
+    this.breadcrumb.render(crumbs, this._text.breadcrumb.label)
   }
 
   private _drillAnnouncement(): string {
+    const text = this._text.drilldown
     const where = this.drillPath.map((l) => l.name ?? l.key).join(', ')
     const count = this.geo?.features.length ?? 0
-    const level = (this.mapMeta?.levelName as string | undefined)?.toLowerCase() ?? 'areas'
-    return where
-      ? `Showing ${count} ${level} in ${where}. Press Escape to go back.`
-      : `Showing ${count} ${level}.`
+    const level = (this.mapMeta?.levelName as string | undefined)?.toLowerCase() ?? text.areas
+    return fillTemplate(where ? text.announceIn : text.announce, { count, level, where })
   }
 
   private _eventPayload(mark: ResolvedMark) {
@@ -2396,6 +2405,7 @@ class ApexMaps extends BaseChart {
             datum: mark.datum,
             series: mark.series,
             format: this.config.tooltip.valueFormatter,
+            noData: this._text.noData,
           })
 
       // An empty string means "nothing to say about this mark", the same as it
@@ -2921,6 +2931,14 @@ class ApexMaps extends BaseChart {
       JSON.stringify(previous.interaction) !== JSON.stringify(this.config.interaction)
     ) {
       this._attachInteraction()
+    } else if (JSON.stringify(previous.locale) !== JSON.stringify(this.config.locale)) {
+      // The furniture outside `_draw`: the buttons and the trail are built once
+      // and then only retitled, so a new locale has to be handed to them.
+      if (this.zoomControls) {
+        this.zoomControls.labels = this._text.zoomControls
+        this.zoomControls.render(this._zoomControlsState())
+      }
+      if (this.drillPath.length) this._renderBreadcrumb()
     }
 
     this._warnUnimplemented()
@@ -3753,6 +3771,23 @@ class ApexMaps extends BaseChart {
       this.element.classList.remove('apexmaps--enter')
     }, speed + 80)
   }
+
+  /**
+   * The map's own strings, `locale` over the English defaults.
+   *
+   * Resolved from the live config on every read, so `updateOptions` and a
+   * responsive rule reach them, and memoised on the options object because a
+   * tooltip asks on every hover.
+   */
+  private get _text(): ResolvedLocale {
+    const locale = this.config?.locale
+    if (!this._textCache || this._textCache.from !== locale) {
+      this._textCache = { from: locale, text: resolveLocale(locale) }
+    }
+    return this._textCache.text
+  }
+
+  private _textCache: { from: unknown; text: ResolvedLocale } | null = null
 
   private _isDark(): boolean {
     const mode = this.config.theme?.mode
