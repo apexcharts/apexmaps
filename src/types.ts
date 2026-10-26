@@ -932,8 +932,82 @@ export interface GeoOptions {
   sphere?: { show?: boolean; fill?: string; stroke?: string; width?: number }
   /** Fill for the no-data basemap drawn when no series is configured. */
   fill?: string
+  /**
+   * Raster tiles under the map, from a `{z}/{x}/{y}` web-map tile server. Off
+   * unless a `url` is given, so no map requests anything from a third party
+   * that its host did not configure. See {@link TileOptions}.
+   */
+  tiles?: TileOptions
   /** Disputed-territory policy. Declared but not applied yet. */
   boundaries?: 'de-facto' | 'un' | 'neutral-dashed' | 'none'
+}
+
+/** Which tile a request is for. */
+export interface TileCoord {
+  z: number
+  x: number
+  y: number
+}
+
+/** What `tiles.request` may hand back for one tile. */
+export type TileRequest = string | { url: string; headers?: Record<string, string> }
+
+/**
+ * A raster tile underlay, from any server that cuts the world into
+ * `{z}/{x}/{y}` squares of spherical Mercator: an OpenStreetMap-style server,
+ * or a commercial provider's raster endpoint.
+ *
+ * Needs `geo.projection: 'webMercator'` (or `'mercator'`), unturned, because
+ * that is the only projection the tiles were cut in. On any other the layer
+ * stays empty and debug mode says why.
+ *
+ * Tiles sit under every series, inside the same transform as the geometry, so
+ * they pan and zoom with it frame for frame. While they are showing, the
+ * automatic basemap (the land drawn under a point-only map) gives way to them:
+ * its fill fades and its outlines stay. A choropleth is data and keeps its
+ * fill; give it `opacity` if the streets should show through.
+ *
+ * Exports leave the tiles out. An exported image cannot fetch them, and an
+ * exported file that silently depends on a tile server and a key is not one a
+ * reader can open.
+ *
+ * Licensed feature: works without a key for evaluation, with a watermark. The
+ * `viewChange` event is free.
+ */
+export interface TileOptions {
+  /**
+   * Tile URL template. `{z}`, `{x}` and `{y}` are the tile; `{s}` is one of
+   * `subdomains`, picked per tile so a server's hosts share the load.
+   */
+  url: string
+  /** Default `['a', 'b', 'c']`. A string is split into characters. */
+  subdomains?: string | readonly string[]
+  /**
+   * Credit line the tile provider requires, shown in the corner while tiles are
+   * on screen. Plain text.
+   */
+  attribution?: string
+  /**
+   * Web-map zoom level below which no tiles are drawn, so the map shows its own
+   * geometry until the reader has zoomed in this far. Default 0.
+   */
+  minZoom?: number
+  /**
+   * Highest level the server has. Past it the last level is stretched rather
+   * than requested. Default 19.
+   */
+  maxZoom?: number
+  /** Tile edge in pixels at its own level. Default 256. */
+  tileSize?: number
+  /** Default 1. */
+  opacity?: number
+  /**
+   * Called for every tile before it is fetched, to sign a URL, add a key, or
+   * send it through the host's own proxy. Return a URL to load as an image, or
+   * `{ url, headers }` to fetch it with those headers. May return a promise.
+   * Without it, the template URL is loaded as is.
+   */
+  request?: (url: string, tile: TileCoord) => TileRequest | Promise<TileRequest>
 }
 
 export interface LegendOptions {
@@ -1365,6 +1439,30 @@ export interface ApexMapsEventMap {
   rotate: { rotate: [number, number, number] }
   /** The globe came to rest, after any inertial glide. */
   rotateEnd: { rotate: [number, number, number] }
+  /**
+   * What is on screen changed: a pan or zoom frame, a globe turning, a resize.
+   * Synchronous with the frame, so a host drawing its own layer under the map
+   * stays in step with it.
+   */
+  viewChange: ViewChangePayload
+}
+
+export interface ViewChangePayload {
+  /**
+   * Longitude and latitude on screen, `[[west, south], [east, north]]`. Null
+   * when the projection cannot be inverted.
+   */
+  bounds: [LonLat, LonLat] | null
+  /** The place at the middle of the plot. */
+  center: LonLat | null
+  /**
+   * The view as a web-map zoom level, fractional between levels: the `z` a
+   * `{z}/{x}/{y}` tile server would draw it at. Null off an unturned Mercator,
+   * where no tile level matches the map.
+   */
+  zoom: number | null
+  /** Camera scale, as in the `zoom` event. */
+  k: number
 }
 
 export type ApexMapsEventName = keyof ApexMapsEventMap

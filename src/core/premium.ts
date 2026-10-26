@@ -21,6 +21,13 @@
  * `pixelMap` is priced with `gridLayout`: both keep the choropleth's data and
  * replace the way the geography is drawn, which is the line above.
  *
+ * `tiles` is priced with imagery. Raster tiles under the map are what turns a
+ * map into a street-level application, read against the streets past a zoom
+ * threshold, and to a buyer they are the same category as the image fills
+ * already on this list. The library hosts no tiles, so the gate is on the
+ * layer that draws them: `viewChange` stays free, and a host that keeps its own
+ * layer in step with it owes nothing.
+ *
  * `hexbin` is priced with `clustering` rather than with the free point series:
  * both take raw points and hand back an aggregate the reader cannot get back to
  * the originals from, which is a step past drawing the points themselves.
@@ -67,6 +74,7 @@ export const PREMIUM_FEATURES = [
   'presentation',
   'routes',
   'story',
+  'tiles',
   'timePlayback',
   'webgl',
 ] as const

@@ -136,6 +136,10 @@ const ACTIVATES: Partial<Record<PremiumFeature, Record<string, unknown>>> = {
     series: [{ type: 'arc', data: [{ from: [0, 0], to: [8, 8] }] }],
   },
   story: { chart: { context: 'story' } },
+  // Configuring a url is using it, whether or not a tile is in view yet.
+  tiles: {
+    geo: { map: BOX, projection: 'webMercator', tiles: { url: 'https://t.test/{z}/{x}/{y}.png' } },
+  },
 }
 
 /**
@@ -157,6 +161,7 @@ const TURNS_OFF: Partial<Record<PremiumFeature, Record<string, unknown>>> = {
   pixelMap: { series: BASE.series },
   routes: { series: BASE.series },
   story: { chart: { context: 'dashboard' } },
+  tiles: { geo: { tiles: { url: '' } } },
 }
 
 describe('premium gating', () => {

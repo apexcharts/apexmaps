@@ -6,8 +6,8 @@ Interactive geographic data visualization and storytelling for the ApexCharts ec
 > versioning: breaking changes wait for a major. The engine, seven series (choropleth, pixel,
 > bubble, marker, hexbin, arc, line), hex tile layouts and the morph between them, projections, joins,
 > scales, pattern and image fills, legend, tooltip, labels, annotations, camera, geometry registry,
-> drilldown, clustering, selection and accessibility layer are shipped and tested. The story engine
-> and tiles are not built yet.
+> drilldown, clustering, selection, accessibility layer and raster tile underlay are shipped and
+> tested. The story engine is not built yet.
 
 ```js
 import ApexMaps from 'apexmaps'
@@ -37,6 +37,7 @@ classification, legend, label or tooltip configuration: the defaults are meant t
 | Projections | 13 core projections with aliases (`equalEarth` default, `webMercator`, `epsg:3857`, `albersUsa`, `orthographic`, conics, azimuthals), spec objects with `rotate` / `parallels` / `clipAngle`, and `ApexMaps.registerProjection()`&nbsp;† for the rest of `d3-geo-projection` |
 | Geometry | 26 built-in packs: world countries and land, US states and counties, EU NUTS 0-3, and admin-1 for 15 more countries. Lazy, one request per pack, provenance and attribution attached |
 | Layouts | `layout: 'hex'` redraws a region set as a hex tile map (honeycomb, tilegram): one equal cell per region, keyed the way the boundary pack is keyed, so the same data and the same `joinBy` serve both. Toggling it **morphs**, region by region, so the reader can see which cell is which place. Seven ship (US states, Australia, Canada, Germany, Brazil, Japan, Europe), each scored against its boundary pack by `npm run check:layout`; `ApexMaps.registerLayout()` takes your own&nbsp;† |
+| Tiles | `geo.tiles`&nbsp;†: a `{z}/{x}/{y}` raster underlay on `webMercator`, off until you name a provider. It pans and zooms in the same transform as the geometry, keeps the old level on screen until the new one loads, can start from a `minZoom`, and hands every request to your own hook for keys, headers or a proxy. A free `viewChange` event carries the visible bounds and web-map zoom for hosts that draw their own |
 | Data | GeoJSON, TopoJSON, bare geometry, feature arrays; automatic winding repair; join-key auto-detection |
 | Joins | Explicit `joinBy`, mismatch diagnostics with suggestions, FIPS leading-zero repair, opt-in `fuzzyJoin` |
 | Scales | quantile, equal interval, Jenks, threshold, linear, log, sqrt, ordinal; OkLab-sampled ramps; 17 palettes; automatic diverging selection; square-root size scales with nested-circle legends |
@@ -285,6 +286,8 @@ const map = new ApexMaps(element, {
     view: { fit: 'data', padding: 24 },
     graticule: { show: true, step: 20 },
     sphere: { show: true },
+    // On a webMercator map only. Off unless a url is given.
+    // tiles: { url: 'https://tiles.example.com/{z}/{x}/{y}.png', attribution: '…', minZoom: 4 },
   },
   series: [
     {
@@ -353,6 +356,8 @@ map.setSelection(['FRA', 'DEU'])
 map.updateSeries([{ name: 'Unemployment rate', joinBy: ['iso_a3', 'code'], data: next }])
 await map.updateOptions({ geo: { projection: 'mercator' } })
 map.on('featureClick', ({ key, value, datum }) => {})
+map.on('viewChange', ({ bounds, center, zoom }) => {})   // every pan and zoom frame
+map.getView()                   // the same, now
 const spec = map.toSpec()   // JSON-serialisable
 ```
 
@@ -472,12 +477,12 @@ survives the next one.
 | The geometry registry, all 26 packs, provenance and attribution | Drilldown and the breadcrumb (`drilldown`) |
 | Real boundaries, in every pack and projection | Hex tile layouts (`layout: 'hex'`, `registerLayout`) and pixel maps (`type: 'pixel'`) |
 | Tooltips, legends, labels, data labels, states and themes | Editorial annotations (`annotations`) |
-| Zoom, pan, pinch, hover, click and box selection, the camera API | `arc` and `line` route series |
+| Zoom, pan, pinch, hover, click and box selection, the camera API and the `viewChange` event | `arc` and `line` route series |
 | Joins, including `fuzzyJoin`, and the join diagnostics | Linked selection across maps (`link: { group }`) |
 | Scales, palettes, size legends, responsive rules | Story mode (`chart: { context: 'story' }`) |
 | Flat fills, in every scale and palette | Pattern fills (`fill: { pattern }`) and image fills (`fill: { image }`) |
 | PNG and SVG export | Presentation mode, map-to-chart morphing, time playback, the WebGL tier *(not built yet)* |
-| The accessibility layer | |
+| The accessibility layer | Raster tile underlay (`geo.tiles`) |
 
 Without a valid key the licensed features **still work, in full, with a watermark on the map**. That
 is deliberate: evaluate the thing before paying for it, in your own app, with your own data. A valid

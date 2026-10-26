@@ -47,6 +47,7 @@ const EVENTS = [
   'panEnd',
   'rotate',
   'rotateEnd',
+  'viewChange',
 ] as const satisfies readonly ApexMapsEventName[]
 
 /**

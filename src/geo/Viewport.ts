@@ -20,7 +20,7 @@
  */
 
 import { geoPath, geoBounds, geoCentroid } from 'd3-geo'
-import { createProjection, isAzimuthal, isComposite, isGlobe } from './Projections'
+import { createProjection, isAzimuthal, isComposite, isGlobe, isMercator } from './Projections'
 import type { GeoProjection } from './Projections'
 import type { Rotation } from './Versor'
 import type {
@@ -333,6 +333,67 @@ export class Viewport {
    */
   center(): LonLat | null {
     return this.screenToLonLat([this.width / 2, this.height / 2])
+  }
+
+  /**
+   * Whether web-map tiles land on this projection as axis-aligned rectangles.
+   *
+   * Only the Mercator family, and only unturned: a slippy-map tile is a square
+   * of spherical Mercator with Greenwich in the middle, so a rotated, tilted or
+   * mirrored Mercator cuts every tile into a shape the tile is not.
+   */
+  get tileAligned(): boolean {
+    const p = this.projection
+    if (!p || !isMercator(this.projectionName)) return false
+    if (this.rotation.some((angle) => angle !== 0)) return false
+    if (typeof p.angle === 'function' && p.angle() !== 0) return false
+    if (typeof p.reflectX === 'function' && p.reflectX()) return false
+    if (typeof p.reflectY === 'function' && p.reflectY()) return false
+    return true
+  }
+
+  /**
+   * The camera as a web-map zoom level: 0 shows the whole world 256px wide,
+   * and each level doubles it. Fractional between levels. Null when tiles do
+   * not line up with the projection, because the number would then name a
+   * level whose tiles cannot be drawn on this map.
+   */
+  webZoom(): number | null {
+    if (!this.tileAligned || typeof this.projection?.scale !== 'function') return null
+    // d3's Mercator scale is pixels per radian, so the world is 2π of them wide.
+    return Math.log2((2 * Math.PI * this.projection.scale() * this.camera.k) / 256)
+  }
+
+  /**
+   * The longitude and latitude range on screen, as `[[west, south], [east, north]]`.
+   *
+   * Sampled on a grid rather than read off the corners, because on a globe or
+   * a conic the extremes are rarely at the corners, and a corner can be off the
+   * sphere altogether. Exact on Mercator, close elsewhere. Null when the
+   * projection cannot be inverted or nothing on screen is on the sphere.
+   */
+  visibleBounds(): [LonLat, LonLat] | null {
+    if (!this.projection || typeof this.projection.invert !== 'function') return null
+    // On an unturned Mercator the screen's corners are its extremes, and the
+    // wrappers listen on every frame, so the common case is two inversions.
+    const steps = this.tileAligned ? 1 : 8
+    let west = Infinity
+    let east = -Infinity
+    let south = Infinity
+    let north = -Infinity
+    for (let i = 0; i <= steps; i++) {
+      for (let j = 0; j <= steps; j++) {
+        const ll = this.screenToLonLat([(this.width * i) / steps, (this.height * j) / steps])
+        if (!ll) continue
+        const lon = Math.max(-180, Math.min(180, ll[0]))
+        const lat = Math.max(-90, Math.min(90, ll[1]))
+        if (lon < west) west = lon
+        if (lon > east) east = lon
+        if (lat < south) south = lat
+        if (lat > north) north = lat
+      }
+    }
+    return Number.isFinite(west) ? [[west, south], [east, north]] : null
   }
 
   /**

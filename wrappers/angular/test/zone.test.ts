@@ -191,4 +191,18 @@ describe('the zone contract', () => {
     expect(inZone).toBe(true)
     fixture.destroy()
   })
+
+  it('delivers viewChange outside the zone, so a pan frame runs no change detection', async () => {
+    const fixture = await mount()
+    const seen: boolean[] = []
+    fixture.componentInstance.viewChange.subscribe(() => seen.push(NgZone.isInAngularZone()))
+
+    // A camera move from outside the zone, as a pointer listener's would be.
+    TestBed.inject(NgZone).runOutsideAngular(() =>
+      fixture.componentInstance.map()!.camera.panBy(10, 0),
+    )
+
+    expect(seen).toEqual([false])
+    fixture.destroy()
+  })
 })

@@ -46,6 +46,7 @@ const EVENT_PROPS: { [K in ApexMapsEventName]: `on${Capitalize<K>}` } = {
   panEnd: 'onPanEnd',
   rotate: 'onRotate',
   rotateEnd: 'onRotateEnd',
+  viewChange: 'onViewChange',
 }
 
 const EVENT_PROP_NAMES: ReadonlySet<string> = new Set(Object.values(EVENT_PROPS))

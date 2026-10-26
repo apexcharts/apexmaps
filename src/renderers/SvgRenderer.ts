@@ -173,6 +173,8 @@ export class SvgRenderer {
   root: SVGSVGElement | null = null
   world: SVGGElement | null = null
   baseLayer: SVGGElement | null = null
+  /** Raster tiles: above the sphere and graticule, under every series. */
+  tileLayer: SVGGElement | null = null
   marksLayer: SVGGElement | null = null
   /** World space, above the marks: annotation area highlights. */
   regionLayer: SVGGElement | null = null
@@ -231,12 +233,14 @@ export class SvgRenderer {
     this.paints = new PaintRegistry(this.defs)
     this.world = svg('g', { class: 'apexmaps-world' })
     this.baseLayer = svg('g', { class: 'apexmaps-layer-base' })
+    this.tileLayer = svg('g', { class: 'apexmaps-layer-tiles' })
     this.marksLayer = svg('g', { class: 'apexmaps-layer-marks' })
     this.regionLayer = svg('g', { class: 'apexmaps-layer-regions' })
     this.symbolLayer = svg('g', { class: 'apexmaps-layer-symbols' })
     this.overlayLayer = svg('g', { class: 'apexmaps-layer-overlay' })
 
     this.world.appendChild(this.baseLayer)
+    this.world.appendChild(this.tileLayer)
     this.world.appendChild(this.marksLayer)
     this.world.appendChild(this.regionLayer)
     root.appendChild(this.defs)

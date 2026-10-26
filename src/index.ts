@@ -72,8 +72,12 @@ export type {
   SizeLegendEntry,
   StatesOptions,
   StrokeOptions,
+  TileCoord,
+  TileOptions,
+  TileRequest,
   TooltipContext,
   TooltipOptions,
+  ViewChangePayload,
   ZoomControlsOptions,
   ZoomControlsPosition,
 } from './types'

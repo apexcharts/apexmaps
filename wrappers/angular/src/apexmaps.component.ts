@@ -114,6 +114,13 @@ export class ApexMapsComponent {
   readonly panEnd = output<ApexMapsEventMap['panEnd']>()
   readonly rotate = output<ApexMapsEventMap['rotate']>()
   readonly rotateEnd = output<ApexMapsEventMap['rotateEnd']>()
+  /**
+   * Fires on every pan and zoom frame, so it is delivered outside the zone:
+   * running it inside would put a change detection pass on every frame of
+   * every pan, for every app, bound or not. Write a signal in the handler and
+   * the view follows, since signal writes schedule change detection on their own.
+   */
+  readonly viewChange = output<ApexMapsEventMap['viewChange']>()
 
   /**
    * The live instance, for the imperative API (`drillTo`, `exportPNG`,
@@ -167,8 +174,13 @@ export class ApexMapsComponent {
         panEnd: this.panEnd,
         rotate: this.rotate,
         rotateEnd: this.rotateEnd,
+        viewChange: this.viewChange,
       }
       for (const event of Object.keys(outputs) as ApexMapsEventName[]) {
+        if (event === 'viewChange') {
+          map.on(event, (payload) => outputs.viewChange.emit(payload))
+          continue
+        }
         map.on(event, ((payload: never) => {
           // Back inside the zone: the event originated from an unpatched
           // listener, so without this a handler that sets component state would

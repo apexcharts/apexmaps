@@ -127,6 +127,13 @@ export function isCustomProjection(name: string): boolean {
   return registry.has(name) && !BUILT_IN.has(name)
 }
 
+/** The spherical Mercator that web-map tiles are cut in, under each of its names. */
+const MERCATOR = new Set(['mercator', 'webMercator', 'epsg:3857'])
+
+export function isMercator(name: string): boolean {
+  return MERCATOR.has(name)
+}
+
 /**
  * Projections whose output is already a fixed composite layout. They must not
  * be re-centred or rotated: `geoAlbersUsa` in particular translates Alaska and

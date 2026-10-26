@@ -87,6 +87,7 @@ import { FLOW_BUDGET, motionBudget, prefersReducedMotion, resolveSpeed } from '.
 import { darken } from './scales/Color'
 import { formatNumber } from './scales/Scale'
 import { resolveLocale, fillTemplate, type ResolvedLocale } from './core/Locale'
+import { TileLayer } from './renderers/TileLayer'
 import type { Scale } from './scales/Scale'
 import type { JoinResult } from './data/Join'
 import type { Cluster } from './geo/Cluster'
@@ -113,6 +114,7 @@ import type {
   Series,
   WorldBounds,
   WorldPoint,
+  ViewChangePayload,
   ZoomControlsOptions,
 } from './types'
 
@@ -303,6 +305,8 @@ class ApexMaps extends BaseChart {
   private _initialRotation: Rotation = [0, 0, 0]
   private _enterTimer: ReturnType<typeof setTimeout> | null = null
   private _attribution: HTMLElement | null = null
+  /** `geo.tiles`. Built with the renderer, empty until a URL is configured. */
+  private tiles: TileLayer | null = null
   private _a11yMounted = false
   private _warnedLinkKeys = false
   private readonly _drillStack: DrillFrame[] = []
@@ -391,12 +395,14 @@ class ApexMaps extends BaseChart {
     this._attachInteraction()
     this._observeResize()
     this._warnUnimplemented()
+    this._warnTiles()
     this._reportDiagnostics()
     this._checkPremium()
     this._evaluateLicense()
 
     this.rendered = true
     this.emit('rendered', { instance: this })
+    this._emitViewChange()
     return this
   }
 
@@ -648,6 +654,19 @@ class ApexMaps extends BaseChart {
       this.renderer.resize(this.viewport.width, this.viewport.height)
     }
 
+    if (!this.tiles && this.renderer.tileLayer) {
+      this.tiles = new TileLayer({
+        layer: this.renderer.tileLayer,
+        viewport: this.viewport,
+        onVisibility: (visible) => {
+          // The basemap under a point map gives way to the streets (see the
+          // stylesheet), and the provider's credit shows only while they do.
+          this.element.classList.toggle('apexmaps--tiles', visible)
+          this._drawAttribution()
+        },
+      })
+    }
+
     if (!this.camera) {
       this.camera = new Camera({
         viewport: this.viewport,
@@ -832,6 +851,7 @@ class ApexMaps extends BaseChart {
     this._syncComponentOptions()
     this._applyMotionVars()
     this._drawBaseLayers()
+    this._drawTiles()
     this._drawGeometry()
 
     this._bindMarkEvents()
@@ -839,6 +859,23 @@ class ApexMaps extends BaseChart {
     this._drawLegend()
     this._drawAttribution()
     this._setupA11y()
+  }
+
+  /**
+   * Hand the tile layer the live options and re-place its tiles. Every caller
+   * of `_draw` has either refitted the projection or may have changed
+   * `geo.tiles`, and re-placing the twenty-odd tiles on screen is cheap.
+   */
+  private _drawTiles(): void {
+    if (!this.tiles) return
+    this.tiles.setOptions(this.config.geo.tiles)
+    this.tiles.refresh()
+  }
+
+  /** Debug-mode note when tiles are configured on a projection they cannot draw on. */
+  private _warnTiles(): void {
+    const problem = this.tiles?.problem
+    if (problem) this.warnings.push(problem)
   }
 
   /**
@@ -1140,7 +1177,10 @@ class ApexMaps extends BaseChart {
   }
 
   private _drawAttribution(): void {
-    const text = attributionFor([this.mapId])
+    // The tile provider's credit first, while its tiles are on screen: it is the
+    // larger share of what the reader is looking at.
+    const tileCredit = this.tiles?.visible ? this.config.geo.tiles?.attribution : undefined
+    const text = [tileCredit, attributionFor([this.mapId])].filter(Boolean).join(' · ')
     remove(this._attribution)
     this._attribution = null
     if (!text) return
@@ -2627,6 +2667,10 @@ class ApexMaps extends BaseChart {
     // Null except during a level change, where it is the outgoing level being
     // carried along by the same move that settles the incoming one.
     this._ghost?.track(this.viewport.camera)
+    // The tiles ride the world transform already; this only fetches the ones a
+    // pan has just uncovered, or schedules a new level after a zoom.
+    this.tiles?.update()
+    this._emitViewChange()
 
     // Clustered markers depend on the camera scale, but only in steps: the level
     // is quantized, so panning never reclusters and a smooth zoom crosses a
@@ -2730,6 +2774,7 @@ class ApexMaps extends BaseChart {
       width: this.viewport.width,
       height: this.viewport.height,
     })
+    this._emitViewChange()
   }
 
   /**
@@ -2767,6 +2812,7 @@ class ApexMaps extends BaseChart {
   private _onRotate(immediate = false): void {
     if (this._destroyed || !this.rendered) return
     this.emit('rotate', { rotate: this.viewport.rotation })
+    this._emitViewChange()
     // A spin is navigation, so it is what the reset button offers to undo.
     this.zoomControls?.sync(this._zoomControlsState())
 
@@ -2792,6 +2838,8 @@ class ApexMaps extends BaseChart {
     this._reprojectSeries()
     this._rebuildAnchors()
     this._drawBaseLayers()
+    // A turned Mercator no longer matches the tiles, so this is what clears them.
+    this.tiles?.update()
     this._drawGeometry()
     // Marks and symbols may have been created or pruned as geography crossed the
     // limb, and the delegated listeners live on the layer, so this is a no-op
@@ -2942,6 +2990,7 @@ class ApexMaps extends BaseChart {
     }
 
     this._warnUnimplemented()
+    this._warnTiles()
     this._reportDiagnostics()
     this._checkPremium()
     this._evaluateLicense()
@@ -3214,6 +3263,7 @@ class ApexMaps extends BaseChart {
     if (this.rendered) {
       this._redrawRotated()
       this.emit('rotate', { rotate: this.viewport.rotation })
+      this._emitViewChange()
     }
     return this
   }
@@ -3355,6 +3405,31 @@ class ApexMaps extends BaseChart {
 
   // --- events ---------------------------------------------------------------
 
+  /**
+   * What is on screen now, in the shape the `viewChange` event carries. For a
+   * host that subscribes after the first render and needs a starting point.
+   */
+  getView(): ViewChangePayload {
+    return {
+      bounds: this.viewport.visibleBounds(),
+      center: this.viewport.center(),
+      zoom: this.viewport.webZoom(),
+      k: this.viewport.camera.k,
+    }
+  }
+
+  /**
+   * `viewChange`, but only when someone is listening: the bounds are sampled
+   * across the plot, which is cheap once and wasteful sixty times a second for
+   * nobody.
+   */
+  private _emitViewChange(): void {
+    if (!this.rendered || this._destroyed) return
+    const configured = typeof this.config.chart?.events?.viewChange === 'function'
+    if (!configured && !this._listeners.viewChange?.length) return
+    this.emit('viewChange', this.getView())
+  }
+
   on<K extends ApexMapsEventName>(event: K, handler: (payload: ApexMapsEventMap[K]) => void): this {
     if (typeof handler !== 'function') return this
     const list = (this._listeners[event] ??= [])
@@ -3480,6 +3555,10 @@ class ApexMaps extends BaseChart {
 
     if (config.chart.context === 'story') this._requirePremium('story')
     if (config.link?.group) this._requirePremium('linkGroup')
+    // Configured, not drawn: a map below `minZoom`, or briefly on a projection
+    // the tiles cannot use, would otherwise gain and lose the watermark as the
+    // reader zooms, and the answer would stop being recomputable from the config.
+    if (config.geo?.tiles?.url) this._requirePremium('tiles')
 
     const annotations = config.annotations
     if (
@@ -3844,6 +3923,8 @@ class ApexMaps extends BaseChart {
     this.breadcrumb?.destroy()
     this.zoomControls?.destroy()
     this.a11y?.destroy()
+    this.tiles?.destroy()
+    this.tiles = null
     this.renderer?.destroy()
     remove(this._attribution)
     remove(this.plot)
@@ -3852,6 +3933,7 @@ class ApexMaps extends BaseChart {
       'apexmaps',
       'apexmaps--dark',
       'apexmaps--enter',
+      'apexmaps--tiles',
       'apexmaps--legend-top',
       'apexmaps--legend-bottom',
       'apexmaps--legend-left',

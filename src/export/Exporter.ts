@@ -133,6 +133,12 @@ export function serializeSvg(root: SVGSVGElement, options: ExportOptions = {}): 
   clone.style.touchAction = ''
   clone.removeAttribute('tabindex')
 
+  // Raster tiles stay behind. An SVG drawn as an image for the PNG path may not
+  // fetch anything, and a file that needs a tile server, often a key, and for
+  // header-signed tiles a page-local blob URL, does not open anywhere else.
+  // Removed after the style walk, which pairs elements by document order.
+  for (const layer of Array.from(clone.querySelectorAll('.apexmaps-layer-tiles'))) layer.remove()
+
   if (options.background) {
     const rect = clone.ownerDocument.createElementNS(SVG_NS, 'rect')
     rect.setAttribute('width', '100%')

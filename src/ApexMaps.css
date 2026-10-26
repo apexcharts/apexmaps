@@ -822,6 +822,46 @@
   cursor: default;
 }
 
+/* --- tiles ---------------------------------------------------------------- */
+
+/* A tile fades in when it arrives rather than popping, because tiles arrive in
+   whatever order the network delivers them and a grid snapping in square by
+   square reads as the map breaking. */
+.apexmaps-tile {
+  opacity: 0;
+  transition: opacity 0.2s ease-out;
+}
+
+.apexmaps-tile.is-loaded {
+  opacity: 1;
+}
+
+/* The land drawn under a point-only map is a stand-in for a basemap, so it
+   gives way to a real one while the tiles are showing: the fill fades and the
+   outlines stay. Data series are not touched; a choropleth that should let the
+   streets through says so with its own opacity. */
+.apexmaps--tiles .apexmaps-series[data-series='base'] .apexmaps-feature {
+  fill-opacity: 0;
+}
+
+.apexmaps-series[data-series='base'] .apexmaps-feature {
+  /* The list on `.apexmaps-feature`, plus the fade. A transition is one
+     property, so naming only the fade here would drop the others. */
+  transition:
+    fill var(--apexmaps-anim, 220ms) ease-out,
+    fill-opacity var(--apexmaps-anim, 220ms) ease-out,
+    stroke-opacity var(--apexmaps-anim, 220ms) ease-out,
+    opacity 150ms ease-out;
+}
+
+/* After the rules above, which it has to beat at the same specificity. */
+@media (prefers-reduced-motion: reduce) {
+  .apexmaps-tile,
+  .apexmaps-series[data-series='base'] .apexmaps-feature {
+    transition: none;
+  }
+}
+
 /* --- attribution ---------------------------------------------------------- */
 
 .apexmaps-attribution {
