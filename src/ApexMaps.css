@@ -387,9 +387,14 @@
 }
 
 /* A side legend is a column of fixed width, so the plot can be measured against
-   what is left over rather than fighting it for the same pixels. */
+   what is left over rather than fighting it for the same pixels. The width has
+   to include the padding, since that is the number the plot is measured
+   against: on a page without a border-box reset the column would otherwise be
+   12px wider than the space left for it, and the row would wrap it below the
+   map at every width. */
 .apexmaps-legend--left,
 .apexmaps-legend--right {
+  box-sizing: border-box;
   width: var(--apexmaps-legend-width, 180px);
   flex: 0 0 var(--apexmaps-legend-width, 180px);
   padding: 2px 6px;

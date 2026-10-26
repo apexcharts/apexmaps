@@ -80,3 +80,20 @@ describe('the public --apexmaps-* names are only ever read', () => {
     expect(themeable).toEqual([])
   })
 })
+
+describe('side legend box model', () => {
+  /**
+   * Reported against 1.1.1 (#2). The plot is measured against the container
+   * minus `--apexmaps-legend-width`, so the legend's box has to be exactly that
+   * wide, padding included. Under the browser's `content-box` default it was
+   * 12px wider, and on any page without a border-box reset the legend wrapped
+   * below the map at every width.
+   */
+  it('sizes the side legend column by its border box', () => {
+    const start = CSS.indexOf('.apexmaps-legend--left,\n.apexmaps-legend--right {')
+    expect(start).toBeGreaterThan(-1)
+    const block = CSS.slice(start, CSS.indexOf('}', start))
+    expect(block).toContain('box-sizing: border-box;')
+    expect(block).toContain('width: var(--apexmaps-legend-width, 180px);')
+  })
+})
