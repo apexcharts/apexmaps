@@ -149,6 +149,40 @@ describe('geo.tiles', () => {
     expect(levels().map((g) => g.getAttribute('data-z'))).toEqual(['2'])
   })
 
+  /**
+   * Reported while documenting 1.2.0: the level was chosen as if every server
+   * cut 256px tiles, so a 512px server was asked one level too deep, drawing
+   * each tile at half its size with four times the requests.
+   */
+  it('asks a server with larger tiles for a shallower level, and draws them at their size', async () => {
+    await build({}, { ...TILES, tileSize: 512 })
+    await flush()
+    const zoom = map.viewport.webZoom()
+    expect(levels().map((g) => Number(g.getAttribute('data-z')))).toEqual([Math.round(zoom - 1)])
+    // On screen a tile is within a factor of root two of its own 512px, whatever
+    // the fractional part of the zoom: the point of choosing the level by size.
+    const onScreen = Number(tiles()[0].getAttribute('width')) * map.viewport.camera.k
+    expect(onScreen).toBeGreaterThan(512 / Math.SQRT2 - 1)
+    expect(onScreen).toBeLessThan(512 * Math.SQRT2 + 1)
+  })
+
+  it('keeps minZoom in web-map zoom, whatever the tile size', async () => {
+    // minZoom describes the reader's view, not the server's levels, so moving
+    // to 512px tiles must not move the threshold by a level.
+    await build({}, { ...TILES, tileSize: 512 })
+    const zoom = map.viewport.webZoom()
+    map.destroy()
+
+    await build({}, { ...TILES, tileSize: 512, minZoom: zoom - 0.5 })
+    await flush()
+    expect(tiles().length).toBeGreaterThan(0)
+    map.destroy()
+
+    await build({}, { ...TILES, tileSize: 512, minZoom: zoom + 0.5 })
+    await flush()
+    expect(tiles()).toHaveLength(0)
+  })
+
   it('draws nothing on a projection the tiles were not cut in, and says why', async () => {
     await build({ geo: { projection: 'equirectangular' } })
     await flush()

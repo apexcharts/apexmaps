@@ -989,15 +989,20 @@ export interface TileOptions {
   attribution?: string
   /**
    * Web-map zoom level below which no tiles are drawn, so the map shows its own
-   * geometry until the reader has zoomed in this far. Default 0.
+   * geometry until the reader has zoomed in this far. Measured on the view, as
+   * `viewChange` reports it, so it does not move with `tileSize`. Default 0.
    */
   minZoom?: number
   /**
-   * Highest level the server has. Past it the last level is stretched rather
-   * than requested. Default 19.
+   * Highest `{z}` the server has, in its own levels. Past it the last level is
+   * stretched rather than requested. Default 19.
    */
   maxZoom?: number
-  /** Tile edge in pixels at its own level. Default 256. */
+  /**
+   * Tile edge in pixels at its own level. Default 256. Decides which `{z}` is
+   * requested: tiles of 512px cover the view one level shallower than 256px
+   * ones, so each draws at its own size rather than at half of it.
+   */
   tileSize?: number
   /** Default 1. */
   opacity?: number

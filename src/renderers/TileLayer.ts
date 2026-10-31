@@ -128,7 +128,12 @@ export class TileLayer {
       return
     }
 
-    const z = Math.max(0, Math.min(options.maxZoom ?? DEFAULT_MAX_ZOOM, Math.round(zoom)))
+    // Web-map zoom counts in 256px tiles. A server cutting larger ones covers the
+    // same view at a shallower level (512px tiles, one level up), and asking it
+    // for the 256px level draws every tile at half its size, at four times the
+    // requests. `minZoom` above stays in web-map zoom: it describes the view.
+    const level = zoom - Math.log2((options.tileSize ?? 256) / 256)
+    const z = Math.max(0, Math.min(options.maxZoom ?? DEFAULT_MAX_ZOOM, Math.round(level)))
     if (this.level && this.level.z !== z) {
       // Mid-zoom: leave the current level riding the transform and come back
       // once the camera has settled on a level.
