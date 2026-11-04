@@ -356,7 +356,9 @@ export class Scale {
     let stops: string[]
     if (Array.isArray(options.palette)) stops = options.palette.slice()
     else {
-      const p = getPalette(typeof options.palette === 'string' ? options.palette : 'apex')
+      const name = typeof options.palette === 'string' ? options.palette : 'apex'
+      const p = getPalette(name)
+      if (!p) this.warnings.push(`unknown palette "${name}", falling back to "apex"`)
       stops = (p ?? getPalette('apex')!).stops.slice()
     }
     this.paletteKind = 'explicit'

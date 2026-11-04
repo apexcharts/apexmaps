@@ -186,7 +186,7 @@ export class MarkerSeries {
     if (config.colorBy) {
       this.colorScale = createScale(categories, {
         type: 'ordinal',
-        palette: config.palette ?? 'category',
+        palette: config.palette ?? 'apex',
       })
       this.warnings.push(...this.colorScale.warnings)
     }

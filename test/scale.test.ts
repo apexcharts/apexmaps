@@ -200,6 +200,21 @@ describe('createScale', () => {
     expect(scale.color('zzz')).toBe(scale.nullColor)
   })
 
+  it('colours ordinal categories from apex by default, without a warning', () => {
+    const scale = createScale(['a', 'b', 'c'], { type: 'ordinal' })
+    expect(scale.colors).toEqual(['#008FFB', '#00E396', '#FEB019'])
+    expect(scale.warnings).toEqual([])
+    expect(createScale(['a'], { type: 'ordinal', palette: 'okabeIto' }).warnings).toEqual([])
+  })
+
+  it('warns about an unknown ordinal palette, as the numeric scales do', () => {
+    // Before: the same apex colours and no warning, while the same typo on a
+    // numeric scale already warned.
+    const scale = createScale(['a', 'b'], { type: 'ordinal', palette: 'tablaeu' })
+    expect(scale.colors).toEqual(['#008FFB', '#00E396'])
+    expect(scale.warnings).toEqual(['unknown palette "tablaeu", falling back to "apex"'])
+  })
+
   it('handles an empty dataset without throwing', () => {
     const scale = createScale([])
     expect(scale.color(1)).toBeTruthy()

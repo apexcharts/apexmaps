@@ -243,6 +243,22 @@ describe('marker series', () => {
     expect(new Set(items.map((i) => i.color)).size).toBe(2)
   })
 
+  it('colours categories from the apex palette by default, with no palette warning', async () => {
+    const instance = await render({
+      series: [{ type: 'marker', name: 'Sites', data: cities, colorBy: 'category' }],
+    })
+    const series = instance.series[0] as MarkerSeries
+    expect(series.colorScale!.colors).toEqual(['#008FFB', '#00E396'])
+    expect(instance.warnings.filter((w) => w.includes('palette'))).toEqual([])
+  })
+
+  it('warns about a mistyped palette name, as a choropleth does', async () => {
+    const instance = await render({
+      series: [{ type: 'marker', data: cities, colorBy: 'category', palette: 'tablaeu' }],
+    })
+    expect(instance.warnings).toContain('unknown palette "tablaeu", falling back to "apex"')
+  })
+
   it('has no legend when nothing is being encoded by colour', async () => {
     const instance = await render({ series: [{ type: 'marker', data: cities }] })
     expect((instance.series[0] as MarkerSeries).legendItems()).toEqual([])
