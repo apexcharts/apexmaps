@@ -10,7 +10,14 @@
  * @module scales/Scale
  */
 
-import { sampleRamp, rampAt, readableOn } from './Color'
+import {
+  sampleRamp,
+  rampAt,
+  readableOn,
+  colorScopeElement,
+  needsBrowser,
+  withColorScope,
+} from './Color'
 import { getPalette, defaultPaletteFor } from './Palettes'
 import type { PaletteKind } from './Palettes'
 import type { LegendItem, ScaleOptions, ScaleType } from '../types'
@@ -206,6 +213,12 @@ export class Scale {
   paletteKind: PaletteKind | 'explicit' = 'sequential'
   /** Distinct categories, for ordinal scales. */
   categories: string[] = []
+  /**
+   * Where stops only the browser can read (names, `hsl()`, `var()`) resolve:
+   * the map element in scope when the scale was built, re-entered by the calls
+   * that sample the ramp later (a tooltip, an export). Unset for hex stops.
+   */
+  private _colorScope: { el: Element | null } | null = null
 
   constructor(values: readonly unknown[], options: ScaleOptions = {}) {
     const sorted = cleanNumbers(values)
@@ -260,6 +273,7 @@ export class Scale {
     if (options.reverse) stops.reverse()
     this.stops = stops
     this.paletteName = paletteName
+    if (stops.some(needsBrowser)) this._colorScope = { el: colorScopeElement() }
 
     const classes = Math.max(2, Math.min(12, options.classes ?? 5))
     this.classes = classes
@@ -397,7 +411,9 @@ export class Scale {
       } else if (this.type === 'sqrt') {
         t = Math.sqrt(Math.max(0, t))
       }
-      return rampAt(this.stops, t)
+      // Hex stops, the default, take the direct call: this runs per feature.
+      if (!this._colorScope) return rampAt(this.stops, t)
+      return this._inScope(() => rampAt(this.stops, t))
     }
 
     return this.colors[this.classIndex(n)] || this.nullColor
@@ -471,14 +487,20 @@ export class Scale {
   gradientStops(steps = 16): { offset: number; color: string }[] {
     const { from, to } = this._rampWindow()
     const out: { offset: number; color: string }[] = []
-    for (let i = 0; i < steps; i++) {
-      const t = i / (steps - 1)
-      out.push({
-        offset: t,
-        color: rampAt(this.stops, from + (to - from) * t),
-      })
-    }
+    this._inScope(() => {
+      for (let i = 0; i < steps; i++) {
+        const t = i / (steps - 1)
+        out.push({
+          offset: t,
+          color: rampAt(this.stops, from + (to - from) * t),
+        })
+      }
+    })
     return out
+  }
+
+  private _inScope<T>(fn: () => T): T {
+    return this._colorScope ? withColorScope(this._colorScope.el, fn) : fn()
   }
 
   /**

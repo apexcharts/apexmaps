@@ -84,7 +84,7 @@ import { registerPalette, listPalettes, getPalette } from './scales/Palettes'
 import type { Palette } from './scales/Palettes'
 import { html, remove, resolveSize, pointerPosition, hasDom } from './utils/dom'
 import { FLOW_BUDGET, motionBudget, prefersReducedMotion, resolveSpeed } from './utils/motion'
-import { darken } from './scales/Color'
+import { clearColorCache, darken, withColorScope } from './scales/Color'
 import { formatNumber } from './scales/Scale'
 import { resolveLocale, fillTemplate, type ResolvedLocale } from './core/Locale'
 import { TileLayer } from './renderers/TileLayer'
@@ -707,16 +707,7 @@ class ApexMaps extends BaseChart {
     })
   }
 
-  private _buildSeries(): void {
-    if (!this.geo) return
-    // Series ids are positional, so dropping a series shifts the next one into
-    // its id. Tracking the kind too means a bubble replaced by an arc under the
-    // same id has its stale marks cleared rather than left orphaned on screen.
-    const previousKinds = new Map(this.renderTargets.map((s) => [s.id, s.kind]))
-    this.series = []
-
-    const geo = this.geo
-
+  private _constructSeries(geo: NormalizedGeo): void {
     // Switching on `cfg.type` directly is what lets TypeScript narrow the
     // discriminated union: hoisting it into a variable first would erase the
     // narrowing and each constructor would receive the whole union.
@@ -806,8 +797,31 @@ class ApexMaps extends BaseChart {
           )
       }
     })
+  }
+
+  private _buildSeries(): void {
+    if (!this.geo) return
+    // Series ids are positional, so dropping a series shifts the next one into
+    // its id. Tracking the kind too means a bubble replaced by an arc under the
+    // same id has its stale marks cleared rather than left orphaned on screen.
+    const previousKinds = new Map(this.renderTargets.map((s) => [s.id, s.kind]))
+    this.series = []
+
+    const geo = this.geo
+
+    // Colours only the browser can read (names, `hsl()`, `var()`) resolve inside
+    // the map's element, freshly for each build, so a token changed since the
+    // last one is read again. Any it cannot resolve either are reported once.
+    clearColorCache(this.element)
+    const unresolved = new Set<string>()
+    withColorScope(this.element, () => this._constructSeries(geo), unresolved)
 
     for (const s of this.series) this.warnings.push(...s.warnings)
+    for (const c of unresolved) {
+      this.warnings.push(
+        `colour "${c}" could not be resolved; ramps, hover and label contrast use it as written`,
+      )
+    }
 
     // Render targets are the data series, or a single basemap pseudo-series when
     // there are none, so every downstream path (draw, hover, selection, tooltip)
@@ -848,17 +862,21 @@ class ApexMaps extends BaseChart {
   private _draw(): void {
     if (!this.renderer || !this.geo) return
 
-    this._syncComponentOptions()
-    this._applyMotionVars()
-    this._drawBaseLayers()
-    this._drawTiles()
-    this._drawGeometry()
+    // Fills, pattern inks and legend ramps sample colours, and the ones only the
+    // browser can read resolve inside this map (see `_buildSeries`).
+    withColorScope(this.element, () => {
+      this._syncComponentOptions()
+      this._applyMotionVars()
+      this._drawBaseLayers()
+      this._drawTiles()
+      this._drawGeometry()
 
-    this._bindMarkEvents()
-    this._drawOverlay()
-    this._drawLegend()
-    this._drawAttribution()
-    this._setupA11y()
+      this._bindMarkEvents()
+      this._drawOverlay()
+      this._drawLegend()
+      this._drawAttribution()
+      this._setupA11y()
+    })
   }
 
   /**
@@ -2420,7 +2438,13 @@ class ApexMaps extends BaseChart {
         if (states?.strokeWidth != null) el.setAttribute('stroke-width', String(states.strokeWidth))
       } else {
         const base = el.getAttribute('fill')
-        if (base) el.setAttribute('fill', darken(base, states?.brightness ?? 0.08))
+        if (base) {
+          // Resolved afresh: a `var()` fill follows its token live, so the hover
+          // tint must not come from what the token was at the last build.
+          clearColorCache(this.element)
+          const hover = withColorScope(this.element, () => darken(base, states?.brightness ?? 0.08))
+          el.setAttribute('fill', hover)
+        }
         // An explicit hover outline, for features and bubbles. Restored by
         // `_clearHover` to whatever selection state says it should be.
         if (states?.stroke) el.setAttribute('stroke', states.stroke)

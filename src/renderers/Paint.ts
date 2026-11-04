@@ -94,9 +94,11 @@ export type FeaturePaint =
  * legend swatch drawing the same pattern has to reach the same answer.
  */
 export function patternInk(background: string): string {
+  // Opaque ink on a translucent background, as it always was: the tile draws
+  // the background under the ink, so a see-through ink would only wash out.
   return contrastRatio(background, '#ffffff') >= WHITE_INK_MIN_CONTRAST
     ? '#ffffff'
-    : darken(background, 0.35)
+    : darken(background, 0.35, false)
 }
 
 /**

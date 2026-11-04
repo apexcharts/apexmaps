@@ -92,6 +92,8 @@ export class MarkerSeries {
   private cachedLevel: number | null = null
   private cachedValid = false
   private cached: Cluster[] = []
+  /** Count ink on `clusterFill`, fixed for the life of the series. Null when it never clusters. */
+  private readonly countInk: string | null
 
   constructor({
     config,
@@ -188,6 +190,12 @@ export class MarkerSeries {
       })
       this.warnings.push(...this.colorScale.warnings)
     }
+
+    // Decided here, while the map's element is in scope for colours only the
+    // browser can read, rather than per cluster on every zoom frame. Only for a
+    // series that can cluster: a hollow `color: 'none'` marker has no count to ink.
+    const c = config.cluster
+    this.countInk = c && c.enabled !== false ? readableOn(this.clusterFill) : null
   }
 
   /** Recompute world positions after a projection change, and drop the cache. */
@@ -226,6 +234,10 @@ export class MarkerSeries {
       maxZoom: c.maxZoom ?? DEFAULT_CLUSTER_MAX_ZOOM,
       minPoints: c.minPoints ?? 2,
     }
+  }
+
+  private get clusterFill(): string {
+    return this.config.cluster?.color ?? this.config.color ?? DEFAULT_COLOR
   }
 
   clusteringEnabled(zoom: number): boolean {
@@ -324,7 +336,7 @@ export class MarkerSeries {
       // uses, so a cluster of 100 does not read as 100 times a cluster of 1.
       const t = Math.sqrt(cluster.count) / Math.sqrt(largest)
       const radius = minR + (maxR - minR) * t
-      const fill = opts.color ?? this.config.color ?? DEFAULT_COLOR
+      const fill = this.clusterFill
 
       return {
         key: `cluster-${i}`,
@@ -343,7 +355,7 @@ export class MarkerSeries {
         // `cluster.color` used to draw a near-black count on a near-black circle.
         // WCAG contrast against the fill decides, the same rule the choropleth
         // labels use over a dark class.
-        labelFill: readableOn(fill),
+        labelFill: this.countInk ?? readableOn(fill),
         hitRadius: radius,
       }
     })

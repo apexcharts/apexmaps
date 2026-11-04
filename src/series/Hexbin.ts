@@ -37,6 +37,7 @@
  */
 
 import { createScale, Scale } from '../scales/Scale'
+import { colorScopeElement, needsBrowser, parseRgba, withColorScope } from '../scales/Color'
 import { Viewport } from '../geo/Viewport'
 import { clusterLevel, levelScale } from '../geo/Cluster'
 import { aggregateOf, binPoints, cellRing } from '../geo/Hexbin'
@@ -81,6 +82,11 @@ export class HexbinSeries {
   colorScale: Scale | null = null
 
   private cached: HexBin[] = []
+  /**
+   * The map element in scope at construction. Bins are re-scaled on zoom, long
+   * after the build, and a palette token set on the map must still resolve.
+   */
+  private readonly colorScope = colorScopeElement()
   private cachedLevel: number | null = null
   private cachedValid = false
   /** Colour classes switched off from the legend. */
@@ -137,6 +143,12 @@ export class HexbinSeries {
         `aggregate "${this.aggregate}" needs a number from every point, and ${missingValue} had none; those bins report on the rest. Use aggregate "count" to bin on position alone`,
       )
     }
+
+    // The scale is built per level in `bins()`, after the build has reported the
+    // colours it could not resolve. Reading the stops the browser has to resolve
+    // once here reports them with the other series, and warms the map's cache.
+    const palette = config.scale?.palette
+    if (Array.isArray(palette)) for (const stop of palette) if (needsBrowser(stop)) parseRgba(stop)
   }
 
   /** Recompute world positions after a projection change. */
@@ -187,7 +199,9 @@ export class HexbinSeries {
     }).filter((bin) => bin.count >= this.minCount)
 
     const values = bins.map((bin) => aggregateOf(bin, this.aggregate))
-    const scale = createScale(values, this.config.scale ?? {})
+    const scale = withColorScope(this.colorScope, () =>
+      createScale(values, this.config.scale ?? {}),
+    )
     // Warnings are replaced rather than appended: this runs again on every level
     // the reader crosses, and appending would grow the list without bound.
     this.warnings.length = 0

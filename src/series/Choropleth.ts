@@ -17,6 +17,7 @@
 import { resolveJoin } from '../data/Join'
 import { resolvePattern } from '../renderers/Paint'
 import { createScale, DARK_NULL_COLOR, Scale } from '../scales/Scale'
+import { colorScopeElement, withColorScope } from '../scales/Color'
 import { readNumber } from './accessors'
 import type { JoinResult } from '../data/Join'
 import type { FeaturePaint } from '../renderers/Paint'
@@ -26,7 +27,9 @@ import type {
   LegendItem,
   NormalizedFeature,
   NormalizedGeo,
+  PatternFillOptions,
   PixelSeriesOptions,
+  ResolvedPattern,
   SeriesFillOptions,
 } from '../types'
 
@@ -60,6 +63,12 @@ export class ChoroplethSeries {
   readonly join: JoinResult
   readonly values: Map<number, number | null>
   readonly scale: Scale
+  /**
+   * The map element in scope at construction. Pattern inks are worked out when a
+   * feature is painted, which a legend toggle or a globe frame does long after
+   * the build, and a palette token set on the map must still resolve there.
+   */
+  private readonly colorScope = colorScopeElement()
 
   constructor({
     config,
@@ -216,7 +225,7 @@ export class ChoroplethSeries {
 
     if (fill.pattern) {
       const options = typeof fill.pattern === 'function' ? fill.pattern(context) : fill.pattern
-      if (options) return { kind: 'pattern', color, pattern: resolvePattern(options, color) }
+      if (options) return { kind: 'pattern', color, pattern: this._resolvePattern(options, color) }
     }
 
     return null
@@ -290,7 +299,12 @@ export class ChoroplethSeries {
         : pattern
     if (!options) return item
 
-    return { ...item, pattern: resolvePattern(options, item.color) }
+    return { ...item, pattern: this._resolvePattern(options, item.color) }
+  }
+
+  private _resolvePattern(options: PatternFillOptions, color: string): ResolvedPattern {
+    if (!this.colorScope) return resolvePattern(options, color)
+    return withColorScope(this.colorScope, () => resolvePattern(options, color))
   }
 
   /**

@@ -10,44 +10,285 @@
  * @module scales/Color
  */
 
+import { hasDom } from '../utils/dom'
+
 /** Components in 0..255. */
 export type RGB = [number, number, number]
+/** Components in 0..255, then alpha in 0..1. */
+export type RGBA = [number, number, number, number]
 /** Perceptual lightness plus two opponent axes. */
 export type OkLab = [number, number, number]
 
-/** Parse `#rgb`, `#rrggbb`, `rgb()` and `rgba()` into 0..255 components. */
+/**
+ * Parse any CSS colour into 0..255 components, dropping alpha. See `parseRgba`.
+ */
 export function parseColor(input: string): RGB | null {
+  const c = parseRgba(input)
+  return c ? [c[0], c[1], c[2]] : null
+}
+
+/**
+ * Parse any CSS colour into 0..255 components plus alpha.
+ *
+ * Hex and every `rgb()` syntax are read here, as are the `oklab()`, `oklch()`
+ * and `color(srgb ...)` forms, because those are what a browser hands back for
+ * colours it does not convert to rgb. Everything else (names, `hsl()`, `var()`)
+ * is resolved by the browser, inside the map's element when one is in scope (see
+ * `withColorScope`), so a token defined on the map's container resolves. With no
+ * DOM, or for a value the browser cannot resolve either, the result is null and
+ * each helper below keeps the literal it was given.
+ */
+export function parseRgba(input: string): RGBA | null {
   if (typeof input !== 'string') return null
   const s = input.trim()
+  return parseLegacy(s) ?? parseModern(s) ?? resolveInBrowser(s)
+}
 
+/**
+ * Hex, and `rgb()`/`rgba()` with plain numbers: the forms this module has always
+ * read. Kept as its own first pass so their channels, and every hex the helpers
+ * derive from them, stay exactly what they were.
+ */
+function parseLegacy(s: string): RGBA | null {
   if (s[0] === '#') {
     const hex = s.slice(1)
     if (hex.length === 3 || hex.length === 4) {
       const r = parseInt(hex[0] + hex[0], 16)
       const g = parseInt(hex[1] + hex[1], 16)
       const b = parseInt(hex[2] + hex[2], 16)
-      return Number.isNaN(r + g + b) ? null : [r, g, b]
+      if (Number.isNaN(r + g + b)) return null
+      return [r, g, b, hex.length === 4 ? hexAlpha(hex[3] + hex[3]) : 1]
     }
     if (hex.length === 6 || hex.length === 8) {
       const r = parseInt(hex.slice(0, 2), 16)
       const g = parseInt(hex.slice(2, 4), 16)
       const b = parseInt(hex.slice(4, 6), 16)
-      return Number.isNaN(r + g + b) ? null : [r, g, b]
+      if (Number.isNaN(r + g + b)) return null
+      return [r, g, b, hex.length === 8 ? hexAlpha(hex.slice(6, 8)) : 1]
     }
     return null
   }
 
   const m = s.match(/^rgba?\(([^)]+)\)$/i)
   if (m) {
-    const parts = m[1]
-      .split(/[\s,/]+/)
-      .filter(Boolean)
-      .map(Number)
+    const raw = m[1].split(/[\s,/]+/).filter(Boolean)
+    const parts = raw.map(Number)
     if (parts.length >= 3 && parts.slice(0, 3).every((n) => !Number.isNaN(n))) {
-      return [parts[0], parts[1], parts[2]]
+      return [parts[0], parts[1], parts[2], raw.length > 3 ? alphaOf(raw[3]) : 1]
     }
   }
   return null
+}
+
+function hexAlpha(pair: string): number {
+  const a = parseInt(pair, 16)
+  return Number.isNaN(a) ? 1 : a / 255
+}
+
+/** An alpha token, `0.5` or `50%`. Unreadable alpha means opaque, as it always did. */
+function alphaOf(token: string | undefined): number {
+  if (token == null) return 1
+  const a = channel(token, 1)
+  return Number.isNaN(a) ? 1 : Math.max(0, Math.min(1, a))
+}
+
+/** A number, a percentage of `full`, or `none` (zero). NaN when unreadable. */
+function channel(token: string, full: number): number {
+  if (!token) return NaN
+  if (token === 'none') return 0
+  if (token.endsWith('%')) return (Number(token.slice(0, -1)) / 100) * full
+  return Number(token)
+}
+
+/** A hue in degrees, from any CSS angle unit. */
+function hueOf(token: string): number {
+  if (token === 'none') return 0
+  const m = token.match(/^(-?[\d.e+-]+)(deg|grad|rad|turn)?$/i)
+  if (!m) return NaN
+  const v = Number(m[1])
+  switch ((m[2] || 'deg').toLowerCase()) {
+    case 'grad':
+      return v * 0.9
+    case 'rad':
+      return (v * 180) / Math.PI
+    case 'turn':
+      return v * 360
+    default:
+      return v
+  }
+}
+
+/**
+ * The CSS colour functions read without a browser: the rest of the `rgb()`
+ * syntax (percentages, `none`), `oklab()`, `oklch()`, `color(srgb ...)` and
+ * `transparent`. Out-of-gamut OkLab colours are clipped to sRGB.
+ */
+function parseModern(s: string): RGBA | null {
+  if (/^transparent$/i.test(s)) return [0, 0, 0, 0]
+  const m = s.match(/^([a-z-]+)\(([^()]*)\)$/i)
+  if (!m) return null
+  const fn = m[1].toLowerCase()
+  const args = m[2].split(/[\s,/]+/).filter(Boolean)
+
+  let rgb: number[] | null = null
+  let alpha = args[3]
+  if (fn === 'rgb' || fn === 'rgba') {
+    rgb = args.slice(0, 3).map((t) => channel(t, 255))
+  } else if (fn === 'oklab' || fn === 'oklch') {
+    const L = channel(args[0] ?? '', 1)
+    let a = channel(args[1] ?? '', 0.4)
+    let b = fn === 'oklab' ? channel(args[2] ?? '', 0.4) : hueOf(args[2] ?? '')
+    if (fn === 'oklch') {
+      const h = (b * Math.PI) / 180
+      b = a * Math.sin(h)
+      a = a * Math.cos(h)
+    }
+    if (![L, a, b].some(Number.isNaN)) rgb = oklabToRgb([L, a, b])
+  } else if (fn === 'color' && (args[0] === 'srgb' || args[0] === 'srgb-linear')) {
+    const linear = args[0] === 'srgb-linear'
+    rgb = args.slice(1, 4).map((t) => {
+      const v = channel(t, 1)
+      return (linear ? toGamma(Math.max(0, Math.min(1, v))) : v) * 255
+    })
+    alpha = args[4]
+  }
+  if (!rgb || rgb.length < 3 || rgb.some(Number.isNaN)) return null
+  return [rgb[0], rgb[1], rgb[2], alphaOf(alpha)]
+}
+
+// --- browser resolution ------------------------------------------------------
+
+interface ColorScope {
+  el: Element | null
+  unresolved?: Set<string>
+}
+
+let scope: ColorScope | null = null
+
+/**
+ * Browser resolutions per map element. They outlive one call because a scale
+ * keeps sampling its ramp after the build (every feature, a tooltip, an export),
+ * and probing the DOM each time would force a style recalc per sample. The map
+ * clears its entry with `clearColorCache` whenever it rebuilds, which is when a
+ * changed token can first matter.
+ */
+const caches = new WeakMap<Element, Map<string, RGBA | null>>()
+
+/**
+ * Run `fn` with colours the browser has to resolve resolved inside `el`, so a
+ * `var()` set on the map's container (or a theme class around it) means what it
+ * means there. With no `el` they resolve against the document, uncached. Values
+ * the browser cannot resolve either are added to `unresolved`.
+ */
+export function withColorScope<T>(
+  el: Element | null | undefined,
+  fn: () => T,
+  unresolved?: Set<string>,
+): T {
+  const outer = scope
+  const same = outer !== null && outer.el === (el ?? null)
+  scope = { el: el ?? null, unresolved: unresolved ?? (same ? outer.unresolved : undefined) }
+  try {
+    return fn()
+  } finally {
+    scope = outer
+  }
+}
+
+/** Forget what colours resolved to inside `el`, so the next read sees current tokens. */
+export function clearColorCache(el: Element | null | undefined): void {
+  if (el) caches.delete(el)
+}
+
+/** The element colours currently resolve in, for work that runs later. */
+export function colorScopeElement(): Element | null {
+  return scope?.el ?? null
+}
+
+/** Whether reading `color` needs the browser: false for hex, rgb(), oklab() and the like. */
+export function needsBrowser(color: string): boolean {
+  if (typeof color !== 'string') return false
+  const s = color.trim()
+  return parseLegacy(s) === null && parseModern(s) === null
+}
+
+/** Valid SVG paints that are not colours: kept as written, and never reported. */
+const NOT_A_COLOR = /^(none|url\(.*\)|context-fill|context-stroke)$/i
+
+function resolveInBrowser(s: string): RGBA | null {
+  if (!s || !hasDom()) return null
+  const el = scope?.el ?? null
+  // A detached element computes no style, so nothing can be read inside it.
+  // Names, `hsl()` and `hwb()` mean the same anywhere and are read against the
+  // document instead. A `var()` or `currentColor` depends on where the map ends
+  // up, so it stays as written, neither cached nor reported, until a build after
+  // the element is attached.
+  const detached = el !== null && el.isConnected === false
+  if (detached && /var\(|currentcolor/i.test(s)) return null
+  let cache = el ? caches.get(el) : undefined
+  let out = cache?.get(s)
+  if (out === undefined) {
+    let got: RGBA | null | undefined
+    try {
+      const doc = el && !detached ? null : (el?.ownerDocument ?? document)
+      got = probe(s, doc ? (doc.body ?? doc.documentElement) : el!)
+    } catch {
+      got = null
+    }
+    // Nowhere to compute it: not an answer, so it is neither kept nor reported.
+    if (got === undefined) return null
+    out = got
+    if (el) {
+      if (!cache) caches.set(el, (cache = new Map()))
+      cache.set(s, out)
+    }
+  }
+  if (!out && !NOT_A_COLOR.test(s)) scope?.unresolved?.add(s)
+  return out
+}
+
+/**
+ * Let the browser compute `input` as a `color` value inside `host`. An unknown
+ * `var()` computes to the inherited colour, which would read as an answer, so the
+ * probe inherits from a sentinel instead and a match means "not resolved".
+ * `currentColor` is meant to inherit, so it keeps the host's colour. Undefined
+ * when the host computes no style at all.
+ */
+function probe(input: string, host: Element): RGBA | null | undefined {
+  const doc = host.ownerDocument
+  const view = doc.defaultView
+  if (!view) return null
+  const wrap = doc.createElement('span')
+  const span = doc.createElement('span')
+  wrap.style.display = 'none'
+  const current = /^currentcolor$/i.test(input)
+  if (!current) wrap.style.color = 'rgba(1, 2, 3, 0.01)'
+  span.style.color = input
+  // The style parser drops what it cannot read, so an empty value is a refusal.
+  if (!span.style.color) return null
+  wrap.appendChild(span)
+  host.appendChild(wrap)
+  try {
+    const got = view.getComputedStyle(span).color
+    const inherited = view.getComputedStyle(wrap).color
+    if (!inherited) return undefined
+    if (!current && got === inherited) return null
+    return parseLegacy(got) ?? parseModern(got)
+  } finally {
+    wrap.remove()
+  }
+}
+
+/** Opaque colours as hex, as always; translucent ones as `rgba()`. */
+function format(rgb: RGB, alpha: number): string {
+  if (alpha >= 1) return toHex(rgb)
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v)))
+  return `rgba(${c(rgb[0])}, ${c(rgb[1])}, ${c(rgb[2])}, ${+alpha.toFixed(3)})`
+}
+
+/** Whether `color` is one of the forms read before any CSS colour was. */
+function isLegacy(color: string): boolean {
+  return typeof color === 'string' && parseLegacy(color.trim()) !== null
 }
 
 export function toHex([r, g, b]: RGB): string {
@@ -108,10 +349,27 @@ export function oklabToRgb([L, A, B]: OkLab): RGB {
   ]
 }
 
-/** Interpolate two colours in OkLab. Returns hex. */
+/**
+ * A ramp stop's channels. A fully see-through stop in a form not read before
+ * (`transparent`, `oklch(... / 0)`) has no colour to blend toward, and its zero
+ * channels would paint the ramp black, so it stays unreadable and the ramp keeps
+ * it as written, as it always did.
+ */
+function rampRgb(s: string): RGB | null {
+  const c = parseRgba(s)
+  if (!c || (c[3] === 0 && !isLegacy(s))) return null
+  return [c[0], c[1], c[2]]
+}
+
+/**
+ * Interpolate two colours in OkLab. Returns hex: ramps are opaque and ignore
+ * alpha, as they always have. At `t` 0 a colour the browser had to resolve comes
+ * back as written, so a `var()` stop stays live and a named one is not rewritten.
+ */
 export function mix(a: string, b: string, t: number): string {
-  const ca = parseColor(a)
-  const cb = parseColor(b)
+  if (t === 0 && !isLegacy(a)) return a
+  const ca = rampRgb(a)
+  const cb = rampRgb(b)
   if (!ca || !cb) return a
   const la = rgbToOklab(ca)
   const lb = rgbToOklab(cb)
@@ -149,7 +407,7 @@ export function sampleRamp(
   if (count === 1) return [stops[Math.floor((stops.length - 1) / 2)]]
 
   const labs = stops.map((s): OkLab | null => {
-    const rgb = parseColor(s)
+    const rgb = rampRgb(s)
     return rgb ? rgbToOklab(rgb) : null
   })
 
@@ -162,7 +420,9 @@ export function sampleRamp(
     const f = pos - i0
     const a = labs[i0]
     const b = labs[i1]
-    if (!a || !b) {
+    // A sample landing exactly on a stop the browser had to resolve keeps the
+    // stop as written, the same rule `mix` applies.
+    if (!a || !b || (f === 0 && !isLegacy(stops[i0]))) {
       out.push(stops[i0])
       continue
     }
@@ -215,18 +475,28 @@ export function readableOn(background: string, dark = '#1a1a1a', light = '#fffff
   return contrastRatio(background, dark) >= contrastRatio(background, light) ? dark : light
 }
 
-/** Reduce OkLab lightness by `amount` (0..1). */
-export function darken(color: string, amount = 0.12): string {
-  const rgb = parseColor(color)
-  if (!rgb) return color
-  const lab = rgbToOklab(rgb)
-  return oklabHex([Math.max(0, lab[0] - amount), lab[1], lab[2]])
+/**
+ * Reduce OkLab lightness by `amount` (0..1). A translucent colour stays as
+ * translucent, and a fully transparent one comes back unchanged since there is
+ * nothing visible to darken, unless `keepAlpha` is false: then the result is
+ * the opaque darkened colour.
+ */
+export function darken(color: string, amount = 0.12, keepAlpha = true): string {
+  return withLightness(color, keepAlpha, (L) => Math.max(0, L - amount))
 }
 
-/** Increase OkLab lightness by `amount` (0..1). */
-export function lighten(color: string, amount = 0.12): string {
-  const rgb = parseColor(color)
-  if (!rgb) return color
-  const lab = rgbToOklab(rgb)
-  return oklabHex([Math.min(1, lab[0] + amount), lab[1], lab[2]])
+/** Increase OkLab lightness by `amount` (0..1). Alpha as for `darken`. */
+export function lighten(color: string, amount = 0.12, keepAlpha = true): string {
+  return withLightness(color, keepAlpha, (L) => Math.min(1, L + amount))
+}
+
+function rgbOf(c: RGBA): RGB {
+  return [c[0], c[1], c[2]]
+}
+
+function withLightness(color: string, keepAlpha: boolean, next: (L: number) => number): string {
+  const c = parseRgba(color)
+  if (!c || (keepAlpha && c[3] === 0)) return color
+  const lab = rgbToOklab(rgbOf(c))
+  return format(oklabToRgb([next(lab[0]), lab[1], lab[2]]), keepAlpha ? c[3] : 1)
 }
