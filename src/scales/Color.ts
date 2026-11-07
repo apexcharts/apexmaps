@@ -7,10 +7,28 @@
  * correctness property of a choropleth, not a nicety, because the reader infers
  * magnitude from perceived lightness.
  *
+ * The primitives the Apex products share (the OkLab conversions, the
+ * `oklab()`/`oklch()` reader, hex and `rgba()` formatting, WCAG luminance and
+ * contrast) come from apex-commons, which took them from this file verbatim.
+ * What stays here is what only the maps do: the lax parser and its browser
+ * probe with the per-map cache, the OkLab ramps, and the lightness step behind
+ * hover, whose clamping differs from the shared shade at the ends of the range.
+ *
  * @module scales/Color
  */
 
+import {
+  contrastRatio as channelContrast,
+  formatColor,
+  luminance as channelLuminance,
+  oklabToRgb,
+  parseOklab,
+  rgbToOklab,
+} from 'apex-commons'
+
 import { hasDom } from '../utils/dom'
+
+export { oklabToRgb, rgbToOklab }
 
 /** Components in 0..255. */
 export type RGB = [number, number, number]
@@ -100,24 +118,6 @@ function channel(token: string, full: number): number {
   return Number(token)
 }
 
-/** A hue in degrees, from any CSS angle unit. */
-function hueOf(token: string): number {
-  if (token === 'none') return 0
-  const m = token.match(/^(-?[\d.e+-]+)(deg|grad|rad|turn)?$/i)
-  if (!m) return NaN
-  const v = Number(m[1])
-  switch ((m[2] || 'deg').toLowerCase()) {
-    case 'grad':
-      return v * 0.9
-    case 'rad':
-      return (v * 180) / Math.PI
-    case 'turn':
-      return v * 360
-    default:
-      return v
-  }
-}
-
 /**
  * The CSS colour functions read without a browser: the rest of the `rgb()`
  * syntax (percentages, `none`), `oklab()`, `oklch()`, `color(srgb ...)` and
@@ -135,15 +135,7 @@ function parseModern(s: string): RGBA | null {
   if (fn === 'rgb' || fn === 'rgba') {
     rgb = args.slice(0, 3).map((t) => channel(t, 255))
   } else if (fn === 'oklab' || fn === 'oklch') {
-    const L = channel(args[0] ?? '', 1)
-    let a = channel(args[1] ?? '', 0.4)
-    let b = fn === 'oklab' ? channel(args[2] ?? '', 0.4) : hueOf(args[2] ?? '')
-    if (fn === 'oklch') {
-      const h = (b * Math.PI) / 180
-      b = a * Math.sin(h)
-      a = a * Math.cos(h)
-    }
-    if (![L, a, b].some(Number.isNaN)) rgb = oklabToRgb([L, a, b])
+    return parseOklab(s)
   } else if (fn === 'color' && (args[0] === 'srgb' || args[0] === 'srgb-linear')) {
     const linear = args[0] === 'srgb-linear'
     rgb = args.slice(1, 4).map((t) => {
@@ -279,11 +271,9 @@ function probe(input: string, host: Element): RGBA | null | undefined {
   }
 }
 
-/** Opaque colours as hex, as always; translucent ones as `rgba()`. */
+/** Opaque colours as hex, as always; translucent ones as `rgba()`, alpha to 3 places. */
 function format(rgb: RGB, alpha: number): string {
-  if (alpha >= 1) return toHex(rgb)
-  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v)))
-  return `rgba(${c(rgb[0])}, ${c(rgb[1])}, ${c(rgb[2])}, ${+alpha.toFixed(3)})`
+  return formatColor([rgb[0], rgb[1], rgb[2], alpha], 3)
 }
 
 /** Whether `color` is one of the forms read before any CSS colour was. */
@@ -291,62 +281,14 @@ function isLegacy(color: string): boolean {
   return typeof color === 'string' && parseLegacy(color.trim()) !== null
 }
 
+/** `#rrggbb`, each channel clipped to 0..255 and rounded. */
 export function toHex([r, g, b]: RGB): string {
-  const c = (v: number) =>
-    Math.max(0, Math.min(255, Math.round(v)))
-      .toString(16)
-      .padStart(2, '0')
-  return `#${c(r)}${c(g)}${c(b)}`
+  return formatColor([r, g, b, 1])
 }
 
-/** Gamma-encoded 0..1 to linear. */
-function toLinear(v: number): number {
-  return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
-}
-
-/** Linear to gamma-encoded 0..1. */
+/** Linear to gamma-encoded 0..1, for `color(srgb-linear ...)`. */
 function toGamma(v: number): number {
   return v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055
-}
-
-export function rgbToOklab([r8, g8, b8]: RGB): OkLab {
-  const r = toLinear(r8 / 255)
-  const g = toLinear(g8 / 255)
-  const b = toLinear(b8 / 255)
-
-  const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b
-  const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b
-  const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b
-
-  const l_ = Math.cbrt(l)
-  const m_ = Math.cbrt(m)
-  const s_ = Math.cbrt(s)
-
-  return [
-    0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_,
-    1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_,
-    0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_,
-  ]
-}
-
-export function oklabToRgb([L, A, B]: OkLab): RGB {
-  const l_ = L + 0.3963377774 * A + 0.2158037573 * B
-  const m_ = L - 0.1055613458 * A - 0.0638541728 * B
-  const s_ = L - 0.0894841775 * A - 1.291485548 * B
-
-  const l = l_ * l_ * l_
-  const m = m_ * m_ * m_
-  const s = s_ * s_ * s_
-
-  const r = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s
-  const g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s
-  const b = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s
-
-  return [
-    Math.max(0, Math.min(255, toGamma(r) * 255)),
-    Math.max(0, Math.min(255, toGamma(g) * 255)),
-    Math.max(0, Math.min(255, toGamma(b) * 255)),
-  ]
 }
 
 /**
@@ -448,21 +390,17 @@ function oklabHex(lab: OkLab): string {
   return toHex(oklabToRgb(lab))
 }
 
-/** Relative luminance per WCAG 2.x, 0..1. */
+/** What a colour that cannot be read counts as: black, luminance 0. */
+const BLACK: RGB = [0, 0, 0]
+
+/** Relative luminance per WCAG 2.x, 0..1. A colour that cannot be read is 0. */
 export function luminance(color: string): number {
-  const rgb = parseColor(color)
-  if (!rgb) return 0
-  const [r, g, b] = rgb.map((v) => toLinear(v / 255)) as RGB
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+  return channelLuminance(parseColor(color) ?? BLACK)
 }
 
 /** WCAG contrast ratio between two colours, 1..21. */
 export function contrastRatio(a: string, b: string): number {
-  const la = luminance(a)
-  const lb = luminance(b)
-  const hi = Math.max(la, lb)
-  const lo = Math.min(la, lb)
-  return (hi + 0.05) / (lo + 0.05)
+  return channelContrast(parseColor(a) ?? BLACK, parseColor(b) ?? BLACK)
 }
 
 /**

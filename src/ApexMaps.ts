@@ -9,7 +9,7 @@
  * @module ApexMaps
  */
 
-import { injectStyle, LicenseManager, Watermark } from 'apex-commons'
+import { injectStyle, LicenseManager, OSThemeWatcher, Watermark } from 'apex-commons'
 import { geoGraticule } from 'd3-geo'
 
 import css from './ApexMaps.css'
@@ -262,6 +262,12 @@ class ApexMaps extends BaseChart {
 
   /** Releases this map's use of the injected stylesheet. */
   private _releaseCss: (() => void) | null = null
+
+  /**
+   * The OS colour scheme, for `theme.mode: 'auto'`. Made on first use, so a map
+   * that never asks for `'auto'` never touches `matchMedia`.
+   */
+  private _os: OSThemeWatcher | null = null
 
   /** Levels drilled into, outermost first. Empty at the top level. */
   readonly drillPath: { key: string; name?: string; mapId?: string }[] = []
@@ -3895,8 +3901,9 @@ class ApexMaps extends BaseChart {
   private _isDark(): boolean {
     const mode = this.config.theme?.mode
     if (mode === 'dark') return true
-    if (mode === 'auto' && typeof window !== 'undefined' && window.matchMedia) {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches
+    if (mode === 'auto') {
+      this._os ??= new OSThemeWatcher()
+      return this._os.state.mode === 'dark'
     }
     return false
   }
@@ -3906,6 +3913,8 @@ class ApexMaps extends BaseChart {
     this._destroyed = true
     this._releaseCss?.()
     this._releaseCss = null
+    this._os?.dispose()
+    this._os = null
     if (this._renderRaf !== null) cancelAnimationFrame(this._renderRaf)
     if (this._resizeRaf !== null) cancelAnimationFrame(this._resizeRaf)
     if (this._rotateRaf !== null) cancelAnimationFrame(this._rotateRaf)
