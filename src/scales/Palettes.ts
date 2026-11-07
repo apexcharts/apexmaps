@@ -10,8 +10,16 @@
  * colourblind-checked. `viridis` and `magma` come from the matplotlib
  * colormaps, which are perceptually uniform and CC0.
  *
+ * A name the maps do not know is looked up on the family theme registry in
+ * apex-commons, the one every Apex product on the page shares: a theme
+ * registered there with `tokens.series` is a categorical palette here under the
+ * same name, so a brand palette is registered once for the charts and the maps.
+ * The maps' own palettes stay here, since a theme carries no ramps.
+ *
  * @module scales/Palettes
  */
+
+import { getTheme } from 'apex-commons'
 
 export type PaletteKind = 'sequential' | 'diverging' | 'categorical'
 
@@ -31,7 +39,15 @@ export function registerPalette(name: string, palette: Palette): void {
 }
 
 export function getPalette(name: string): Palette | undefined {
-  return registry.get(name)
+  return registry.get(name) ?? familyPalette(name)
+}
+
+/** A family theme's `tokens.series`, as a categorical palette. */
+function familyPalette(name: string): Palette | undefined {
+  const series = typeof name === 'string' ? getTheme(name)?.tokens?.series : undefined
+  return Array.isArray(series) && series.length
+    ? { kind: 'categorical', stops: series.slice(), colorblindSafe: false }
+    : undefined
 }
 
 export function listPalettes(): string[] {
@@ -39,7 +55,7 @@ export function listPalettes(): string[] {
 }
 
 export function hasPalette(name: string): boolean {
-  return registry.has(name)
+  return getPalette(name) !== undefined
 }
 
 // --- Sequential -------------------------------------------------------------

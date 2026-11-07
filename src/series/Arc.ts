@@ -82,11 +82,17 @@ export class ArcSeries {
     geo,
     index,
     viewport,
+    palette,
   }: {
     config: ArcSeriesOptions
     geo: NormalizedGeo
     index: number
     viewport: Viewport
+    /**
+     * The theme's categorical palette: the default for an ordinal colour scale.
+     * Absent: built in. Arcs keep their own single colour.
+     */
+    palette?: readonly string[]
   }) {
     this.config = config
     this.index = index
@@ -145,7 +151,7 @@ export class ArcSeries {
     this.warnings.push(...this.widthScale.warnings)
 
     if (config.colorScale) {
-      this.colorScale = createScale(values, config.colorScale)
+      this.colorScale = createScale(values, config.colorScale, { categorical: palette })
       this.warnings.push(...this.colorScale.warnings)
     }
 

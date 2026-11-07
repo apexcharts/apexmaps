@@ -33,6 +33,16 @@ import type {
   SeriesFillOptions,
 } from '../types'
 
+/** What the map's theme hands a feature series, below anything its own options say. */
+export interface FeatureSeriesTheme {
+  /** `theme.palette`: the scale's palette when the series names none. */
+  palette?: string
+  /** The theme's categorical palette, for an ordinal scale with none named. */
+  categorical?: readonly string[]
+  /** The no-data fill when the scale names none. Absent: the mode's default. */
+  nullColor?: string
+}
+
 export class ChoroplethSeries {
   /*
    * Widened to admit `series/Pixel`, which is this series with a different
@@ -49,7 +59,7 @@ export class ChoroplethSeries {
   readonly geo: NormalizedGeo
   readonly index: number
   readonly id: string
-  readonly theme: { palette?: string }
+  readonly theme: FeatureSeriesTheme
   readonly dark: boolean
   /**
    * `locale.noData` when the caller set one. Left undefined otherwise, so the
@@ -83,7 +93,7 @@ export class ChoroplethSeries {
     geo: NormalizedGeo
     /** Series index, used for the stable series id. */
     index: number
-    theme?: { palette?: string }
+    theme?: FeatureSeriesTheme
     /** Dark mode, already resolved from `theme.mode` (`'auto'` included). */
     dark?: boolean
     /** `locale.noData`, only when the caller set it. */
@@ -106,7 +116,9 @@ export class ChoroplethSeries {
     })
 
     this.values = this._computeValues()
-    this.scale = createScale([...this.values.values()], this._scaleOptions())
+    this.scale = createScale([...this.values.values()], this._scaleOptions(), {
+      categorical: this.theme.categorical,
+    })
     this.warnings.push(...this.scale.warnings)
   }
 
@@ -117,7 +129,7 @@ export class ChoroplethSeries {
       palette: s.palette ?? this.theme.palette,
       // No-data follows the theme, so the legend's last swatch and every
       // unmatched feature stay no-data rather than reading as the top class.
-      nullColor: s.nullColor ?? (this.dark ? DARK_NULL_COLOR : undefined),
+      nullColor: s.nullColor ?? this.theme.nullColor ?? (this.dark ? DARK_NULL_COLOR : undefined),
       nullLabel: s.nullLabel ?? this.noData,
     }
   }

@@ -18,6 +18,7 @@ import {
   needsBrowser,
   withColorScope,
 } from './Color'
+import { THEME_DEFAULTS } from '../core/Theme'
 import { getPalette, defaultPaletteFor } from './Palettes'
 import type { PaletteKind } from './Palettes'
 import type { LegendItem, ScaleOptions, ScaleType } from '../types'
@@ -31,14 +32,14 @@ import type { LegendItem, ScaleOptions, ScaleType } from '../types'
  */
 const SEQUENTIAL_LIGHT_INSET = 0.1
 
-const DEFAULT_NULL_COLOR = '#eeeeee'
+const DEFAULT_NULL_COLOR = THEME_DEFAULTS.light.noData
 
 /**
  * No-data on a dark map. Light grey reads as the brightest class there, which is
  * the one thing a no-data fill must never do, so callers that know the theme pass
  * this as `nullColor`.
  */
-export const DARK_NULL_COLOR = '#374151'
+export const DARK_NULL_COLOR = THEME_DEFAULTS.dark.noData
 
 /** Finite numbers only, ascending. */
 function cleanNumbers(values: readonly unknown[]): number[] {
@@ -183,13 +184,27 @@ export function formatNumber(v: number): string {
   return v.toFixed(2)
 }
 
+/** What the map's theme supplies to a scale, below anything its options name. */
+export interface ScaleDefaults {
+  /**
+   * The palette an ordinal scale takes when its options name none. Absent:
+   * the built-in `apex` palette.
+   */
+  categorical?: readonly string[]
+}
+
 /**
  * Create a colour scale.
  *
  * @param values Raw values; nulls and non-numerics are tolerated.
+ * @param defaults What the theme supplies when `options` leave it open.
  */
-export function createScale(values: readonly unknown[], options: ScaleOptions = {}): Scale {
-  return new Scale(values, options)
+export function createScale(
+  values: readonly unknown[],
+  options: ScaleOptions = {},
+  defaults: ScaleDefaults = {},
+): Scale {
+  return new Scale(values, options, defaults)
 }
 
 export class Scale {
@@ -220,7 +235,11 @@ export class Scale {
    */
   private _colorScope: { el: Element | null } | null = null
 
-  constructor(values: readonly unknown[], options: ScaleOptions = {}) {
+  constructor(
+    values: readonly unknown[],
+    options: ScaleOptions = {},
+    defaults: ScaleDefaults = {},
+  ) {
     const sorted = cleanNumbers(values)
 
     this.type = options.type || 'quantile'
@@ -229,7 +248,7 @@ export class Scale {
     this.isOrdinal = this.type === 'ordinal'
 
     if (this.isOrdinal) {
-      this._initOrdinal(values, options)
+      this._initOrdinal(values, options, defaults.categorical)
       return
     }
 
@@ -341,7 +360,11 @@ export class Scale {
       : { from: 0, to: 1 }
   }
 
-  private _initOrdinal(values: readonly unknown[], options: ScaleOptions): void {
+  private _initOrdinal(
+    values: readonly unknown[],
+    options: ScaleOptions,
+    categorical?: readonly string[],
+  ): void {
     const seen: string[] = []
     const set = new Set<string>()
     for (const v of values) {
@@ -355,6 +378,7 @@ export class Scale {
     this.categories = seen
     let stops: string[]
     if (Array.isArray(options.palette)) stops = options.palette.slice()
+    else if (options.palette == null && categorical?.length) stops = categorical.slice()
     else {
       const name = typeof options.palette === 'string' ? options.palette : 'apex'
       const p = getPalette(name)

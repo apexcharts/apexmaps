@@ -54,6 +54,8 @@ export class LineSeries {
   readonly type = 'line' as const
   readonly kind = 'paths' as const
   readonly config: LineSeriesOptions
+  /** The theme's categorical palette; see the constructor. */
+  private readonly palette: readonly string[] | undefined
   readonly index: number
   readonly id: string
   readonly warnings: string[] = []
@@ -68,15 +70,22 @@ export class LineSeries {
     config,
     index,
     viewport,
+    palette,
   }: {
     config: LineSeriesOptions
     geo: NormalizedGeo
     index: number
     viewport: Viewport
+    /**
+     * The theme's categorical palette, row 1 first: the default for an ordinal
+     * colour scale and, through row 1, for the series colour. Absent: built in.
+     */
+    palette?: readonly string[]
   }) {
     this.config = config
     this.index = index
     this.id = `s${index}`
+    this.palette = palette
 
     const rows = (config.data ?? []) as readonly LineDatum[]
     const valueField = config.valueField ?? 'value'
@@ -122,7 +131,7 @@ export class LineSeries {
     this.warnings.push(...this.widthScale.warnings)
 
     if (config.colorScale) {
-      this.colorScale = createScale(values, config.colorScale)
+      this.colorScale = createScale(values, config.colorScale, { categorical: palette })
       this.warnings.push(...this.colorScale.warnings)
     }
 
@@ -165,7 +174,7 @@ export class LineSeries {
   colorFor(item: LineItem): string {
     if (item.color) return item.color
     if (this.colorScale) return this.colorScale.color(item.value)
-    return this.config.color ?? DEFAULT_COLOR
+    return this.config.color ?? this.palette?.[0] ?? DEFAULT_COLOR
   }
 
   /** Whether the legend has switched off the class this route falls in. */
@@ -207,7 +216,8 @@ export class LineSeries {
   }[] {
     if (!this.config.endpoints?.show) return []
     const radius = this.config.endpoints.radius ?? 2.5
-    const fill = this.config.endpoints.color ?? this.config.color ?? DEFAULT_COLOR
+    const fill =
+      this.config.endpoints.color ?? this.config.color ?? this.palette?.[0] ?? DEFAULT_COLOR
 
     // Deduplicate: routes sharing a terminus would otherwise stack identical
     // dots into a darker blob than intended.

@@ -68,6 +68,26 @@ describe('family tokens: the roles that deliberately do not', () => {
   })
 })
 
+describe('theme.tokens: false', () => {
+  const BLOCK = CSS.slice(CSS.indexOf('.apexmaps--untokened {'), CSS.indexOf('.apexmaps--dark {'))
+
+  it.each([
+    ['--apexmaps-fg', '#1f2933'],
+    ['--apexmaps-surface', '#ffffff'],
+    ['--apexmaps-border', 'rgba(0, 0, 0, 0.12)'],
+    ['--apexmaps-focus', '#2563eb'],
+  ])('%s skips the family token and keeps %s', (local, fallback) => {
+    const priv = local.replace('--apexmaps-', '--_apexmaps-')
+    expect(BLOCK).toContain(`${priv}: var(${local}, ${fallback});`)
+  })
+
+  it('reads no family token, and sits before the dark block so dark still wins', () => {
+    expect(BLOCK.length).toBeGreaterThan(0)
+    expect(BLOCK).not.toContain('--apx-')
+    expect(CSS.indexOf('.apexmaps--untokened {')).toBeLessThan(CSS.indexOf('.apexmaps--dark {'))
+  })
+})
+
 describe('the public --apexmaps-* names are only ever read', () => {
   it('declares none of them, so a value set above the map is inherited', () => {
     // A declaration on the element beats an inherited value whatever the
@@ -75,7 +95,9 @@ describe('the public --apexmaps-* names are only ever read', () => {
     // set on :root, a dashboard panel or a web component's shadow host.
     const declared = [...CSS.matchAll(/(^|[;{\s])(--apexmaps-[\w-]+)\s*:/g)].map((m) => m[2])
     const themeable = declared.filter((name) =>
-      /^--apexmaps-(fg|fg-muted|bg|surface|border|shadow|focus|halo|radius|font-size)$/.test(name),
+      /^--apexmaps-(fg|fg-muted|bg|surface|border|shadow|focus|halo|radius|font-size|basemap|no-data|outline|selected)$/.test(
+        name,
+      ),
     )
     expect(themeable).toEqual([])
   })

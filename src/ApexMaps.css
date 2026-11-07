@@ -81,6 +81,14 @@
   width: 100%;
 }
 
+/* `theme.tokens: false`: no `--apx-*` tokens. Before the dark block, which wins. */
+.apexmaps--untokened {
+  --_apexmaps-fg: var(--apexmaps-fg, #1f2933);
+  --_apexmaps-surface: var(--apexmaps-surface, #ffffff);
+  --_apexmaps-border: var(--apexmaps-border, rgba(0, 0, 0, 0.12));
+  --_apexmaps-focus: var(--apexmaps-focus, #2563eb);
+}
+
 /* Dark mode paints its own background, unlike the light default which stays
    transparent. Forcing dark on a page that is still light is the whole point of
    this being a class, and light text over the host's white card is not a theme,

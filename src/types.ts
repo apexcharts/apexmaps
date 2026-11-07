@@ -1362,6 +1362,43 @@ export interface AnnotationOptions {
   areas?: AreaAnnotation[]
 }
 
+/**
+ * The map's mode, its default palette and the family-token switch.
+ *
+ * The colours the engine paints in JS read the map's own tokens first, then the
+ * `--apx-*` family tokens, then the built-in default for the mode:
+ *
+ * - `--apexmaps-basemap`: the land drawn when no feature series is configured
+ * - `--apexmaps-no-data`: features with no value (a scale's `nullColor` wins)
+ * - `--apexmaps-outline`: the default region and symbol outline (a series'
+ *   `stroke.color` wins)
+ * - `--apexmaps-selected`: the selected feature's outline (`states.active.stroke` wins)
+ * - `--apx-series-1` … `--apx-series-N`: the default categorical palette, and
+ *   row 1 as the single colour of a bubble, marker or line series with none
+ *   of its own
+ * - `--apx-font-family`: the map's font, below `chart.fontFamily`
+ *
+ * Tokens are read at each render and `updateOptions` call.
+ */
+export interface ThemeOptions {
+  /**
+   * `'light' | 'dark' | 'auto'`. Unset renders light. `'auto'` follows the OS
+   * colour scheme, and switches when the OS does.
+   */
+  mode?: 'light' | 'dark' | 'auto'
+  /**
+   * Default palette when a series does not specify one. Naming one also keeps
+   * the categorical defaults built in: `--apx-series-N` no longer applies.
+   */
+  palette?: PaletteName
+  /**
+   * `false` ignores every `--apx-*` family token, in the stylesheet and in JS,
+   * so the map renders its built-in look. The `--apexmaps-*` tokens still apply.
+   * Default `true`.
+   */
+  tokens?: boolean
+}
+
 export interface ApexMapsOptions {
   chart?: ChartOptions
   geo?: GeoOptions
@@ -1370,7 +1407,7 @@ export interface ApexMapsOptions {
   tooltip?: TooltipOptions
   dataLabels?: DataLabelOptions
   states?: StatesOptions
-  theme?: { mode?: 'light' | 'dark' | 'auto'; palette?: PaletteName }
+  theme?: ThemeOptions
   interaction?: InteractionOptions
   a11y?: A11yOptions
   /** The map's own built-in text. See {@link LocaleOptions}. */

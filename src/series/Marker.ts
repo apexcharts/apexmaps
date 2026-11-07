@@ -64,6 +64,8 @@ export class MarkerSeries {
   readonly type = 'marker' as const
   readonly kind = 'marks' as const
   readonly config: MarkerSeriesOptions
+  /** The theme's categorical palette; see the constructor. */
+  private readonly palette: readonly string[] | undefined
   readonly index: number
   readonly id: string
   readonly warnings: string[] = []
@@ -100,15 +102,22 @@ export class MarkerSeries {
     geo,
     index,
     viewport,
+    palette,
   }: {
     config: MarkerSeriesOptions
     geo: NormalizedGeo
     index: number
     viewport: Viewport
+    /**
+     * The theme's categorical palette, row 1 first: the default for an ordinal
+     * colour scale and, through row 1, for the series colour. Absent: built in.
+     */
+    palette?: readonly string[]
   }) {
     this.config = config
     this.index = index
     this.id = `s${index}`
+    this.palette = palette
 
     const rows = (config.data ?? []) as readonly MarkerDatum[]
     const needsJoin = rows.some((d) => !hasCoordinates(d))
@@ -184,10 +193,11 @@ export class MarkerSeries {
     }
 
     if (config.colorBy) {
-      this.colorScale = createScale(categories, {
-        type: 'ordinal',
-        palette: config.palette ?? 'apex',
-      })
+      this.colorScale = createScale(
+        categories,
+        { type: 'ordinal', palette: config.palette },
+        { categorical: palette },
+      )
       this.warnings.push(...this.colorScale.warnings)
     }
 
@@ -220,7 +230,7 @@ export class MarkerSeries {
       return (item.datum as MarkerDatum).color as string
     }
     if (this.colorScale && item.category != null) return this.colorScale.color(item.category)
-    return this.config.color ?? DEFAULT_COLOR
+    return this.config.color ?? this.palette?.[0] ?? DEFAULT_COLOR
   }
 
   // --- clustering ------------------------------------------------------------
@@ -237,7 +247,7 @@ export class MarkerSeries {
   }
 
   private get clusterFill(): string {
-    return this.config.cluster?.color ?? this.config.color ?? DEFAULT_COLOR
+    return this.config.cluster?.color ?? this.config.color ?? this.palette?.[0] ?? DEFAULT_COLOR
   }
 
   clusteringEnabled(zoom: number): boolean {

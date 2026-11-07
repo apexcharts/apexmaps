@@ -61,6 +61,7 @@ import type {
 } from '../geo/PixelGrid'
 import type { Rotation } from '../geo/Versor'
 import { ChoroplethSeries } from './Choropleth'
+import type { FeatureSeriesTheme } from './Choropleth'
 import type {
   LegendItem,
   LonLat,
@@ -193,7 +194,7 @@ export class PixelSeries extends ChoroplethSeries {
      * map as it opened, not to wherever the reader has turned it since.
      */
     rotation?: Rotation
-    theme?: { palette?: string }
+    theme?: FeatureSeriesTheme
     dark?: boolean
     noData?: string
   }) {

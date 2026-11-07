@@ -12,11 +12,9 @@
  * @module series/BaseFeatures
  */
 
+import { THEME_DEFAULTS } from '../core/Theme'
 import { darken } from '../scales/Color'
 import type { NormalizedFeature, SeriesLabelOptions, StrokeOptions } from '../types'
-
-const LIGHT_FILL = '#dfe4ea'
-const DARK_FILL = '#374151'
 
 export interface BaseFeaturesConfig {
   name?: string
@@ -53,9 +51,22 @@ export class BaseFeatures {
     gradientStops: () => never[]
   }
 
-  constructor({ config = {}, dark = false }: { config?: BaseFeaturesConfig; dark?: boolean }) {
-    this.config = { stroke: { color: '#ffffff', width: 0.5 }, ...config }
-    this.fill = config.fill || (dark ? DARK_FILL : LIGHT_FILL)
+  /**
+   * @param config.fill `geo.fill`, else the theme's basemap colour.
+   * @param outline The theme's outline colour, for the default stroke.
+   */
+  constructor({
+    config = {},
+    dark = false,
+    outline,
+  }: {
+    config?: BaseFeaturesConfig
+    dark?: boolean
+    outline?: string
+  }) {
+    const defaults = THEME_DEFAULTS[dark ? 'dark' : 'light']
+    this.config = { stroke: { color: outline || defaults.outline, width: 0.5 }, ...config }
+    this.fill = config.fill || defaults.basemap
     // A minimal scale-shaped object so tooltip and legend code can read the
     // no-data labels without knowing whether a real scale exists.
     this.scale = {

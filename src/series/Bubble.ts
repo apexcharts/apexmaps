@@ -54,6 +54,8 @@ export class BubbleSeries {
   readonly type = 'bubble' as const
   readonly kind = 'symbols' as const
   readonly config: BubbleSeriesOptions
+  /** The theme's categorical palette; see the constructor. */
+  private readonly palette: readonly string[] | undefined
   readonly index: number
   readonly id: string
   readonly warnings: string[] = []
@@ -76,15 +78,22 @@ export class BubbleSeries {
     geo,
     index,
     viewport,
+    palette,
   }: {
     config: BubbleSeriesOptions
     geo: NormalizedGeo
     index: number
     viewport: Viewport
+    /**
+     * The theme's categorical palette, row 1 first: the default for an ordinal
+     * colour scale and, through row 1, for the series colour. Absent: built in.
+     */
+    palette?: readonly string[]
   }) {
     this.config = config
     this.index = index
     this.id = `s${index}`
+    this.palette = palette
 
     const rows = (config.data ?? []) as readonly BubbleDatum[]
     const needsJoin = rows.some((d) => !hasCoordinates(d))
@@ -180,7 +189,7 @@ export class BubbleSeries {
     }
 
     if (config.colorScale) {
-      this.colorScale = createScale(colorValues, config.colorScale)
+      this.colorScale = createScale(colorValues, config.colorScale, { categorical: palette })
       this.warnings.push(...this.colorScale.warnings)
     }
 
@@ -207,7 +216,7 @@ export class BubbleSeries {
 
   fillFor(item: BubbleItem): string {
     if (this.colorScale) return this.colorScale.color(item.colorValue)
-    return this.config.color ?? DEFAULT_COLOR
+    return this.config.color ?? this.palette?.[0] ?? DEFAULT_COLOR
   }
 
   /** Whether the legend has switched off the colour class this bubble falls in. */

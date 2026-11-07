@@ -132,10 +132,15 @@ export function defaults(): ResolvedOptions {
     },
 
     theme: {
-      /** `'light' | 'dark' | 'auto'` */
-      mode: 'light',
+      /**
+       * `'light' | 'dark' | 'auto'`. Unset on purpose, and rendered light:
+       * a mode the page did not pass can then be told from one it did.
+       */
+      mode: undefined,
       /** Default palette when a series does not specify one. */
       palette: undefined,
+      /** `false` ignores the `--apx-*` family tokens. Unset reads them. */
+      tokens: undefined,
     },
 
     interaction: {
@@ -337,6 +342,27 @@ export function buildConfig(options?: ApexMapsOptions): ResolvedOptions {
   }
 
   return cfg
+}
+
+/**
+ * Whether the page passed a value at `path`: in its options, or in a
+ * `responsive` rule in force at `width`. Defaults never count, and neither do
+ * `undefined`, `null` or `''`, so a page that passes the default value on
+ * purpose keeps it, while a value it never passed can be themed.
+ *
+ * @param options The options the page passed, before defaults.
+ */
+export function passedOption(
+  options: ApexMapsOptions,
+  width: number,
+  path: readonly (string | number)[],
+): boolean {
+  let node: unknown = applyResponsive(options as ResolvedOptions, width)
+  for (const key of path) {
+    if (node == null || typeof node !== 'object') return false
+    node = (node as Record<string | number, unknown>)[key]
+  }
+  return node !== undefined && node !== null && node !== ''
 }
 
 /**

@@ -14,7 +14,9 @@ import { geoGraticule } from 'd3-geo'
 
 import css from './ApexMaps.css'
 import { BaseChart } from './core/BaseChart'
-import { buildConfig, applyResponsive, merge, mergeOptions } from './core/Config'
+import { buildConfig, applyResponsive, merge, mergeOptions, passedOption } from './core/Config'
+import { resolveTheme, THEME_DEFAULTS } from './core/Theme'
+import type { MapTheme } from './core/Theme'
 import { A11y } from './core/A11y'
 import type { PremiumFeature } from './core/premium'
 import {
@@ -112,6 +114,7 @@ import type {
   ResolvedOptions,
   ScreenPoint,
   Series,
+  StrokeOptions,
   WorldBounds,
   WorldPoint,
   ViewChangePayload,
@@ -264,10 +267,20 @@ class ApexMaps extends BaseChart {
   private _releaseCss: (() => void) | null = null
 
   /**
-   * The OS colour scheme, for `theme.mode: 'auto'`. Made on first use, so a map
-   * that never asks for `'auto'` never touches `matchMedia`.
+   * The OS colour scheme, for `theme.mode: 'auto'`, which re-themes the map when
+   * the OS switches. Made while the mode is `'auto'` and disposed when it is
+   * not, so a map that never asks for it never touches `matchMedia`.
    */
   private _os: OSThemeWatcher | null = null
+
+  /** The theme of the last render or `updateOptions`; see `core/Theme`. */
+  private _theme: MapTheme | null = null
+
+  /** The theme options `_theme` was read for. */
+  private _themeKey = ''
+
+  /** The font this map wrote on its container, so it removes only its own. */
+  private _themeFont: string | null = null
 
   /** Levels drilled into, outermost first. Empty at the top level. */
   readonly drillPath: { key: string; name?: string; mapId?: string }[] = []
@@ -485,17 +498,13 @@ class ApexMaps extends BaseChart {
   }
 
   private _mountShell(): void {
-    const { chart } = this.config
     // The stylesheet goes into the root the map renders in (the document head,
     // or its shadow root, which a head stylesheet never reaches), once per
     // root. The last map destroyed in that root removes it.
     if (!this._releaseCss) this._releaseCss = injectStyle(this.element, 'apexmaps-styles', css)
     this.element.classList.add('apexmaps')
-    this.element.classList.toggle('apexmaps--dark', this._isDark())
+    this._applyTheme()
     this._applyStateVars()
-    if (chart.fontFamily && chart.fontFamily !== 'inherit') {
-      this.element.style.fontFamily = chart.fontFamily
-    }
 
     this.plot = html('div', { class: 'apexmaps-plot' })
     this.element.appendChild(this.plot)
@@ -717,8 +726,16 @@ class ApexMaps extends BaseChart {
     // Switching on `cfg.type` directly is what lets TypeScript narrow the
     // discriminated union: hoisting it into a variable first would erase the
     // narrowing and each constructor would receive the whole union.
-    this.config.series.forEach((cfg: Series, i: number) => {
-      if (cfg.visible === false) return
+    const theme = this._currentTheme()
+    const palette = theme.series
+    const featureTheme = {
+      palette: this.config.theme?.palette,
+      categorical: palette,
+      nullColor: theme.noData,
+    }
+    this.config.series.forEach((built: Series, i: number) => {
+      if (built.visible === false) return
+      const cfg = this._themedSeries(built, i)
 
       switch (cfg.type) {
         case 'bubble':
@@ -728,6 +745,7 @@ class ApexMaps extends BaseChart {
               geo,
               index: i,
               viewport: this.viewport,
+              palette,
             }),
           )
           break
@@ -738,6 +756,7 @@ class ApexMaps extends BaseChart {
               geo,
               index: i,
               viewport: this.viewport,
+              palette,
             }),
           )
           break
@@ -748,6 +767,7 @@ class ApexMaps extends BaseChart {
               geo,
               index: i,
               viewport: this.viewport,
+              palette,
             }),
           )
           break
@@ -758,6 +778,7 @@ class ApexMaps extends BaseChart {
               geo,
               index: i,
               viewport: this.viewport,
+              palette,
             }),
           )
           break
@@ -778,7 +799,7 @@ class ApexMaps extends BaseChart {
               index: i,
               viewport: this.viewport,
               rotation: this.viewport.rotatable ? this._initialRotation : undefined,
-              theme: this.config.theme,
+              theme: featureTheme,
               dark: this._isDark(),
               noData: this.config.locale?.noData,
             }),
@@ -791,7 +812,7 @@ class ApexMaps extends BaseChart {
               config: cfg,
               geo,
               index: i,
-              theme: this.config.theme,
+              theme: featureTheme,
               dark: this._isDark(),
               noData: this.config.locale?.noData,
             }),
@@ -839,13 +860,18 @@ class ApexMaps extends BaseChart {
 
     const targets: AnySeries[] = []
     if (needsBasemap) {
+      const first = this.config.series?.[0]
+      const theme = this._currentTheme()
       targets.push(
         new BaseFeatures({
           config: {
-            stroke: this.config.series?.[0]?.stroke,
-            fill: this.config.geo?.fill,
+            stroke: first
+              ? (this._themedSeries(first, 0) as { stroke?: StrokeOptions }).stroke
+              : undefined,
+            fill: this.config.geo?.fill || theme.basemap,
           },
-          dark: this._isDark(),
+          dark: theme.dark,
+          outline: theme.outline,
         }),
       )
     }
@@ -2576,7 +2602,7 @@ class ApexMaps extends BaseChart {
     const selected = this.selection.has(String(markKey)) && active.enabled !== false
     const isFeature = series.kind === 'features'
     const stroke = selected
-      ? (active.stroke ?? '#111111')
+      ? this._selectedStroke()
       : (series.config.stroke?.color ?? (isFeature ? 'none' : '#ffffff'))
     const width = selected
       ? (active.strokeWidth ?? (isFeature ? 1.5 : 2))
@@ -2971,7 +2997,7 @@ class ApexMaps extends BaseChart {
       this._buildViewport()
     }
 
-    this.element.classList.toggle('apexmaps--dark', this._isDark())
+    this._applyTheme()
     this._applyStateVars()
     this.warnings = []
     this._buildSeries()
@@ -3084,7 +3110,7 @@ class ApexMaps extends BaseChart {
         path.classList.toggle('is-selected', selected)
         path.classList.toggle('is-muted', muting && !selected)
         if (selected && active.enabled !== false) {
-          path.setAttribute('stroke', active.stroke ?? '#111111')
+          path.setAttribute('stroke', this._selectedStroke())
           path.setAttribute('stroke-width', String(active.strokeWidth ?? 1.5))
         } else {
           path.setAttribute('stroke', series.config.stroke?.color ?? 'none')
@@ -3103,7 +3129,7 @@ class ApexMaps extends BaseChart {
           el.classList.toggle('is-muted', muting && !selected)
           el.setAttribute(
             'stroke',
-            selected ? (active.stroke ?? '#111111') : (series.config.stroke?.color ?? '#ffffff'),
+            selected ? this._selectedStroke() : (series.config.stroke?.color ?? '#ffffff'),
           )
           el.setAttribute(
             'stroke-width',
@@ -3899,13 +3925,94 @@ class ApexMaps extends BaseChart {
   private _textCache: { from: unknown; text: ResolvedLocale } | null = null
 
   private _isDark(): boolean {
-    const mode = this.config.theme?.mode
-    if (mode === 'dark') return true
-    if (mode === 'auto') {
-      this._os ??= new OSThemeWatcher()
-      return this._os.state.mode === 'dark'
+    return this._currentTheme().dark
+  }
+
+  /**
+   * The theme as last read, read again only when the theme options changed
+   * since (a responsive rule can switch the mode), so a data update re-reads no
+   * tokens. `render` and `updateOptions` always read them afresh.
+   */
+  private _currentTheme(): MapTheme {
+    const key = JSON.stringify(this.config.theme ?? {})
+    return this._theme && this._themeKey === key ? this._theme : this._resolveTheme()
+  }
+
+  /**
+   * Read the theme for this render: the mode and the colours painted from JS,
+   * each through its token chain (see `core/Theme`).
+   */
+  private _resolveTheme(): MapTheme {
+    this._themeKey = JSON.stringify(this.config.theme ?? {})
+    if (this.config.theme?.mode === 'auto') {
+      this._os ??= new OSThemeWatcher({ onChange: () => this._onSchemeChange() })
+    } else if (this._os) {
+      this._os.dispose()
+      this._os = null
     }
-    return false
+    this._theme = resolveTheme({
+      element: this.element,
+      theme: this.config.theme,
+      osDark: () => this._os?.state.mode === 'dark',
+    })
+    return this._theme
+  }
+
+  /**
+   * Resolve the theme and apply what the stylesheet cannot decide alone: the
+   * mode class, the token switch and the font.
+   */
+  private _applyTheme(): void {
+    const theme = this._resolveTheme()
+    this.element.classList.toggle('apexmaps--dark', theme.dark)
+    this.element.classList.toggle('apexmaps--untokened', this.config.theme?.tokens === false)
+
+    // `chart.fontFamily` when the page passed it ('inherit' included), else the
+    // family font token. Written on the container, which everything inherits.
+    const own = this._passed(['chart', 'fontFamily'])
+    const passed = this.config.chart.fontFamily
+    const font = own ? (passed !== 'inherit' ? passed : '') : (theme.font ?? '')
+    const style = this.element.style
+    if (font) {
+      style.fontFamily = font
+      this._themeFont = style.fontFamily
+    } else if (this._themeFont !== null) {
+      if (style.fontFamily === this._themeFont) style.removeProperty('font-family')
+      this._themeFont = null
+    }
+  }
+
+  /** The OS switched scheme: re-theme a map in `'auto'` mode. */
+  private _onSchemeChange(): void {
+    if (this._destroyed || !this.rendered || this.config.theme?.mode !== 'auto') return
+    void this.updateOptions({})
+  }
+
+  /** Whether the page itself passed a value at `path`; see `passedOption`. */
+  private _passed(path: readonly (string | number)[]): boolean {
+    // Before the first measure the config has no responsive rule applied, and
+    // no width matches none.
+    const width = this.viewport?.width
+    return passedOption(this.userOptions, width > 0 ? width : Infinity, path)
+  }
+
+  /** The selected outline: `states.active.stroke` when the page set it, else the theme's. */
+  private _selectedStroke(): string {
+    const set = this.config.states?.active?.stroke
+    if (set && this._passed(['states', 'active', 'stroke'])) return set
+    return this._theme?.selected ?? set ?? THEME_DEFAULTS.light.selected
+  }
+
+  /**
+   * A series as built, with its default outline in the theme's colour. A colour
+   * the page set, or a type whose default is not the outline, stays as it is.
+   */
+  private _themedSeries<T extends Series>(cfg: T, index: number): T {
+    const stroke = (cfg as { stroke?: StrokeOptions }).stroke
+    const outline = this._theme?.outline
+    if (!stroke || !outline || stroke.color !== THEME_DEFAULTS.light.outline) return cfg
+    if (outline === stroke.color || this._passed(['series', index, 'stroke', 'color'])) return cfg
+    return { ...cfg, stroke: { ...stroke, color: outline } }
   }
 
   /** Tear down: listeners, observers, animation frames, DOM. */
@@ -3915,6 +4022,10 @@ class ApexMaps extends BaseChart {
     this._releaseCss = null
     this._os?.dispose()
     this._os = null
+    if (this._themeFont !== null && this.element.style.fontFamily === this._themeFont) {
+      this.element.style.removeProperty('font-family')
+    }
+    this._themeFont = null
     if (this._renderRaf !== null) cancelAnimationFrame(this._renderRaf)
     if (this._resizeRaf !== null) cancelAnimationFrame(this._resizeRaf)
     if (this._rotateRaf !== null) cancelAnimationFrame(this._rotateRaf)
@@ -3965,6 +4076,7 @@ class ApexMaps extends BaseChart {
     this.element.classList.remove(
       'apexmaps',
       'apexmaps--dark',
+      'apexmaps--untokened',
       'apexmaps--enter',
       'apexmaps--tiles',
       'apexmaps--legend-top',

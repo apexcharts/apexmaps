@@ -368,7 +368,7 @@ ApexMaps.setLicense(key)                        // shared across the ApexCharts 
 ApexMaps.registerMap(id, geometry, meta)        // meta carries source, licence, vintage
 ApexMaps.registerLayout(id, { keyField, cells }) // one equal cell per region
 ApexMaps.registerProjection(name, factory)
-ApexMaps.registerPalette(name, { kind, stops })
+ApexMaps.registerPalette(name, { kind, stops })   // a family theme's tokens.series works by name too
 ApexMaps.listMaps()
 ApexMaps.listProjections()
 ApexMaps.listPalettes()
@@ -392,11 +392,25 @@ and the map follows, with no configuration:
 }
 ```
 
+Four more tokens back colours the map paints itself rather than through the
+stylesheet. Each sits below the option that sets the same thing, so a value you
+pass in the options still wins:
+
+| Token | Paints | Default (light / dark) | Option that wins |
+| --- | --- | --- | --- |
+| `--apexmaps-basemap` | The land drawn when no feature series is configured | `#dfe4ea` / `#374151` | `geo.fill` |
+| `--apexmaps-no-data` | Features with no value, and the legend's no-data swatch | `#eeeeee` / `#374151` | `scale.nullColor` |
+| `--apexmaps-outline` | Default region and symbol outlines | `#ffffff` | a series' `stroke.color` |
+| `--apexmaps-selected` | The selected feature's outline | `#111111` | `states.active.stroke` |
+
+These are read when the map renders and on every `updateOptions` call, so after
+changing one on a live page, call `updateOptions({})`.
+
 ### Family tokens (`--apx-*`)
 
-Every product in the ApexCharts family reads the same five root tokens, so a
-page can state its brand once and have maps, plots, trees, flow diagrams and
-Gantt charts all follow:
+Every product in the ApexCharts family reads the same root tokens, so a page
+can state its brand once and have maps, plots, trees, flow diagrams and Gantt
+charts all follow:
 
 | Token | Role |
 | --- | --- |
@@ -405,6 +419,7 @@ Gantt charts all follow:
 | `--apx-grid` | Hairlines: borders and separators |
 | `--apx-surface` | The plane content sits on |
 | `--apx-series-1` … `--apx-series-N` | An ordered categorical palette (1-based) |
+| `--apx-font-family` | The typeface |
 
 ```css
 :root {
@@ -428,10 +443,32 @@ change a map you had already themed:
 is `transparent` so your own card shows through, and painting it with
 `--apx-surface` would cover a background you chose.
 
+The series read two of them:
+
+- `--apx-series-1` … `--apx-series-N` replace the built-in `apex` list as the
+  default for every ordinal scale (a marker series' `colorBy`, an ordinal
+  `colorScale`), and row 1 is the colour of a bubble, marker or line series
+  that sets no `color`. The list is taken whole, up to its first gap. A
+  `palette` on the series, a `colorScale.palette`, or `theme.palette` wins, and
+  naming `theme.palette` keeps the built-in list for the rest. Arcs keep their
+  own colour. Sequential and diverging ramps never take them.
+- `--apx-font-family` sets the map's font unless `chart.fontFamily` is passed
+  (`'inherit'` included).
+
+A palette name the map does not know is looked up on the family theme registry
+in apex-commons, so a brand palette registered once for the charts with
+`registerTheme('acme', { tokens: { series: [...] } })` is also `palette: 'acme'`
+here.
+
+To keep a map on its built-in look whatever the page sets, pass
+`theme: { tokens: false }`: every `--apx-*` token is ignored, in the stylesheet
+and in JS. Your `--apexmaps-*` tokens still apply.
+
 ### Why dark mode does not take them
 
 A single set of `--apx-*` values describes **one** appearance. The map's mode is
-chosen by `theme.mode` (`'light'`, `'dark'` or `'auto'`), not by the page, so
+chosen by `theme.mode` (`'light'`, `'dark'` or `'auto'`; unset renders light,
+and `'auto'` follows the OS scheme as it switches), not by the page, so
 the two can disagree: a page with a light brand surface plus `theme.mode:
 'dark'` would paint the dark palette white and put white text on it. Rather than
 guess, the dark palette stays self-contained and always legible.
