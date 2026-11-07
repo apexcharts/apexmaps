@@ -1378,12 +1378,17 @@ export interface AnnotationOptions {
  *   of its own
  * - `--apx-font-family`: the map's font, below `chart.fontFamily`
  *
+ * With the `apexmaps/ignite-ui` add-on loaded, an Ignite UI theme on the page
+ * ranks below all of these and above the built-in defaults.
+ *
  * Tokens are read at each render and `updateOptions` call.
  */
 export interface ThemeOptions {
   /**
-   * `'light' | 'dark' | 'auto'`. Unset renders light. `'auto'` follows the OS
-   * colour scheme, and switches when the OS does.
+   * `'light' | 'dark' | 'auto'`. Unset renders light, or dark when the
+   * `apexmaps/ignite-ui` add-on is loaded and the page's Ignite UI theme is a
+   * dark one. `'auto'` follows the OS colour scheme, and switches when the OS
+   * does.
    */
   mode?: 'light' | 'dark' | 'auto'
   /**
@@ -1394,9 +1399,15 @@ export interface ThemeOptions {
   /**
    * `false` ignores every `--apx-*` family token, in the stylesheet and in JS,
    * so the map renders its built-in look. The `--apexmaps-*` tokens still apply.
-   * Default `true`.
+   * Also turns off the design system below. Default `true`.
    */
   tokens?: boolean
+  /**
+   * `false` ignores the page's design system (Ignite UI) for this map: its
+   * colours, font and dark variant. Has an effect only while the
+   * `apexmaps/ignite-ui` add-on is loaded. Default `true`.
+   */
+  designSystem?: boolean
 }
 
 export interface ApexMapsOptions {

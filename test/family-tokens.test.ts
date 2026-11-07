@@ -26,30 +26,50 @@ const LIGHT_BLOCK = CSS.slice(
 )
 
 /** The `.apexmaps--dark` block. */
-const DARK_BLOCK = CSS.slice(CSS.indexOf('.apexmaps--dark {'), CSS.indexOf('.apexmaps-plot'))
+const DARK_BLOCK = CSS.slice(
+  CSS.indexOf('.apexmaps--dark {'),
+  CSS.indexOf('.apexmaps--dark.apexmaps--design-system {'),
+)
+
+/** The dark block's override while a dark design-system theme paints the chrome. */
+const DS_DARK_BLOCK = CSS.slice(
+  CSS.indexOf('.apexmaps--dark.apexmaps--design-system {'),
+  CSS.indexOf('.apexmaps-plot'),
+)
 
 describe('family tokens: the roles that hand off to --apx-*', () => {
   it.each([
-    ['--apexmaps-fg', '--apx-fore', '#1f2933'],
-    ['--apexmaps-surface', '--apx-surface', '#ffffff'],
-    ['--apexmaps-border', '--apx-grid', 'rgba(0, 0, 0, 0.12)'],
-    ['--apexmaps-focus', '--apx-accent', '#2563eb'],
-  ])('%s falls back to %s, keeping %s as the default', (local, token, fallback) => {
-    // Read through the private copy: the public name first, then the family
-    // token, then the default.
-    const priv = local.replace('--apexmaps-', '--_apexmaps-')
-    expect(LIGHT_BLOCK).toContain(`${priv}: var(${local}, var(${token}, ${fallback}));`)
-  })
+    ['--apexmaps-fg', '--apx-fore', 'fg', '#1f2933'],
+    ['--apexmaps-surface', '--apx-surface', 'overlay', '#ffffff'],
+    ['--apexmaps-border', '--apx-grid', 'grid', 'rgba(0, 0, 0, 0.12)'],
+    ['--apexmaps-focus', '--apx-accent', 'focus', '#2563eb'],
+  ])(
+    '%s falls back to %s, then the design system, keeping the default',
+    (local, token, ds, fallback) => {
+      // Read through the private copy: the public name first, then the family
+      // token, then the design system's step (unset without the add-on), then
+      // the default.
+      const priv = local.replace('--apexmaps-', '--_apexmaps-')
+      expect(LIGHT_BLOCK).toContain(
+        `${priv}: var(${local}, var(${token}, var(--_apexmaps-ds-${ds}, ${fallback})));`,
+      )
+    },
+  )
 
   it('leaves the original default in place, so a page with no tokens is unchanged', () => {
-    // Every token-backed declaration still names the value it always had.
+    // Every token-backed declaration still names the value it always had, as
+    // the last step of its chain.
     const backed = [
       ...LIGHT_BLOCK.matchAll(
-        /--_apexmaps-[\w-]+: var\(--apexmaps-[\w-]+, var\(--apx-[\w-]+, ([^)]*(?:\([^)]*\))?[^)]*)\)\);/g,
+        /--_apexmaps-[\w-]+: var\(--apexmaps-[\w-]+, var\(--apx-[\w-]+, var\(--_apexmaps-ds-[\w-]+, (.+)\)\)\);/g,
       ),
     ]
     expect(backed).toHaveLength(4)
     for (const [, fallback] of backed) expect(fallback.trim()).not.toBe('')
+  })
+
+  it('names no design system in the stylesheet: the add-on writes its steps', () => {
+    expect(CSS).not.toContain('--ig-')
   })
 })
 
@@ -62,9 +82,42 @@ describe('family tokens: the roles that deliberately do not', () => {
   it('the dark palette takes no family tokens at all', () => {
     // A single set of --apx-* values describes one appearance. Applying a light
     // brand surface to the palette chosen for dark mode is how the chrome ends
-    // up white-on-white, so dark stays self-contained.
-    expect(DARK_BLOCK).toContain('--_apexmaps-fg: var(--apexmaps-fg, #e5e7eb);')
+    // up white-on-white, so dark stays self-contained. The design system's
+    // steps do reach it: the map writes them only from a dark theme.
+    expect(DARK_BLOCK).toContain(
+      '--_apexmaps-fg: var(--apexmaps-fg, var(--_apexmaps-ds-fg, #e5e7eb));',
+    )
+    expect(DARK_BLOCK).toContain(
+      '--_apexmaps-bg: var(--apexmaps-bg, var(--_apexmaps-ds-paper, #111827));',
+    )
     expect(DARK_BLOCK).not.toContain('--apx-')
+  })
+
+  it.each([
+    ['--apexmaps-fg', '--apx-fore', 'fg', '#e5e7eb'],
+    ['--apexmaps-surface', '--apx-surface', 'overlay', '#1f2937'],
+    ['--apexmaps-border', '--apx-grid', 'grid', 'rgba(255, 255, 255, 0.16)'],
+    ['--apexmaps-focus', '--apx-accent', 'focus', '#60a5fa'],
+  ])(
+    'under a dark design-system theme %s takes %s above the design system',
+    (local, family, ds, fallback) => {
+      // The class is set only while the design system paints the chrome, so a
+      // page without the add-on keeps the self-contained palette above, and one
+      // with it ranks --apx-* over --ig-* in dark as in light (plan 36, D5).
+      const priv = local.replace('--apexmaps-', '--_apexmaps-')
+      expect(DS_DARK_BLOCK).toContain(
+        `${priv}: var(${local}, var(${family}, var(--_apexmaps-ds-${ds}, ${fallback})));`,
+      )
+    },
+  )
+
+  it('the design-system override touches only the token-backed roles', () => {
+    expect(DS_DARK_BLOCK.match(/--_apexmaps-[a-z-]+:/g)).toEqual([
+      '--_apexmaps-fg:',
+      '--_apexmaps-surface:',
+      '--_apexmaps-border:',
+      '--_apexmaps-focus:',
+    ])
   })
 })
 

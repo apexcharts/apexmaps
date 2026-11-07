@@ -464,6 +464,61 @@ To keep a map on its built-in look whatever the page sets, pass
 `theme: { tokens: false }`: every `--apx-*` token is ignored, in the stylesheet
 and in JS. Your `--apexmaps-*` tokens still apply.
 
+### Ignite UI
+
+Ignite UI theming is an add-on. Load it once and maps follow the Ignite UI
+theme on the page: the series colours, text, borders, focus ring, tooltip
+surface, font, the basemap and no-data greys, outlines, and light or dark.
+
+```js
+import 'apexmaps/ignite-ui'
+```
+
+Without a bundler, load `dist/apexmaps.ignite-ui.min.js` with a script tag,
+before or after `apexmaps.min.js`. Load it before the first render: a map
+rendered earlier picks it up on its next `updateOptions()` (call
+`updateOptions({})` to apply it at once).
+Without the add-on the `--ig-*` tokens are ignored, with no error; the `--apx-*`
+and `--apexmaps-*` tokens work either way. It is free and needs no licence key.
+
+The theme ranks below everything you set:
+
+```
+options  >  --apexmaps-*  >  --apx-*  >  theme.palette  >  Ignite UI  >  built-in default
+```
+
+| Map role | Ignite UI token |
+| --- | --- |
+| Series rows 1 to 6: the ordinal palette, and row 1 for a bubble, marker or line series with no `color` | `--ig-primary-seed`, `-secondary-`, `-info-`, `-success-`, `-warn-`, `-error-seed` (each else `-500`) |
+| Series rows 7 to 12, then 13 to 18 | The same six at `-300`, then at `-700` |
+| Text, muted text, borders | `--ig-gray-800`, `--ig-gray-600`, `--ig-gray-300` |
+| Focus ring | `--ig-primary-seed` |
+| Tooltip and zoom controls | `--ig-surface-overlay` (Ignite UI 7.5 and later; the built-in surface before) |
+| Basemap, no-data | `--ig-gray-100`, `--ig-gray-200` |
+| Region and symbol outlines | The paper: `--ig-surface-base`, else `--ig-surface-500` |
+| Basemap outlines | `--ig-gray-300`, like the borders: the paper beside `--ig-gray-100` would leave none |
+| Selected outline | `--ig-gray-800` |
+| Font | `--ig-font-family` |
+| Light or dark | `--ig-theme-variant` |
+
+- With `theme.mode` unset, a dark Ignite UI theme turns the map dark, and the
+  map's own background stays transparent so the page's surface shows through
+  (`--apexmaps-bg` and `chart.background` still paint). A mode you pass wins,
+  and a light theme changes nothing about the mode.
+- Text, lines, surfaces and the greys apply only while the map's mode is the
+  theme's: a dark theme's light greys never land on a light map. The series
+  and focus colours apply in either mode.
+- `--apx-accent` alone takes row 1 of the series, and the theme fills the rest.
+  Where the theme paints the selected outline or the basemap's outlines,
+  `--apx-fore` and `--apx-grid` rank above it.
+- Sequential and diverging ramps (choropleth classes, hexbin and pixel scales)
+  do not change.
+- `theme: { designSystem: false }` turns it off for one map, and
+  `theme: { tokens: false }` turns it off together with the `--apx-*` tokens.
+- It registers the adapter the Apex products share, so ApexTree, ApexSankey
+  and ApexGantt on the page follow the theme too. ApexCharts charts take their
+  own add-on, `apexcharts/features/ignite-ui`.
+
 ### Why dark mode does not take them
 
 A single set of `--apx-*` values describes **one** appearance. The map's mode is
@@ -472,6 +527,12 @@ and `'auto'` follows the OS scheme as it switches), not by the page, so
 the two can disagree: a page with a light brand surface plus `theme.mode:
 'dark'` would paint the dark palette white and put white text on it. Rather than
 guess, the dark palette stays self-contained and always legible.
+
+An Ignite UI theme loaded through its add-on is the exception: it states its
+own mode with `--ig-theme-variant`, so its dark values reach the dark palette
+only from a dark theme. A dark map under a dark Ignite UI theme is on a page
+that says it is dark, so there the `--apx-*` tokens apply to the dark palette
+too, above the theme, as in light.
 
 To brand dark mode, override the `--apexmaps-*` tokens under `.apexmaps--dark`
 (or on the container), which still wins over everything. A `--apexmaps-*` value

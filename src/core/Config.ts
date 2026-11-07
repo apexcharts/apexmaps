@@ -141,6 +141,8 @@ export function defaults(): ResolvedOptions {
       palette: undefined,
       /** `false` ignores the `--apx-*` family tokens. Unset reads them. */
       tokens: undefined,
+      /** `false` ignores the design system (Ignite UI add-on). Unset reads it. */
+      designSystem: undefined,
     },
 
     interaction: {

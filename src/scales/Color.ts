@@ -276,6 +276,16 @@ function format(rgb: RGB, alpha: number): string {
   return formatColor([rgb[0], rgb[1], rgb[2], alpha], 3)
 }
 
+/**
+ * `color` as `#rrggbb`, or `rgba()` when translucent, clipped to sRGB: what it
+ * computes to inside the map in scope (see `withColorScope`). Null when it
+ * cannot be read, so a caller can treat it as absent.
+ */
+export function normalizeColor(color: string): string | null {
+  const c = parseRgba(color)
+  return c ? format([c[0], c[1], c[2]], c[3]) : null
+}
+
 /** Whether `color` is one of the forms read before any CSS colour was. */
 function isLegacy(color: string): boolean {
   return typeof color === 'string' && parseLegacy(color.trim()) !== null

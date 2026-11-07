@@ -14,6 +14,12 @@
       "default": "./dist/apexmaps.cjs"
     },
     "./apexmaps.css": "./dist/apexmaps.css",
+    "./ignite-ui": {
+      "types": "./dist/types/ignite-ui.d.ts",
+      "import": "./dist/apexmaps.ignite-ui.esm.js",
+      "require": "./dist/apexmaps.ignite-ui.cjs",
+      "default": "./dist/apexmaps.ignite-ui.cjs"
+    },
     "./wrappers": {
       "types": "./dist/types/wrappers/index.d.ts",
       "import": "./dist/wrappers.esm.js",
@@ -23,7 +29,11 @@
     "./dist/*": "./dist/*",
     "./package.json": "./package.json"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/apexmaps.ignite-ui.esm.js",
+    "./dist/apexmaps.ignite-ui.cjs",
+    "./dist/apexmaps.ignite-ui.min.js"
+  ],
   "files": [
     "dist"
   ],

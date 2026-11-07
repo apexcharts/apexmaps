@@ -16,11 +16,25 @@ import { gzipSync } from 'node:zlib'
 const ROOT = resolve(import.meta.dirname, '..')
 const BUDGET = 150 * 1024
 
-const BUNDLES = ['apexmaps.min.js', 'apexmaps.esm.js', 'apexmaps.cjs']
+/**
+ * The opt-in Ignite UI add-on has its own, much smaller budget: it is the
+ * commons adapter plus two token names, and growth there means a core module
+ * leaked into it.
+ */
+const ADDON_BUDGET = 3 * 1024
+
+const BUNDLES = [
+  ['apexmaps.min.js', BUDGET],
+  ['apexmaps.esm.js', BUDGET],
+  ['apexmaps.cjs', BUDGET],
+  ['apexmaps.ignite-ui.min.js', ADDON_BUDGET],
+  ['apexmaps.ignite-ui.esm.js', ADDON_BUDGET],
+  ['apexmaps.ignite-ui.cjs', ADDON_BUDGET],
+]
 
 let failed = false
 console.log('')
-for (const file of BUNDLES) {
+for (const [file, budget] of BUNDLES) {
   const path = join(ROOT, 'dist', file)
   if (!existsSync(path)) {
     console.error(`  ${file}: missing. Run \`npm run build\` first.`)
@@ -29,12 +43,12 @@ for (const file of BUNDLES) {
   }
   const raw = readFileSync(path)
   const gz = gzipSync(raw, { level: 9 }).length
-  const over = gz > BUDGET
+  const over = gz > budget
   if (over) failed = true
   console.log(
-    `  ${file.padEnd(18)} ${(raw.length / 1024).toFixed(1).padStart(7)} kB raw` +
+    `  ${file.padEnd(26)} ${(raw.length / 1024).toFixed(1).padStart(7)} kB raw` +
       `  ${(gz / 1024).toFixed(1).padStart(6)} kB gzipped` +
-      `  ${over ? 'OVER' : 'ok'} (budget ${(BUDGET / 1024).toFixed(0)} kB)`,
+      `  ${over ? 'OVER' : 'ok'} (budget ${(budget / 1024).toFixed(0)} kB)`,
   )
 }
 console.log('')

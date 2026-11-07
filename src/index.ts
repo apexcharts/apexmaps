@@ -72,6 +72,7 @@ export type {
   SizeLegendEntry,
   StatesOptions,
   StrokeOptions,
+  ThemeOptions,
   TileCoord,
   TileOptions,
   TileRequest,

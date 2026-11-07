@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ignite UI theming · ApexMaps</title>
+    <link rel="stylesheet" href="_shared.css" />
+    <!-- The page's Ignite UI theme. A real page links the igniteui-webcomponents
+         sheet; this demo uses the same tokens, captured into a local file. -->
+    <link rel="stylesheet" id="ig-theme" href="../e2e/fixtures/ignite-ui/light-material.css" />
+    <style>
+      /* An Ignite UI page paints its own surface; the map's paper stays
+         transparent on it, in a dark theme too. */
+      .ig-surface {
+        background: var(--ig-surface-500, #fff);
+        padding: 10px;
+        border-radius: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="grid">
+      <div class="card">
+        <h1>Ignite UI theming</h1>
+        <p class="note">
+          One line, <code>import 'apexmaps/ignite-ui'</code> (or the
+          <code>apexmaps.ignite-ui.min.js</code> script tag here), and the map follows the Ignite UI
+          theme on the page: series colours from the theme's seeds, text, borders, the focus ring,
+          the tooltip, the font, the basemap and no-data greys, and light or dark. The map itself
+          sets no theme option. Without the add-on an Ignite UI sheet changes nothing. Anything you
+          set (options, <code>--apexmaps-*</code>, <code>--apx-*</code>, a palette) still wins, and
+          the choropleth ramp stays sequential.
+        </p>
+        <div class="row">
+          <button data-theme="light-material">material</button>
+          <button data-theme="dark-material">material dark</button>
+          <button data-theme="light-bootstrap">bootstrap</button>
+          <button data-theme="dark-bootstrap">bootstrap dark</button>
+          <button data-theme="light-fluent">fluent</button>
+          <button data-theme="dark-fluent">fluent dark</button>
+          <label><input type="checkbox" id="ds-off" /> <code>designSystem: false</code></label>
+          <span class="label" id="ig-status"></span>
+        </div>
+        <div class="ig-surface"><div id="ignite"></div></div>
+      </div>
+    </div>
+
+    <script src="../dist/apexmaps.min.js"></script>
+    <script src="../dist/apexmaps.ignite-ui.min.js"></script>
+    <script src="_shared.js"></script>
+    <script>
+      const KEYS = ['DE', 'FR', 'IT', 'ES', 'PL', 'NL', 'SE', 'IE', 'PT', 'EL', 'FI', 'AT']
+      const SITES = [
+        { name: 'Lisbon', lon: -9.14, lat: 38.72, kind: 'Port' },
+        { name: 'Rotterdam', lon: 4.48, lat: 51.92, kind: 'Port' },
+        { name: 'Frankfurt', lon: 8.68, lat: 50.11, kind: 'Hub' },
+        { name: 'Milan', lon: 9.19, lat: 45.46, kind: 'Hub' },
+        { name: 'Warsaw', lon: 21.01, lat: 52.23, kind: 'Hub' },
+        { name: 'Stockholm', lon: 18.07, lat: 59.33, kind: 'Port' },
+      ]
+
+      const map = Demo.watch(
+        'ignite',
+        new ApexMaps(document.getElementById('ignite'), {
+          chart: { height: 360 },
+          geo: { map: 'eu/nuts0@20m' },
+          series: [
+            {
+              name: 'Adoption',
+              joinBy: ['nuts_id', 'key'],
+              data: Demo.rows(KEYS),
+              scale: { palette: 'blues' },
+            },
+            { type: 'marker', name: 'Sites', colorBy: 'kind', data: SITES },
+          ],
+        }),
+      )
+
+      const status = document.getElementById('ig-status')
+      const report = () => {
+        const dark = map.element.classList.contains('apexmaps--dark')
+        status.textContent = `${dark ? 'dark' : 'light'}, theme.mode ${map.config.theme.mode ?? 'unset'}`
+      }
+
+      Demo.ready(map.render().then(report))
+
+      const link = document.getElementById('ig-theme')
+      for (const button of document.querySelectorAll('[data-theme]')) {
+        button.addEventListener('click', () => {
+          // Tokens are read at render and on updateOptions, so re-read them once
+          // the new sheet has loaded.
+          link.addEventListener('load', () => map.updateOptions({}).then(report), { once: true })
+          link.href = `../e2e/fixtures/ignite-ui/${button.dataset.theme}.css`
+        })
+      }
+      document.getElementById('ds-off').addEventListener('change', (event) => {
+        map.updateOptions({ theme: { designSystem: !event.target.checked } }).then(report)
+      })
+    </script>
+  </body>
+</html>

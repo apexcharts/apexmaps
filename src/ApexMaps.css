@@ -11,7 +11,9 @@
  * `:root` and have the map follow along with the charts beside it. Precedence
  * reads left to right in each declaration below:
  *
- *   --apexmaps-* set by the host  >  --apx-* family token  >  built-in default
+ *   --apexmaps-* set by the host  >  --apx-* family token  >  design system
+ *   (`--_apexmaps-ds-*`, written by the map only with `apexmaps/ignite-ui`)
+ *   >  built-in default
  *
  * The public `--apexmaps-*` names are never declared here, only read. The map
  * reads private `--_apexmaps-*` copies, each set from its public name with the
@@ -20,23 +22,26 @@
  * names (as this file used to) meant a theme set on `:root`, a dashboard panel
  * or a web component's shadow host never reached the map.
  *
- * The dark palette deliberately takes no tokens. A single set of `--apx-*`
- * values describes one appearance, and applying a light brand surface to the
+ * The dark palette deliberately takes no `--apx-*` tokens. A single set of
+ * them describes one appearance, and applying a light brand surface to the
  * palette chosen for dark mode is how you get white text on white. Dark stays
- * self-contained and always legible; override `--apexmaps-*` to theme it.
+ * self-contained and always legible; override `--apexmaps-*` to theme it. The
+ * design-system steps reach it only from a dark design-system theme, and then
+ * the page has said its appearance is dark, so the `--apx-*` tokens rank above
+ * them there as they do in light (`.apexmaps--design-system`, below).
  */
 
 .apexmaps {
-  --_apexmaps-fg: var(--apexmaps-fg, var(--apx-fore, #1f2933));
-  --_apexmaps-fg-muted: var(--apexmaps-fg-muted, #6b7280);
+  --_apexmaps-fg: var(--apexmaps-fg, var(--apx-fore, var(--_apexmaps-ds-fg, #1f2933)));
+  --_apexmaps-fg-muted: var(--apexmaps-fg-muted, var(--_apexmaps-ds-muted, #6b7280));
   /* Not token-backed: the light default is transparent on purpose, so the
      host's own card shows through. Painting it with `--apx-surface` would
      cover a tinted card that was deliberately chosen. */
   --_apexmaps-bg: var(--apexmaps-bg, transparent);
-  --_apexmaps-surface: var(--apexmaps-surface, var(--apx-surface, #ffffff));
-  --_apexmaps-border: var(--apexmaps-border, var(--apx-grid, rgba(0, 0, 0, 0.12)));
+  --_apexmaps-surface: var(--apexmaps-surface, var(--apx-surface, var(--_apexmaps-ds-overlay, #ffffff)));
+  --_apexmaps-border: var(--apexmaps-border, var(--apx-grid, var(--_apexmaps-ds-grid, rgba(0, 0, 0, 0.12))));
   --_apexmaps-shadow: var(--apexmaps-shadow, 0 4px 16px rgba(15, 23, 42, 0.14));
-  --_apexmaps-focus: var(--apexmaps-focus, var(--apx-accent, #2563eb));
+  --_apexmaps-focus: var(--apexmaps-focus, var(--apx-accent, var(--_apexmaps-ds-focus, #2563eb)));
   /* The label halo, so it flips with the theme rather than staying white over a
      dark map. */
   --_apexmaps-halo: var(--apexmaps-halo, rgba(255, 255, 255, 0.85));
@@ -95,16 +100,28 @@
    it is an unreadable map. A dashboard that is already dark can hand the
    background back with `--apexmaps-bg: transparent`. */
 .apexmaps--dark {
-  /* No `--apx-*` fallbacks here on purpose — see the note at the top of the
-     file. This palette must stay readable whatever the page's tokens describe. */
-  --_apexmaps-fg: var(--apexmaps-fg, #e5e7eb);
-  --_apexmaps-fg-muted: var(--apexmaps-fg-muted, #9ca3af);
-  --_apexmaps-bg: var(--apexmaps-bg, #111827);
-  --_apexmaps-surface: var(--apexmaps-surface, #1f2937);
-  --_apexmaps-border: var(--apexmaps-border, rgba(255, 255, 255, 0.16));
+  /* No `--apx-*` fallbacks here on purpose: see the note at the top of the
+     file. This palette must stay readable whatever the page's tokens describe.
+     `--_apexmaps-ds-paper` is transparent when the design system chose dark. */
+  --_apexmaps-fg: var(--apexmaps-fg, var(--_apexmaps-ds-fg, #e5e7eb));
+  --_apexmaps-fg-muted: var(--apexmaps-fg-muted, var(--_apexmaps-ds-muted, #9ca3af));
+  --_apexmaps-bg: var(--apexmaps-bg, var(--_apexmaps-ds-paper, #111827));
+  --_apexmaps-surface: var(--apexmaps-surface, var(--_apexmaps-ds-overlay, #1f2937));
+  --_apexmaps-border: var(--apexmaps-border, var(--_apexmaps-ds-grid, rgba(255, 255, 255, 0.16)));
   --_apexmaps-shadow: var(--apexmaps-shadow, 0 4px 16px rgba(0, 0, 0, 0.5));
-  --_apexmaps-focus: var(--apexmaps-focus, #60a5fa);
+  --_apexmaps-focus: var(--apexmaps-focus, var(--_apexmaps-ds-focus, #60a5fa));
   --_apexmaps-halo: var(--apexmaps-halo, rgba(17, 24, 39, 0.85));
+}
+
+/* A dark map under a dark design-system theme (the map sets the class only
+   while `apexmaps/ignite-ui` paints its chrome): the `--apx-*` tokens rank
+   above the design system, as in light. Without the add-on the class is never
+   set and the dark palette above stays self-contained. */
+.apexmaps--dark.apexmaps--design-system {
+  --_apexmaps-fg: var(--apexmaps-fg, var(--apx-fore, var(--_apexmaps-ds-fg, #e5e7eb)));
+  --_apexmaps-surface: var(--apexmaps-surface, var(--apx-surface, var(--_apexmaps-ds-overlay, #1f2937)));
+  --_apexmaps-border: var(--apexmaps-border, var(--apx-grid, var(--_apexmaps-ds-grid, rgba(255, 255, 255, 0.16))));
+  --_apexmaps-focus: var(--apexmaps-focus, var(--apx-accent, var(--_apexmaps-ds-focus, #60a5fa)));
 }
 
 .apexmaps-plot {

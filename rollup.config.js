@@ -103,6 +103,20 @@ export default [
     plugins: plugins(false),
   },
   {
+    // The `apexmaps/ignite-ui` subpath: the opt-in Ignite UI add-on. Its own
+    // entry, so no default bundle carries the Ignite UI map or its colour
+    // reader, and a page that wants it loads it in one line or one script tag.
+    // It imports nothing from the core, so every format stands alone and a
+    // script tag can come before or after `apexmaps.min.js`.
+    input: 'src/ignite-ui.ts',
+    output: [
+      { file: 'dist/apexmaps.ignite-ui.esm.js', format: 'es', sourcemap: !production },
+      { file: 'dist/apexmaps.ignite-ui.cjs', format: 'cjs', sourcemap: !production },
+      { file: 'dist/apexmaps.ignite-ui.min.js', format: 'iife', sourcemap: !production },
+    ],
+    plugins: plugins(false),
+  },
+  {
     // The `apexmaps/wrappers` subpath: change detection for the framework
     // wrappers. A separate entry on purpose, so it costs the main bundle nothing
     // and a map-only consumer never loads it. It imports types alone, so the

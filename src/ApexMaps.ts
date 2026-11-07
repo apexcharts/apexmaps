@@ -282,6 +282,9 @@ class ApexMaps extends BaseChart {
   /** The font this map wrote on its container, so it removes only its own. */
   private _themeFont: string | null = null
 
+  /** The design-system custom properties this map wrote on its container. */
+  private _themeVars: string[] = []
+
   /** Levels drilled into, outermost first. Empty at the top level. */
   readonly drillPath: { key: string; name?: string; mapId?: string }[] = []
 
@@ -866,12 +869,13 @@ class ApexMaps extends BaseChart {
         new BaseFeatures({
           config: {
             stroke: first
-              ? (this._themedSeries(first, 0) as { stroke?: StrokeOptions }).stroke
+              ? (this._themedSeries(first, 0, theme.basemapOutline) as { stroke?: StrokeOptions })
+                  .stroke
               : undefined,
             fill: this.config.geo?.fill || theme.basemap,
           },
           dark: theme.dark,
-          outline: theme.outline,
+          outline: theme.basemapOutline,
         }),
       )
     }
@@ -3445,7 +3449,11 @@ class ApexMaps extends BaseChart {
   }
 
   private async _exportRaster(options: ExportOptions): Promise<Blob> {
-    const background = options.background ?? inheritedBackground(this.element) ?? '#ffffff'
+    const background =
+      options.background ??
+      inheritedBackground(this.element) ??
+      this._theme?.rasterPaper ??
+      '#ffffff'
     const markup = this.getSvgString({ ...options, background })
     return rasterize(markup, {
       width: this.viewport.width,
@@ -3966,6 +3974,8 @@ class ApexMaps extends BaseChart {
     const theme = this._resolveTheme()
     this.element.classList.toggle('apexmaps--dark', theme.dark)
     this.element.classList.toggle('apexmaps--untokened', this.config.theme?.tokens === false)
+    this.element.classList.toggle('apexmaps--design-system', theme.designSystem)
+    this._writeThemeVars(theme.vars)
 
     // `chart.fontFamily` when the page passed it ('inherit' included), else the
     // family font token. Written on the container, which everything inherits.
@@ -3980,6 +3990,18 @@ class ApexMaps extends BaseChart {
       if (style.fontFamily === this._themeFont) style.removeProperty('font-family')
       this._themeFont = null
     }
+  }
+
+  /**
+   * The design system's steps for the stylesheet, as custom properties on the
+   * container. Only ever names this map wrote, so a page's own inline tokens
+   * are never touched.
+   */
+  private _writeThemeVars(vars: Record<string, string>): void {
+    const style = this.element.style
+    for (const name of this._themeVars) if (!(name in vars)) style.removeProperty(name)
+    for (const [name, value] of Object.entries(vars)) style.setProperty(name, value)
+    this._themeVars = Object.keys(vars)
   }
 
   /** The OS switched scheme: re-theme a map in `'auto'` mode. */
@@ -4004,12 +4026,16 @@ class ApexMaps extends BaseChart {
   }
 
   /**
-   * A series as built, with its default outline in the theme's colour. A colour
-   * the page set, or a type whose default is not the outline, stays as it is.
+   * A series as built, with its default outline in the theme's colour (or in
+   * `outline`, for the basemap drawn from it). A colour the page set, or a type
+   * whose default is not the outline, stays as it is.
    */
-  private _themedSeries<T extends Series>(cfg: T, index: number): T {
+  private _themedSeries<T extends Series>(
+    cfg: T,
+    index: number,
+    outline = this._theme?.outline,
+  ): T {
     const stroke = (cfg as { stroke?: StrokeOptions }).stroke
-    const outline = this._theme?.outline
     if (!stroke || !outline || stroke.color !== THEME_DEFAULTS.light.outline) return cfg
     if (outline === stroke.color || this._passed(['series', index, 'stroke', 'color'])) return cfg
     return { ...cfg, stroke: { ...stroke, color: outline } }
@@ -4026,6 +4052,7 @@ class ApexMaps extends BaseChart {
       this.element.style.removeProperty('font-family')
     }
     this._themeFont = null
+    this._writeThemeVars({})
     if (this._renderRaf !== null) cancelAnimationFrame(this._renderRaf)
     if (this._resizeRaf !== null) cancelAnimationFrame(this._resizeRaf)
     if (this._rotateRaf !== null) cancelAnimationFrame(this._rotateRaf)
@@ -4077,6 +4104,7 @@ class ApexMaps extends BaseChart {
       'apexmaps',
       'apexmaps--dark',
       'apexmaps--untokened',
+      'apexmaps--design-system',
       'apexmaps--enter',
       'apexmaps--tiles',
       'apexmaps--legend-top',
