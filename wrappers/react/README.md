@@ -117,6 +117,33 @@ options={{ ...base, ...(show && { dataLabels: { enabled: true } }) }}
 options={{ ...base, dataLabels: { enabled: show } }}
 ```
 
+## Using with Ignite UI
+
+From ApexMaps 1.3.0, a map can follow the Ignite UI theme on the page: series colours, text, borders,
+tooltip surface, font, the basemap greys, and light or dark. Import the core's add-on once, anywhere
+in the app, before the first map renders:
+
+```js
+import 'apexmaps/ignite-ui'
+```
+
+A page that loads ApexMaps with script tags loads `apexmaps/dist/apexmaps.ignite-ui.min.js` instead.
+The add-on is free and needs no licence key. Without it the `--ig-*` tokens are ignored; the
+`--apx-*` and `--apexmaps-*` tokens work either way, and everything you set ranks above the theme.
+
+To turn it off for one map, set it in the options the wrapper passes through:
+
+```jsx
+// Ignite UI off for this map
+<ApexMaps options={{ ...options, theme: { ...options.theme, designSystem: false } }} />
+
+// Ignite UI and the family --apx-* tokens both off
+<ApexMaps options={{ ...options, theme: { ...options.theme, tokens: false } }} />
+```
+
+Both are part of `ApexMapsOptions`, so they are typed through the `options` prop. The ranking and the
+full token table are in the ApexMaps README (Ignite UI).
+
 ## Server rendering
 
 The component is safe to import and render on the server: it emits its container and does nothing

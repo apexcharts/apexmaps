@@ -112,6 +112,33 @@ and follows the container. `height="100%"` hands the height to the container:
 The `<apx-map>` element is yours: class and style bindings land there (it is `display: block` by
 default). The element inside it belongs to the map.
 
+## Using with Ignite UI
+
+From ApexMaps 1.3.0, a map can follow the Ignite UI theme on the page: series colours, text, borders,
+tooltip surface, font, the basemap greys, and light or dark. Import the core's add-on once, anywhere
+in the app, before the first map renders:
+
+```js
+import 'apexmaps/ignite-ui'
+```
+
+A page that loads ApexMaps with script tags loads `apexmaps/dist/apexmaps.ignite-ui.min.js` instead.
+The add-on is free and needs no licence key. Without it the `--ig-*` tokens are ignored; the
+`--apx-*` and `--apexmaps-*` tokens work either way, and everything you set ranks above the theme.
+
+To turn it off for one map, set it in the options the wrapper passes through:
+
+```ts
+// Ignite UI off for this map
+readonly options = { geo: { map: 'world' }, theme: { designSystem: false } }
+
+// Ignite UI and the family --apx-* tokens both off
+readonly plain = { geo: { map: 'world' }, theme: { tokens: false } }
+```
+
+Both are part of `ApexMapsOptions`, so they are typed through the `options` input. The ranking and the
+full token table are in the ApexMaps README (Ignite UI).
+
 ## SSR
 
 Safe under Angular SSR and hydration: the component renders its container on the server and builds
