@@ -518,6 +518,10 @@ options  >  --apexmaps-*  >  --apx-*  >  theme.palette  >  Ignite UI  >  built-i
 - It registers the adapter the Apex products share, so ApexTree, ApexSankey
   and ApexGantt on the page follow the theme too. ApexCharts charts take their
   own add-on, `apexcharts/features/ignite-ui`.
+- Another product's add-on (`apextree/ignite-ui`,
+  `apexcharts/features/ignite-ui` and the others) themes the map as well,
+  except the basemap fill and the no-data colour: only `apexmaps/ignite-ui`
+  maps those to the theme's greys, so load it when the map is on the page.
 
 ### Why dark mode does not take them
 
