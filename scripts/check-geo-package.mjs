@@ -22,6 +22,8 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
+import { declaredPacks } from './geo/catalogue.mjs'
+
 const ROOT = resolve(import.meta.dirname, '..')
 const GEO_DIR = join(ROOT, 'geo')
 
@@ -39,12 +41,8 @@ if (!versionMatch) {
 }
 const datasetMajor = versionMatch[1]
 
-// Pack rows are declared as `{ id: '...', file: '...' }` literals. Reading them
-// out of the reviewed source is deliberate: that file is the authority on ids.
-const declared = new Map()
-for (const m of catalogueSource.matchAll(/id:\s*'([^']+)',\s*\n\s*file:\s*'([^']+)'/g)) {
-  declared.set(m[1], m[2])
-}
+// Read out of the reviewed source, which is the authority on ids.
+const declared = declaredPacks(catalogueSource)
 if (!declared.size) note('parsed zero pack declarations out of src/core/GeoCatalogue.ts')
 
 /* ---------------------------------------------------------------- the package */

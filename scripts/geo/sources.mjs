@@ -19,6 +19,7 @@
  */
 
 import { US_STATE_ABBR, US_STATE_NAME } from './us-states.mjs'
+import { ADMIN1_CORRECTIONS } from './corrections.mjs'
 
 const NE_GEOJSON = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/'
 const GISCO = 'https://gisco-services.ec.europa.eu/distribution/v2/nuts/geojson/'
@@ -368,5 +369,8 @@ export const PACKS = [
     keyField: 'iso_3166_2',
     levelName: country.level.charAt(0).toUpperCase() + country.level.slice(1),
     quantization: 1e5,
+    // Islands the source puts in the wrong subdivision, each fix cited. See
+    // ./corrections.mjs.
+    ...(ADMIN1_CORRECTIONS[country.iso2] ? { corrections: ADMIN1_CORRECTIONS[country.iso2] } : {}),
   })),
 ]

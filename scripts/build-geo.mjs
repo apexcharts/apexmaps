@@ -17,6 +17,13 @@
  *    names and per-country diplomatic variants. Eight are useful for joining.
  *  - **Sources are cached under `.geo-cache/`.** Re-running is free, and a flaky
  *    download cannot half-produce a release.
+ *  - **Upstream errors are corrected here, not by hand in `geo/`.** A pack may
+ *    carry `corrections` (see `scripts/geo/corrections.mjs`) that move islands
+ *    the source assigns to the wrong subdivision. They run on every build and
+ *    land in the manifest row, so a rebuild cannot silently undo one.
+ *  - **`--only` rebuilds a subset without touching the rest.** Manifest rows for
+ *    packs this run did not build are carried over from the existing manifest,
+ *    so refreshing one country does not erase the provenance of the others.
  *
  * Usage:
  *   npm run data:build                 # everything
@@ -30,6 +37,8 @@ import { topology } from 'topojson-server'
 import { feature as topoFeature } from 'topojson-client'
 
 import { PACKS, PROFILES, DOWNLOADS } from './geo/sources.mjs'
+import { applyCorrections } from './geo/corrections.mjs'
+import { declaredPacks } from './geo/catalogue.mjs'
 
 const ROOT = process.cwd()
 const CACHE_DIR = resolve(ROOT, '.geo-cache')
@@ -189,6 +198,14 @@ for (const pack of selected) {
     continue
   }
 
+  // After transform, so corrections address features by their cleaned join key.
+  // A correction that no longer matches the source throws: shipping half of a
+  // fix is worse than stopping.
+  const corrected = applyCorrections(result.features, pack.corrections, (props) =>
+    pack.keyField ? props[pack.keyField] : undefined,
+  )
+  result.features = corrected.features
+
   const json = `${JSON.stringify(buildPack(pack, result.features))}\n`
   writeFileSync(join(OUT_DIR, pack.file), json)
   const bytes = statSync(join(OUT_DIR, pack.file)).size
@@ -205,11 +222,13 @@ for (const pack of selected) {
     levelName: pack.levelName,
     ...PROFILES[pack.profile],
     ...(pack.note ? { note: pack.note } : {}),
+    ...(corrected.applied.length ? { corrections: corrected.applied } : {}),
   })
 
   const flags = []
   if (result.missingKey) flags.push(`${result.missingKey} without ${pack.keyField}`)
   if (result.duplicateId) flags.push(`${result.duplicateId} duplicate id`)
+  if (corrected.applied.length) flags.push(`${corrected.applied.length} correction(s)`)
   console.log(
     `  ${pack.id.padEnd(24)} ${String(result.features.length).padStart(5)} features  ${mb(bytes).padStart(9)}` +
       (flags.length ? `   (${flags.join(', ')})` : ''),
@@ -222,31 +241,43 @@ for (const pack of selected) {
 }
 
 /**
- * Hand-authored packs survive the rebuild.
+ * Rows this run did not build survive it.
  *
  * Grid layouts (`kind: 'layout'`) are tables of cell positions curated by hand
  * and verified with `npm run check:layout`; nothing here builds them, so
  * overwriting the manifest with only what this run produced would silently drop
  * their rows and `npm run check:geo` would then fail on ids whose files are
  * still sitting in geo/.
+ *
+ * The same holds for a partial run: `--only=jp` builds one pack, and without
+ * this it would rewrite the manifest with eight rows out of thirty-three. A row
+ * is kept when its pack was not built this run and its file is still in geo/.
  */
 const preserved = []
+const builtIds = new Set(manifest.map((p) => p.id))
 const manifestPath = join(OUT_DIR, 'manifest.json')
 if (existsSync(manifestPath)) {
   try {
     const existing = JSON.parse(readFileSync(manifestPath, 'utf8'))
     for (const pack of existing.packs ?? []) {
-      if (pack.kind === 'layout' && existsSync(join(OUT_DIR, pack.file))) preserved.push(pack)
+      if (builtIds.has(pack.id) || !existsSync(join(OUT_DIR, pack.file))) continue
+      if (pack.kind === 'layout' || only) preserved.push(pack)
     }
   } catch {
-    warnings.push('the existing manifest.json could not be read, so hand-authored rows were lost')
+    warnings.push(
+      'the existing manifest.json could not be read, so rows not built this run were lost',
+    )
   }
 }
-if (preserved.length) {
+const layouts = preserved.filter((p) => p.kind === 'layout')
+if (layouts.length) {
   console.log(
-    `\n  kept ${preserved.length} hand-authored layout row(s): ` +
-      preserved.map((p) => p.id).join(', '),
+    `\n  kept ${layouts.length} hand-authored layout row(s): ` +
+      layouts.map((p) => p.id).join(', '),
   )
+}
+if (preserved.length > layouts.length) {
+  console.log(`  kept ${preserved.length - layouts.length} row(s) for packs not rebuilt (--only)`)
 }
 manifest.push(...preserved)
 
@@ -256,7 +287,9 @@ writeFileSync(
   `${JSON.stringify({ generated: 'npm run data:build', packs: manifest }, null, 2)}\n`,
 )
 
-console.log(`\n${manifest.length} pack(s), ${mb(totalBytes)} total, manifest.json written to ./geo`)
+console.log(
+  `\n${builtIds.size} pack(s) built, ${mb(totalBytes)} total; manifest.json lists ${manifest.length}`,
+)
 
 /* ------------------------------------------------------- catalogue agreement */
 
@@ -268,9 +301,8 @@ console.log(`\n${manifest.length} pack(s), ${mb(totalBytes)} total, manifest.jso
  */
 if (!only && existsSync(CATALOGUE)) {
   const text = readFileSync(CATALOGUE, 'utf8')
-  const declared = new Set(
-    [...text.matchAll(/'([a-z]{2,6}\/[a-z0-9]+@[0-9]+m)'/g)].map((m) => m[1]),
-  )
+  // Layouts included, read the way scripts/check-geo-package.mjs reads them.
+  const declared = new Set(declaredPacks(text).keys())
   const built = new Set(manifest.map((p) => p.id))
 
   const missing = [...declared].filter((id) => !built.has(id))

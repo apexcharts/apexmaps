@@ -311,7 +311,7 @@
       "file": "jp-admin1-10m.json",
       "object": "admin1",
       "features": 47,
-      "bytes": 104333,
+      "bytes": 104337,
       "detail": "high",
       "keyField": "iso_3166_2",
       "levelName": "Prefectures",
@@ -319,7 +319,11 @@
       "license": "public domain",
       "attribution": "",
       "vintage": "2022",
-      "boundaries": "Natural Earth de facto boundaries; disputed areas follow the NE default view"
+      "boundaries": "Natural Earth de facto boundaries; disputed areas follow the NE default view",
+      "corrections": [
+        "The Amami Islands (Amami Oshima, Kakeromajima, Kikaijima, Tokunoshima, Okinoerabujima and Yoronjima) moved from Okinawa (JP-47) to Kagoshima (JP-46)",
+        "Nagashima and Shishijima moved from Kumamoto (JP-43) to Kagoshima (JP-46)"
+      ]
     },
     {
       "id": "jp/admin1@hex",
