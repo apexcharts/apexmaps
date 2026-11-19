@@ -176,6 +176,8 @@ export function defaults(): ResolvedOptions {
       dataTable: false,
       /** Make individual features focusable below this feature count. */
       keyboardFeatureLimit: 500,
+      /** `(context) => string` writing the keyboard announcement. Unset: the default. */
+      announcementFormatter: undefined,
     },
 
     /** The map's own text. Empty: `core/Locale` holds the English defaults. */

@@ -94,10 +94,10 @@ export class Tooltip {
     /** `locale.noData`, for a series with no scale to carry its own label. */
     noData?: string
   }): string {
-    const title = feature.name || feature.key || 'Unknown'
+    const title = Tooltip.defaultTitle(feature)
     const seriesName = series?.config?.name
     const formatted =
-      value == null ? (series?.scale?.nullLabel ?? noData) : format ? format(value) : String(value)
+      value == null ? (series?.scale?.nullLabel ?? noData) : Tooltip.defaultValue(value, format)
 
     const rows: string[] = []
     rows.push(`<div class="apexmaps-tooltip-title">${escapeHtml(title)}</div>`)
@@ -130,5 +130,22 @@ export class Tooltip {
     }
 
     return rows.join('')
+  }
+
+  /**
+   * The name the default tooltip gives a mark. Shared with the keyboard
+   * announcement, so what is spoken names a place the way the screen does.
+   */
+  static defaultTitle(feature: { key?: string; name?: string }): string {
+    return feature.name || feature.key || 'Unknown'
+  }
+
+  /**
+   * A value as the default tooltip writes it: through `tooltip.valueFormatter`
+   * when the page set one, as the plain number otherwise. Shared with the
+   * keyboard announcement for the same reason as the title.
+   */
+  static defaultValue(value: number, format?: (v: number) => string): string {
+    return format ? format(value) : String(value)
   }
 }

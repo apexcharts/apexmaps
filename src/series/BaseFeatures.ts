@@ -121,8 +121,9 @@ export class BaseFeatures {
     return []
   }
 
-  describe(feature: NormalizedFeature): string {
-    return String(feature.name ?? feature.key)
+  /** A feature with no value to read: its name, as the map's tooltip gives it. */
+  describe(_feature: NormalizedFeature, { name }: { name: string }): string {
+    return name
   }
 
   advise(): string[] {

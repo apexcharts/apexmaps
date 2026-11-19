@@ -1247,6 +1247,30 @@ export interface A11yOptions {
   dataTable?: boolean
   /** Make individual features keyboard-reachable below this count. */
   keyboardFeatureLimit?: number
+  /**
+   * Writes what the live region says when keyboard focus lands on a feature.
+   *
+   * Receives what `tooltip.formatter` receives, plus `defaultText`, the
+   * announcement the map would make itself. Returns plain text: it is written
+   * to `textContent`, so markup is read out literally rather than parsed.
+   * Return `null` or `undefined` to keep the default for that feature, and an
+   * empty string to say nothing.
+   *
+   * Without it, the default announcement names the feature the way the
+   * default tooltip does and formats its value through `tooltip.valueFormatter`,
+   * so the spoken text and the default tooltip agree. With no `valueFormatter`
+   * the value is spoken as a whole number with group separators, or to two
+   * decimals, as before 1.5.0. A page that writes its tooltip with
+   * `tooltip.formatter` should also set `tooltip.valueFormatter` or this hook:
+   * the map cannot read text back out of that markup.
+   */
+  announcementFormatter?: (context: A11yAnnouncementContext) => string | null | undefined
+}
+
+/** What `a11y.announcementFormatter` receives for the focused feature. */
+export interface A11yAnnouncementContext extends TooltipContext {
+  /** The announcement the map makes when the formatter returns nothing. */
+  defaultText: string
 }
 
 /**

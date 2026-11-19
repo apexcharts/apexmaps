@@ -13,6 +13,7 @@ export { ApexMaps }
 export default ApexMaps
 
 export type {
+  A11yAnnouncementContext,
   A11yOptions,
   AnnotationConnector,
   AnnotationLabel,

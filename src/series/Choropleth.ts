@@ -320,21 +320,33 @@ export class ChoroplethSeries {
   }
 
   /**
+   * What the keyboard announces for a feature: its name, the series, the value.
+   *
+   * The map passes the default tooltip's name and value formatting, so the
+   * spoken text and the shown text cannot disagree: a page that formats its
+   * tooltip values (a locale's minus sign, a unit, a fixed precision) gets the
+   * same formatting read aloud. A feature with no value says the series'
+   * `scale.nullLabel` when the page set one, as the tooltip shows it, and the
+   * locale's no-data wording otherwise. Plain text, since it is written to
+   * `textContent`.
+   */
+  describe(
+    feature: NormalizedFeature,
+    { name, format }: { name: string; format: (value: number) => string },
+  ): string {
+    const value = this.valueFor(feature)
+    if (value == null) return `${name}, ${this.config.scale?.nullLabel ?? this.noData ?? 'no data'}`
+    const label = this.legendTitle() ?? 'value'
+    return `${name}, ${label} ${format(value)}`
+  }
+
+  /**
    * Cartographic sanity checks, surfaced in dev mode only.
    *
    * The count-versus-rate check is the one that matters: it is the difference
    * between "where are the people" and "where is the phenomenon", and it is the
    * error that gets published most often.
-   *
    */
-  describe(feature: NormalizedFeature): string {
-    const name = feature.name ?? feature.key
-    const value = this.valueFor(feature)
-    if (value == null) return `${name}, ${this.noData ?? 'no data'}`
-    const label = this.legendTitle() ?? 'value'
-    return `${name}, ${label} ${Number.isInteger(value) ? value.toLocaleString() : value.toFixed(2)}`
-  }
-
   advise(): string[] {
     const notes: string[] = []
     const values = [...this.values.values()].filter((v): v is number => v != null)

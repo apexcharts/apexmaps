@@ -1275,7 +1275,7 @@ class ApexMaps extends BaseChart {
     const featureSeries = primary?.kind === 'features' ? primary : undefined
     const extremes = this.geo.features
       .map((f) => ({
-        name: String(f.name ?? f.key),
+        name: Tooltip.defaultTitle(f),
         value: featureSeries?.valueFor(f) ?? null,
       }))
       .filter((e): e is { name: string; value: number } => e.value != null)
@@ -1319,7 +1319,7 @@ class ApexMaps extends BaseChart {
         columns: [text.dataTable.area, primary.legendTitle() ?? text.dataTable.value],
         rows: this.geo.features.map((f) => {
           const v = primary.valueFor(f)
-          return [String(f.name ?? f.key), v == null ? primary.scale.nullLabel : v]
+          return [Tooltip.defaultTitle(f), v == null ? primary.scale.nullLabel : v]
         }),
       })
     } else {
@@ -2682,9 +2682,44 @@ class ApexMaps extends BaseChart {
     })
   }
 
+  /**
+   * What the live region says about a feature.
+   *
+   * The default takes its name from the default tooltip, and its value from
+   * `tooltip.valueFormatter` when the page sets one, so the reader hears what a
+   * sighted reader sees. Without one it keeps a spoken form rather than the
+   * tooltip's raw number: a whole number with its group separators, anything
+   * else to two decimals, since sixteen digits of a rate are noise read aloud.
+   * `a11y.announcementFormatter` replaces it per feature, and returning null or
+   * undefined keeps it.
+   */
   private _describeFeature(feature: NormalizedFeature): string {
     const series = this.renderTargets.find((s) => s.kind === 'features')
-    return series ? series.describe(feature) : String(feature.name ?? feature.key)
+    const name = Tooltip.defaultTitle(feature)
+    if (!series) return name
+
+    const valueFormatter = this.config.tooltip.valueFormatter
+    const defaultText = series.describe(feature, {
+      name,
+      format:
+        typeof valueFormatter === 'function'
+          ? (value: number) => Tooltip.defaultValue(value, valueFormatter)
+          : (value: number) =>
+              Number.isInteger(value) ? value.toLocaleString() : value.toFixed(2),
+    })
+    const formatter = this.config.a11y.announcementFormatter
+    if (typeof formatter !== 'function') return defaultText
+
+    const text = formatter({
+      key: feature.key,
+      name: feature.name,
+      value: series.valueFor(feature),
+      datum: series.datumFor(feature),
+      properties: feature.properties,
+      series: series.config as Series,
+      defaultText,
+    })
+    return text == null ? defaultText : String(text)
   }
 
   /**
