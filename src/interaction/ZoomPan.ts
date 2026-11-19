@@ -35,8 +35,37 @@ const INERTIA_MIN_VELOCITY = 0.04
 /** Below this drag distance a pointer-up is a click, not a pan. */
 const CLICK_SLOP = 4
 
+/**
+ * Write the first `touch-action` this browser accepts, and return it.
+ *
+ * The candidates come from {@link ZoomPan.touchAction}, most specific first, and
+ * the last one is a value every browser that has `touch-action` at all
+ * understands. A browser that does not know a value ignores the assignment and
+ * keeps the old one, so reading it back is the feature test: without it, a map
+ * that pans and asks for `pinch-zoom` would keep whatever it had before on a
+ * browser without that value, which could be a value that hands the drag to the
+ * page.
+ */
+export function applyTouchAction(
+  el: HTMLElement | SVGElement,
+  candidates: readonly string[],
+): string {
+  for (const value of candidates) {
+    el.style.touchAction = value
+    if (el.style.touchAction === value) return value
+  }
+  return el.style.touchAction
+}
+
 export class ZoomPan {
   readonly container: HTMLElement
+  /**
+   * The element touch gestures land on: the map's SVG, which carries the
+   * `touch-action` from {@link touchAction}. The pinch guard listens here rather
+   * than on `container`, so a pinch or a scroll that starts on the zoom buttons
+   * or the attribution beside the SVG stays the page's. Defaults to `container`.
+   */
+  readonly surface: Element
   readonly camera: Camera
   readonly options: InteractionOptions
   readonly emit: (event: string, payload?: unknown) => void
@@ -69,6 +98,7 @@ export class ZoomPan {
   private readonly _onPointerUp: (event: PointerEvent) => void
   private readonly _onWheel: (event: WheelEvent) => void
   private readonly _onDblClick: (event: MouseEvent) => void
+  private readonly _onTouchMove: (event: TouchEvent) => void
 
   constructor({
     container,
@@ -77,8 +107,10 @@ export class ZoomPan {
     emit,
     onSelectBox,
     globe,
+    surface,
   }: {
     container: HTMLElement
+    surface?: Element | null
     camera: Camera
     options: InteractionOptions
     emit?: (event: string, payload?: unknown) => void
@@ -87,6 +119,7 @@ export class ZoomPan {
     globe?: GlobeRotation | null
   }) {
     this.container = container
+    this.surface = surface ?? container
     this.camera = camera
     this.options = options
     this.emit = emit ?? (() => {})
@@ -98,11 +131,58 @@ export class ZoomPan {
     this._onPointerUp = this._handlePointerUp.bind(this)
     this._onWheel = this._handleWheel.bind(this)
     this._onDblClick = this._handleDblClick.bind(this)
+    this._onTouchMove = this._handleTouchMove.bind(this)
+  }
+
+  /**
+   * The CSS `touch-action` the map's surface needs, most specific first.
+   *
+   * Touch gestures go to the browser unless the surface says otherwise, and once
+   * the browser takes one (a scroll, a page zoom) the map gets `pointercancel`
+   * and nothing more. So the surface has to claim exactly the gestures this map
+   * handles and leave every other one to the page:
+   *
+   * - a one-finger drag, when it pans, spins the globe, or draws a selection box;
+   * - a two-finger pinch, when the map zooms.
+   *
+   * Claiming more than that is the worse failure. A full-width map that neither
+   * zooms nor pans but still swallows every swipe leaves a phone reader unable
+   * to scroll past it. Wheel and double-click are not touch gestures, so they are
+   * unaffected and keep following `zoom.wheel` and `zoom.doubleClick`.
+   *
+   * A list rather than one value because `pinch-zoom` is not universal: where it
+   * is missing, a map that pans falls back to `none`, keeping the drag (which it
+   * needs) and giving up the page's pinch (which it can do without). Live, since
+   * whether a drag spins the globe follows the projection, which can change
+   * without the interaction options changing.
+   */
+  get touchAction(): readonly string[] {
+    const pinch = this.options.zoom?.enabled !== false
+    const drag =
+      this.options.pan?.enabled !== false || !!this.globe?.enabled || this._plainDragSelects()
+    if (drag && pinch) return ['none']
+    if (drag) return ['pinch-zoom', 'none']
+    // The page scrolls with one finger and the pinch is the map's. `manipulation`
+    // is the fallback because losing the map's pinch to the page is a lesser fault
+    // than trapping the scroll.
+    if (pinch) return ['pan-x pan-y', 'manipulation']
+    // Scroll and pinch both stay with the page. `manipulation` rather than `auto`
+    // only drops the double-tap page zoom, whose wait is what delays a tap that
+    // selects a region.
+    return ['manipulation']
   }
 
   attach(): void {
     const { zoom, pan } = this.options
     this.container.addEventListener('pointerdown', this._onPointerDown)
+    if (zoom?.enabled !== false) {
+      // Not passive, for the same reason as the wheel: see `_handleTouchMove`.
+      // On the surface only, so the furniture beside it keeps the page's pinch.
+      // `Element`'s event map has no touch events, hence the listener cast.
+      this.surface.addEventListener('touchmove', this._onTouchMove as EventListener, {
+        passive: false,
+      })
+    }
     if (zoom?.wheel !== false && zoom?.enabled !== false) {
       // Not passive: zooming must be able to preventDefault the page scroll.
       this.container.addEventListener('wheel', this._onWheel, {
@@ -123,6 +203,7 @@ export class ZoomPan {
     this.container.removeEventListener('pointerdown', this._onPointerDown)
     this.container.removeEventListener('wheel', this._onWheel)
     this.container.removeEventListener('dblclick', this._onDblClick)
+    this.surface.removeEventListener('touchmove', this._onTouchMove as EventListener)
     this._detachWindowListeners()
     // The cursor was set by attach() from options this instance no longer speaks
     // for; a successor's attach() decides it again.
@@ -284,11 +365,45 @@ export class ZoomPan {
     return this._marquee !== null
   }
 
-  private _marqueeWanted(event: PointerEvent): boolean {
+  /**
+   * A pinch on a map that zooms but leaves one-finger scrolling to the page.
+   *
+   * `touch-action: pan-x pan-y` already stops the page zooming, but not the page
+   * scrolling under two fingers: their midpoint drifts during any real pinch, and
+   * once that drift reads as a scroll the browser takes the gesture and the map
+   * gets `pointercancel`. Cancelling the move while two fingers are down keeps the
+   * pinch whole. One finger is never cancelled, so the page still scrolls, and a
+   * move the browser has already committed to a scroll is not cancelable, so a
+   * second finger landing mid-scroll does not stop the page with a jolt.
+   */
+  private _handleTouchMove(event: TouchEvent): void {
+    if (event.touches.length > 1 && event.cancelable) event.preventDefault()
+  }
+
+  /** Whether a selection box exists at all under these options. */
+  private _boxSelectable(): boolean {
     const selection = this.options.selection ?? {}
     if (selection.enabled === false || selection.rectangle === false) return false
     // A box that can only ever hold one thing is a click with extra steps.
-    if (selection.multiple === false) return false
+    return selection.multiple !== false
+  }
+
+  /**
+   * Whether a drag with no modifier draws a selection box, which makes the
+   * one-finger drag the map's even with panning off: a finger has no modifier
+   * keys, so this is the only selection box a touch reader can draw.
+   */
+  private _plainDragSelects(): boolean {
+    return (
+      this._boxSelectable() &&
+      this.options.selection?.modifier === 'none' &&
+      this.options.pan?.enabled === false
+    )
+  }
+
+  private _marqueeWanted(event: PointerEvent): boolean {
+    if (!this._boxSelectable()) return false
+    const selection = this.options.selection ?? {}
 
     const modifier = selection.modifier ?? 'shift'
     if (modifier === 'none') {

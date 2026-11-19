@@ -139,8 +139,14 @@
 
 .apexmaps-svg {
   display: block;
-  /* Prevents the browser's own pan/zoom from fighting our pointer handlers. */
-  touch-action: none;
+  /* Touch gestures stay with the page (scroll and pinch) until the map claims
+     them. Each map writes its own `touch-action` inline from what it handles
+     (the rule is `ZoomPan.touchAction`): `none` when it takes the drag and the
+     pinch, `pinch-zoom` when it takes only the drag (it pans, spins a globe, or
+     draws a selection box with a plain drag), `pan-x pan-y` when it takes only
+     the pinch, and this value when it takes neither, so a phone reader can
+     scroll past it. */
+  touch-action: manipulation;
 }
 
 .apexmaps-svg:focus-visible {

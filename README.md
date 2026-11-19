@@ -564,6 +564,12 @@ dark value under `.apexmaps--dark` when the two should differ.
   understate it.
 - **Winding is repaired on ingest.** A counterclockwise ring makes `d3-geo` render the whole sphere
   minus your polygon: solid fill, identical centroids for every feature, nothing thrown.
+- **A map takes only the touch gestures it uses.** One-finger drags go to the map when it pans,
+  spins a globe, or draws a selection box with `selection.modifier: 'none'`; pinches go to it when
+  it zooms; every other gesture stays with the page. A map with zoom and pan both off, as a hex
+  layout is by default, lets a phone reader scroll straight past it. The value is written inline
+  on `.apexmaps-svg` and follows `updateOptions`, so a page no longer needs to force
+  `touch-action` there.
 - **Accessibility is on by default and free in every tier.**
 
 ## Licensing

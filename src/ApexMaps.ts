@@ -79,7 +79,7 @@ import type { Crumb } from './components/Breadcrumb'
 import { ZoomControls } from './components/ZoomControls'
 import type { ZoomControlsState } from './components/ZoomControls'
 import { scopeToParent } from './data/Hierarchy'
-import { ZoomPan } from './interaction/ZoomPan'
+import { applyTouchAction, ZoomPan } from './interaction/ZoomPan'
 import type { SelectBox, SelectBoxPhase } from './interaction/ZoomPan'
 import { GlobeRotation } from './interaction/GlobeRotation'
 import { registerPalette, listPalettes, getPalette } from './scales/Palettes'
@@ -1408,8 +1408,10 @@ class ApexMaps extends BaseChart {
       emit: (event, payload) => this.emit(event as ApexMapsEventName, payload as never),
       onSelectBox: (box, phase, additive) => this._handleSelectBox(box, phase, additive),
       globe: this.globe,
+      surface: this.renderer?.root,
     })
     this.zoomPan.attach()
+    this._applyTouchAction()
 
     // Rebuilt from the same live config, so `zoom.enabled: false` set later takes
     // the buttons with it: leaving controls on a map that no longer zooms would be
@@ -1419,6 +1421,22 @@ class ApexMaps extends BaseChart {
       this.zoomControls.labels = this._text.zoomControls
       this.zoomControls.render(this._zoomControlsState())
     }
+  }
+
+  /**
+   * Claim on the SVG exactly the touch gestures this map handles, and leave the
+   * rest to the page (see `ZoomPan.touchAction`).
+   *
+   * On the SVG rather than the plot, so the zoom buttons and anything else drawn
+   * beside it keep the page's gestures. Inline, because the stylesheet can fail
+   * to arrive (a strict CSP blocks an injected `<style>`, never a style property
+   * written from script) and the value is per map anyway; `ApexMaps.css` carries
+   * the starting value that the first write replaces.
+   */
+  private _applyTouchAction(): void {
+    const root = this.renderer?.root
+    if (!root || !this.zoomPan) return
+    applyTouchAction(root, this.zoomPan.touchAction)
   }
 
   /**
@@ -3081,6 +3099,9 @@ class ApexMaps extends BaseChart {
       }
       if (this.drillPath.length) this._renderBreadcrumb()
     }
+    // Outside the branch above: a projection change can turn a drag into a globe
+    // spin with `interaction` untouched, and the surface has to claim that drag.
+    this._applyTouchAction()
 
     this._warnUnimplemented()
     this._warnTiles()

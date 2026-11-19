@@ -225,7 +225,8 @@ export class SvgRenderer {
         background: background || 'transparent',
         fontFamily: fontFamily || 'inherit',
         overflow: 'hidden',
-        touchAction: 'none',
+        // No `touchAction` here: which touch gestures the surface claims depends
+        // on the interaction options, so ApexMaps writes it once they are known.
       },
     })
 
