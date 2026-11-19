@@ -407,7 +407,12 @@ pass in the options still wins:
 | `--apexmaps-selected` | The selected feature's outline | `#111111` | `states.active.stroke` |
 
 These are read when the map renders and on every `updateOptions` call, so after
-changing one on a live page, call `updateOptions({})`.
+changing one on a live page, call `updateOptions({})`. Data labels read
+`--apexmaps-fg` and `--apexmaps-surface` (or `--apx-fore` and `--apx-surface`)
+the same way, to give each label whichever of the two contrasts more with the
+region under it, and `--apexmaps-halo`, when set, becomes their halo with the
+text picked against it. Until that call, a live change leaves each label on the
+colour it was given, still readable on its unchanged region.
 
 ### Family tokens (`--apx-*`)
 

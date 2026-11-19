@@ -1103,7 +1103,11 @@ class ApexMaps extends BaseChart {
    */
   private _syncComponentOptions(): void {
     this._applyLegendLayout()
-    if (this.labels) this.labels.options = this.config.dataLabels
+    if (this.labels) {
+      this.labels.options = this.config.dataLabels
+      // In the colour scope `_draw` opens, so the theme's tokens resolve here.
+      this.labels.setTheme(this._isDark())
+    }
     if (this.annotations) this.annotations.options = this.config.annotations
     if (this.legend) {
       this.legend.options = this.config.legend
@@ -1143,6 +1147,14 @@ class ApexMaps extends BaseChart {
       (this.mapMeta?.labelField as string | undefined)
     const candidates: LabelCandidate[] = []
 
+    // What each label sits on, so it can pick its ink (see `components/Labels`).
+    // The topmost feature series is the one drawn, and a selection's CSS muting
+    // replaces the series opacity on the mark rather than multiplying it.
+    const fillSeries = this.renderTargets.filter(isFeatureSeries).pop()
+    const seriesOpacity = fillSeries?.config.opacity ?? 1
+    const mutedOpacity = this.config.states.muted?.opacity ?? 0.25
+    const muting = this.selection.size > 0 && mutedOpacity < 1
+
     for (const feature of this.geo.features) {
       const anchor = this.anchors.get(feature.index)
       if (!anchor) continue
@@ -1164,6 +1176,8 @@ class ApexMaps extends BaseChart {
         priority: anchor.area + (value == null ? 0 : Math.abs(value)) * 1e-6,
         featureArea: anchor.area,
         key: feature.key,
+        fill: fillSeries?.fillFor(feature),
+        opacity: muting && !this.selection.has(feature.key) ? mutedOpacity : seriesOpacity,
       })
     }
 
@@ -2776,7 +2790,18 @@ class ApexMaps extends BaseChart {
     }
     if (marks) this._drawGeometry()
     else this._redrawFills()
+    this._refreshLabelInk()
     this.emit('legendToggle', { classIndex, instance: this })
+  }
+
+  /**
+   * Lay the labels out again after fills changed outside a draw (a legend
+   * toggle, a selection dimming the rest), so each picks its ink against the
+   * fill now under it. Once per change, never per frame.
+   */
+  private _refreshLabelInk(): void {
+    if (!this.labels?.candidates.length) return
+    withColorScope(this.element, () => this._drawLabels())
   }
 
   private _redrawFills(): void {
@@ -2979,7 +3004,10 @@ class ApexMaps extends BaseChart {
     // limb, and the delegated listeners live on the layer, so this is a no-op
     // whenever the layers already exist.
     this._bindMarkEvents()
-    this._drawOverlay()
+    // In the map's colour scope, as in `_draw`: a fill first seen after a turn
+    // (it was behind the limb at render) has its label ink worked out here, and
+    // a `var()` palette on the container only resolves inside it.
+    withColorScope(this.element, () => this._drawOverlay())
   }
 
   /** Rebuild projection-dependent geometry after a projection or size change. */
@@ -3180,6 +3208,7 @@ class ApexMaps extends BaseChart {
    */
   private _selectionChanged(source: string = this.getInstanceId()): void {
     this._applySelectionStyles()
+    this._refreshLabelInk()
     this.emit('selectionChange', { ids: [...this.selection], source })
     if (source === this.getInstanceId()) this._broadcastSelection()
   }

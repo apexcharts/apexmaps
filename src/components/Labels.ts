@@ -10,6 +10,28 @@
  * - **Axis-aligned collision** against already-placed labels.
  * - **Area gating.** A label wider than its feature is noise.
  * - **Halo by default** via `paint-order`, so text stays readable on any fill.
+ * - **Ink from the fill.** Unless `style.color` is set, each label takes the
+ *   theme's text or surface colour, whichever contrasts more with what is
+ *   behind its glyphs: the fill drawn under it, haloed in that fill, or the
+ *   halo when the page sets one (`style.haloColor`, `--apexmaps-halo`). See
+ *   `labelInk`.
+ *
+ * What "the fill under it" means, decided once here so every state agrees:
+ *
+ * - No-data and legend-muted features: the no-data colour they are drawn in.
+ * - Features dimmed by a selection (`states.muted`): the fill at the muted
+ *   opacity over the map's surface, recomputed when the selection changes.
+ * - Series `opacity` below 1: the same blend at that opacity.
+ * - Patterns and images: the class colour, which is what the tile or picture
+ *   is drawn over unless the fill names its own `background`.
+ * - Hover: the resting fill. Hover shifts lightness by a few percent, and
+ *   recolouring per pointer move would be per-frame work for no gain.
+ * - Selected features keep their fill (selection is a stroke), so nothing changes.
+ * - A fill that is not a colour (`none`): no ink. The label keeps the page's
+ *   text colour and the theme's halo, as every label did before.
+ * - Data labels name features only. A bubble or marker drawn over a region
+ *   does not move its label's ink, cluster counts already pick theirs against
+ *   their own fill (`series/Marker`), and bubbles carry no text.
  *
  * Labels are drawn in the screen-space overlay, not the world group: text must
  * not scale with the camera. They are re-laid-out on camera change, which is
@@ -19,6 +41,7 @@
  */
 
 import { svg, empty } from '../utils/dom'
+import { normalizeColor, parseRgba, readableOn, toHex } from '../scales/Color'
 import type { SvgRenderer } from '../renderers/SvgRenderer'
 import type { GeoPathLike, Viewport } from '../geo/Viewport'
 import type { Anchor, DataLabelOptions, NormalizedFeature, WorldPoint } from '../types'
@@ -33,6 +56,144 @@ export interface LabelCandidate {
   featureArea: number
   color?: string
   key?: string
+  /**
+   * The flat colour painted under the label: the feature's fill as the map
+   * draws it (no-data and legend-muted classes included). A textured feature
+   * passes the colour its pattern or image sits on. Absent, the label keeps
+   * the page's text colour and the theme's halo, as it always did.
+   */
+  fill?: string
+  /**
+   * How much of `fill` shows, 0..1: the series opacity, or the muted opacity
+   * while a selection dims the feature (the muting replaces the series opacity
+   * rather than multiplying it, as the CSS does). The rest is the map's surface.
+   */
+  opacity?: number
+}
+
+/**
+ * The two tones an adaptive label picks between: the map's text colour and its
+ * surface colour. They swap roles with the theme (dark text on a light surface
+ * in light mode, light text on a dark surface in dark mode), so the label takes
+ * whichever reads better on its fill without asking which mode is on.
+ *
+ * `paint` is what the attribute says and `color` is what the contrast maths
+ * reads. Where the token resolved inside the map they are the same colour, so
+ * a token changed later without `updateOptions` leaves each label on the tone
+ * it was judged with (still readable on its unchanged fill) rather than
+ * swapping it for the other tone. Where nothing can resolve it (SSR, a
+ * detached map, a test DOM) `paint` stays the live `var()` and `color` is the
+ * stylesheet default.
+ */
+export interface LabelTones {
+  text: { paint: string; color: string }
+  surface: { paint: string; color: string }
+}
+
+/**
+ * The stylesheet's defaults for the two tokens: what a tone falls back to when
+ * there is nothing to resolve it in, or when it resolves to a colour that text
+ * cannot be painted in (transparent or translucent).
+ */
+const TONE_DEFAULTS = {
+  light: { text: '#1f2933', surface: '#ffffff' },
+  dark: { text: '#e5e7eb', surface: '#1f2937' },
+} as const
+
+/**
+ * Resolve the label tones from the map's theme tokens. Call it inside the map's
+ * colour scope (`withColorScope`), so each `var()` reads what the map's element
+ * computes: `--apexmaps-fg`, `--apx-fore`, `--apexmaps-surface`, `--apx-surface`
+ * and the design system's steps all reach the labels this way.
+ */
+export function resolveLabelTones(dark: boolean): LabelTones {
+  const defaults = TONE_DEFAULTS[dark ? 'dark' : 'light']
+  const tone = (token: string, fallback: string) => {
+    const live = `var(${token}, ${fallback})`
+    const c = parseRgba(live)
+    if (!c) return { paint: live, color: fallback }
+    // A see-through tone would paint see-through text, and the contrast maths
+    // (which ignores alpha) would overrate it: the opaque default reads instead.
+    if (c[3] < 1) return { paint: fallback, color: fallback }
+    const color = toHex([c[0], c[1], c[2]])
+    return { paint: color, color }
+  }
+  return {
+    text: tone('--_apexmaps-fg', defaults.text),
+    surface: tone('--_apexmaps-surface', defaults.surface),
+  }
+}
+
+/**
+ * The halo colour in force behind every label, or null when the text sits
+ * straight on the fill: `style.haloColor` when set, otherwise the page's
+ * `--apexmaps-halo` token when it resolves in scope. A halo that is off, fully
+ * transparent, or not a colour (`none`) counts as none. Call it inside the
+ * map's colour scope, like `resolveLabelTones`.
+ */
+export function resolveLabelHalo(style: DataLabelOptions['style'] = {}): string | null {
+  if (style.halo === false) return null
+  const source = style.haloColor || 'var(--apexmaps-halo)'
+  const c = parseRgba(source)
+  return c && c[3] > 0 ? normalizeColor(source) : null
+}
+
+/** What an adaptive label is painted with. */
+export interface LabelInk {
+  /** Text fill: one of the two tones' `paint`. */
+  fill: string
+  /**
+   * Halo when the page sets none: the colour under the label, so it reads as
+   * part of the cell. `--apexmaps-halo` still wins, through the `var()`.
+   */
+  halo: string
+}
+
+/**
+ * Ink for a label over `fill` showing at `opacity` on the map's surface, or
+ * null when `fill` is not a colour that can be read (`none`, an unresolvable
+ * `var()`): the label then keeps the page's text colour and the theme's halo.
+ *
+ * The text takes whichever tone has the higher WCAG contrast against what is
+ * directly behind its glyphs, the same rule the marker cluster counts use.
+ * Behind the glyphs is the halo when one is in force (`halo`, composited over
+ * the fill when translucent), since that is what the text edges touch, and the
+ * fill otherwise. With no halo in force the halo takes the fill itself: inside
+ * the cell it is invisible, and it shows only where the text crosses a border
+ * or a neighbouring cell, which is exactly where separation is needed. A fixed
+ * light halo painted a pale patch behind every label on a dark class instead.
+ */
+export function labelInk(
+  fill: string,
+  opacity: number,
+  tones: LabelTones,
+  halo: string | null = null,
+): LabelInk | null {
+  const paint = parseRgba(fill)
+  if (!paint) return null
+  const surface = parseRgba(tones.surface.color) ?? [255, 255, 255, 1]
+  const a = paint[3] * Math.max(0, Math.min(1, opacity))
+  // An opaque fill at full opacity stays as written, so a `var()` fill stays
+  // live in the halo.
+  const under = a >= 1 ? fill : toHex(over(paint, a, surface))
+  const haloRgba = halo ? parseRgba(halo) : null
+  const behind = haloRgba
+    ? toHex(over(haloRgba, haloRgba[3], a >= 1 ? paint : over(paint, a, surface)))
+    : under
+  const text = readableOn(behind, tones.text.color, tones.surface.color)
+  return {
+    fill: text === tones.text.color ? tones.text.paint : tones.surface.paint,
+    halo: `var(--apexmaps-halo, ${under})`,
+  }
+}
+
+/** `top` at `alpha` over `bottom`, per sRGB channel as the browser composites it. */
+function over(
+  top: readonly number[],
+  alpha: number,
+  bottom: readonly number[],
+): [number, number, number] {
+  return [0, 1, 2].map((i) => top[i] * alpha + bottom[i] * (1 - alpha)) as [number, number, number]
 }
 
 export class Labels {
@@ -59,9 +220,48 @@ export class Labels {
     this.options = options || {}
   }
 
+  /** The theme's two label tones, read by `setTheme` once per render. */
+  private tones: LabelTones = resolveLabelTones(false)
+  /** The halo in force behind every label, read by `setTheme` once per render. */
+  private halo: string | null = null
+  /**
+   * Ink per fill and opacity (null for a fill that is not a colour). A
+   * classed map has a handful of distinct fills (one per class, plus no-data),
+   * and a globe rebuilds its candidates every frame, so the contrast maths runs
+   * once per new colour and every later sighting is a lookup. A continuous
+   * scale has a fill per feature, still worked out once each per render.
+   * Cleared by `setTheme`, which every render calls.
+   */
+  private inkCache = new Map<string, LabelInk | null>()
+  /** Ink per candidate, worked out in `setCandidates` so `layout` only reads it. */
+  private inks = new WeakMap<LabelCandidate, LabelInk>()
+
+  /**
+   * Read the theme's label tones and the halo in force. Called on every
+   * render, after `options` is re-pointed and inside the map's colour scope,
+   * which is also when a changed token can first matter.
+   */
+  setTheme(dark: boolean): void {
+    this.tones = resolveLabelTones(dark)
+    this.halo = resolveLabelHalo(this.options.style)
+    this.inkCache.clear()
+  }
+
   setCandidates(candidates: LabelCandidate[]): void {
     // Sort once: layout runs on every camera change, so ordering must not.
     this.candidates = [...candidates].sort((a, b) => b.priority - a.priority)
+    this.inks = new WeakMap()
+    for (const candidate of this.candidates) {
+      if (candidate.fill == null) continue
+      const opacity = candidate.opacity ?? 1
+      const key = `${candidate.fill}|${opacity}`
+      let ink = this.inkCache.get(key)
+      if (ink === undefined) {
+        ink = labelInk(candidate.fill, opacity, this.tones, this.halo)
+        this.inkCache.set(key, ink)
+      }
+      if (ink) this.inks.set(candidate, ink)
+    }
   }
 
   /**
@@ -142,6 +342,11 @@ export class Labels {
       }
       placed.push(box)
 
+      // A colour the caller chose is drawn as written, with the halo it always
+      // had. Otherwise the label adapts to the fill under it.
+      const chosen = candidate.color || style.color
+      const ink = chosen ? undefined : this.inks.get(candidate)
+
       const text = svg('text', {
         class: 'apexmaps-label',
         x: screen[0],
@@ -150,7 +355,7 @@ export class Labels {
         'dominant-baseline': 'central',
         'font-size': fontSize,
         'font-weight': fontWeight,
-        fill: candidate.color || 'currentColor',
+        fill: chosen || ink?.fill || 'currentColor',
         text: candidate.text,
       })
       if (fontFamily) text.setAttribute('font-family', fontFamily)
@@ -161,7 +366,7 @@ export class Labels {
         text.setAttribute('paint-order', 'stroke')
         text.setAttribute(
           'stroke',
-          style.haloColor || 'var(--_apexmaps-halo, rgba(255,255,255,0.85))',
+          style.haloColor || ink?.halo || 'var(--_apexmaps-halo, rgba(255,255,255,0.85))',
         )
         text.setAttribute('stroke-width', String(style.haloWidth ?? 2.5))
         text.setAttribute('stroke-linejoin', 'round')

@@ -1140,7 +1140,23 @@ export interface DataLabelOptions {
      */
     fontFamily?: string
     fontWeight?: number | string
+    /**
+     * Text colour for every label. Unset, each label takes the theme's text or
+     * surface colour (`--apexmaps-fg` or `--apx-fore`, `--apexmaps-surface` or
+     * `--apx-surface`), whichever contrasts more with what is behind it: the
+     * fill drawn under it (light text on dark classes, dark text on light
+     * ones), or the halo when `haloColor` or the `--apexmaps-halo` token sets
+     * one. Set, every label is drawn in this colour with the theme's halo.
+     */
+    color?: string
     halo?: boolean
+    /**
+     * Halo colour. Unset, the halo is the fill under the label (so it shows
+     * only where the text crosses a border), or the theme's halo when `color`
+     * is set; the `--apexmaps-halo` token, when the page sets it, replaces
+     * either. Set (or with the token set), it is drawn as given and adaptive
+     * text is picked against it, so the glyphs never merge into their halo.
+     */
     haloColor?: string
     haloWidth?: number
   }

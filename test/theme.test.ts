@@ -117,9 +117,23 @@ describe('theme.mode', () => {
     expect(nullColor()).toBe('#ff00ff')
   })
 
-  it('flips the label halo with the theme rather than staying white', async () => {
+  it('halos a dark-mode label in the fill under it rather than in white', async () => {
     await render({ theme: { mode: 'dark' }, dataLabels: { enabled: true } })
     const label = el.querySelector('.apexmaps-label')
+    const stroke = label?.getAttribute('stroke') ?? ''
+    const fills = [...el.querySelectorAll('path.apexmaps-feature')].map((p) =>
+      p.getAttribute('fill'),
+    )
+    expect(fills).toContain(stroke.match(/^var\(--apexmaps-halo, (.+)\)$/)?.[1])
+  })
+
+  it('flips the theme halo of a label with a set colour rather than staying white', async () => {
+    await render({
+      theme: { mode: 'dark' },
+      dataLabels: { enabled: true, style: { color: '#ffcc00' } },
+    })
+    const label = el.querySelector('.apexmaps-label')
+    expect(label?.getAttribute('fill')).toBe('#ffcc00')
     expect(label?.getAttribute('stroke')).toContain('--_apexmaps-halo')
   })
 })
