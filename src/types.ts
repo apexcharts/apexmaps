@@ -924,6 +924,18 @@ export interface GeoOptions {
    * off with everything else, and it stands down on its own above the motion
    * budget, where per-frame vertex work would cost frames.
    *
+   * A grid has no geography, so while a layout is drawn `geo.projection`,
+   * `geo.view.fit` and `geo.tiles` stand down in favour of the layout's own
+   * plane and framing: written for the real map (a conic, a box round the main
+   * islands, web-mercator tiles), they would flip the grid, frame empty space or
+   * draw under cells they do not line up with. They are kept, and apply again
+   * the moment the layout is switched off. `geo.view.padding` applies to both.
+   * This holds however the grid is reached: `layout: 'hex'`, a layout id in
+   * `map`, or a layout added with `ApexMaps.registerLayout()`, whose own
+   * projection and framing are set by passing `meta.projection` or
+   * `meta.bounds` there. A layout change through `updateOptions` returns the
+   * camera to the new view's fit, easing alongside the morph.
+   *
    * Only `'hex'` here, because that is what ships. Square grids are supported by
    * the generator and reachable through `ApexMaps.registerLayout()` with
    * `grid: 'square'`; there is no built-in square layout to name yet.
@@ -940,8 +952,17 @@ export interface GeoOptions {
   nameField?: string
   /** Normalise ring winding on ingest. Default true; see `geo/GeoData`. */
   repairWinding?: boolean
+  /**
+   * How lon/lat becomes the plane. Unset, the pack's recommendation, then
+   * `'equalEarth'`. Ignored while a grid layout is drawn (see `layout`).
+   */
   projection?: ProjectionName | ProjectionSpec
   view?: {
+    /**
+     * What the initial view frames: the data, the whole sphere, nothing, or a
+     * `[west, south, east, north]` box. Ignored while a grid layout is drawn,
+     * which is framed by its own cells (see `layout`).
+     */
     fit?: 'data' | 'world' | 'none' | BBox4
     padding?: Padding
   }
@@ -952,7 +973,8 @@ export interface GeoOptions {
   /**
    * Raster tiles under the map, from a `{z}/{x}/{y}` web-map tile server. Off
    * unless a `url` is given, so no map requests anything from a third party
-   * that its host did not configure. See {@link TileOptions}.
+   * that its host did not configure. Not drawn while a grid layout is (see
+   * `layout`). See {@link TileOptions}.
    */
   tiles?: TileOptions
   /** Disputed-territory policy. Declared but not applied yet. */

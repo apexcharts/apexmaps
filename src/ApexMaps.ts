@@ -638,9 +638,18 @@ class ApexMaps extends BaseChart {
       bounds?: [number, number, number, number]
     }
 
-    this.viewport.setProjection(
-      asked.projection ?? recommended.projection ?? geo.projection ?? 'equalEarth',
-    )
+    // A grid layout is a diagram, not geography: its coordinates are cells on a
+    // plane, so a projection and a lon/lat fit box describe something it does
+    // not have. Both are written for the geography view (a north-up conic, a box
+    // round the main islands) and applied to a hex grid they flip it or frame
+    // empty space, so while a layout is drawn its own recommendation wins over
+    // the caller's. Nothing is overwritten: the caller's options stay in
+    // `userOptions` and take effect again the moment the layout is switched off.
+    const grid = !!this.mapMeta?.layout
+    const projection = grid
+      ? (recommended.projection ?? 'identity')
+      : (asked.projection ?? recommended.projection ?? geo.projection ?? 'equalEarth')
+    this.viewport.setProjection(projection)
     // What `resetView` returns a spun globe to. Read after `setProjection`, so it
     // reflects what the projection actually took rather than what the spec said.
     this._initialRotation = this.viewport.rotation
@@ -649,7 +658,9 @@ class ApexMaps extends BaseChart {
     // different orientation.
     if (keepRotation) this.viewport.setRotation(keepRotation)
 
-    const fit = asked.view?.fit ?? recommended.bounds ?? geo.view?.fit ?? 'data'
+    const fit = grid
+      ? (recommended.bounds ?? 'data')
+      : (asked.view?.fit ?? recommended.bounds ?? geo.view?.fit ?? 'data')
     const padding = (geo.view?.padding ?? 16) as Padding
     if (fit === 'world') {
       this.viewport.fit({ type: 'Sphere' }, padding)
@@ -929,6 +940,11 @@ class ApexMaps extends BaseChart {
 
   /** Debug-mode note when tiles are configured on a projection they cannot draw on. */
   private _warnTiles(): void {
+    // Tiles are part of the geography view. A grid layout is drawn on its own
+    // plane, so they stand down there by design and come back when the layout
+    // is switched off; telling the caller to set the projection they already
+    // set would be wrong, and on a page that toggles it, said on every toggle.
+    if (this.mapMeta?.layout) return
     const problem = this.tiles?.problem
     if (problem) this.warnings.push(problem)
   }
@@ -2986,6 +3002,7 @@ class ApexMaps extends BaseChart {
     this._morph = null
     const morphFrom = mapChanged ? this._captureShapes() : null
     const morphSet = this._regionSetId()
+    const wasGrid = !!this.mapMeta?.layout
 
     if (redrawGeometry || mapChanged || projectionChanged) {
       if (mapChanged) {
@@ -3030,6 +3047,17 @@ class ApexMaps extends BaseChart {
     // shares no keys with what was on screen, so there is nothing to interpolate
     // along and the swap stays a swap.
     if (morphFrom && morphSet && morphSet === this._regionSetId()) this._startMorph(morphFrom)
+
+    // A change of representation is a new view, so the camera goes back to that
+    // view's fit. Two ways to get one: the `layout` option, and naming a layout
+    // or its boundary pack in `map`, which is why the resolved geometry is asked
+    // as well. Without this a geography view zoomed to one island carries its
+    // zoom into a hex grid, which turns zoom and pan off, so the reader is left
+    // looking at a few cells with no gesture to get out.
+    const layoutChanged =
+      (previous.geo?.layout ?? null) !== (this.config.geo?.layout ?? null) ||
+      wasGrid !== !!this.mapMeta?.layout
+    if (layoutChanged) this._resetCameraToFit(this._morph ? this._morphMs() : 0)
 
     // The interaction tree is plain data (no formatters), so a JSON comparison is
     // exact. Recreating drops any gesture mid-flight, which is why it only happens
@@ -3851,6 +3879,30 @@ class ApexMaps extends BaseChart {
       },
     })
     if (!this._morph) this.element.classList.remove('apexmaps--morphing')
+  }
+
+  /**
+   * Return the camera to the fit, the view the projection was framed for.
+   *
+   * The identity camera rather than `resetView`, because the fit is whatever
+   * `geo.view.fit` asked for (a bbox, the world) and `resetView` reframes the
+   * data instead.
+   *
+   * @param duration Ease over this many ms, the length of the morph running
+   *   alongside, so the shapes and the frame land together. The captured shapes
+   *   were on screen under the old camera, and jumping it before they start to
+   *   move would show the whole map for a frame before the morph had begun.
+   *   Zero jumps, and so does `easeTo` under reduced motion.
+   */
+  private _resetCameraToFit(duration: number): void {
+    const camera = this.camera
+    if (!camera) return
+    camera.stop()
+    const { k, x, y } = this.viewport.camera
+    if (k === 1 && x === 0 && y === 0) return
+    const fit = { k: 1, x: 0, y: 0 }
+    if (duration > 0) void camera.easeTo({ ...fit, duration, ease: 'cubicInOut' })
+    else camera.jumpTo(fit)
   }
 
   /**

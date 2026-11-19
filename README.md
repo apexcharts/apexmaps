@@ -179,7 +179,10 @@ representations rather than swapping them: each outline is resampled at equal ar
 rotated to its closest match and walked to its cell. It is not decoration. The hardest thing
 about reading a cartogram is knowing which cell is which region, and watching Texas walk to
 its own is what tells you. It runs off `chart.animations` and stands down above the motion
-budget, since unlike every other transition here it is vertex work every frame.
+budget, since unlike every other transition here it is vertex work every frame. A grid has no
+geography, so while one is drawn `geo.projection`, `geo.view.fit` and `geo.tiles` stand down in
+favour of the layout's own plane and framing; they apply again when it is switched off, and each
+switch returns the camera to the new view's fit.
 
 Every one is hand-authored, because no country has a canonical tilegram and curating the table
 *is* the work. `npm run check:layout` scores each against the boundary pack it claims to

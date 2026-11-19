@@ -291,14 +291,23 @@ export function merge<T>(target: T, source: unknown): T {
  * abandoned the drilldown trail. For a legend tweak.
  *
  * Geometry is data, not configuration. There is nothing to merge inside it.
+ *
+ * Unlike `merge`, a key the caller sets to `undefined` is removed, so the next
+ * `buildConfig` falls back to the default for it. `{ geo: { projection:
+ * undefined } }` used to be skipped, which left the old projection in force.
+ * `null` already cleared options that are read with `??`, such as the
+ * projection and the fit, but not every option is read that way, and
+ * `undefined` is what spreading an unset variable produces. A key that is
+ * absent is still left alone, so a partial update keeps meaning "change only
+ * these".
  */
 export function mergeOptions<T extends { geo?: { map?: unknown } }>(target: T, source: unknown): T {
   const map = (source as T | undefined)?.geo?.map
-  if (map == null || typeof map !== 'object') return merge(target, source)
+  if (map == null || typeof map !== 'object') return mergeUpdate(target, source)
 
-  // `merge` skips undefined values, so blanking the key here leaves whatever the
-  // target held, and the assignment below then sets the caller's own reference.
-  const out = merge(target, {
+  // Blanking the key here clears whatever the target held, and the assignment
+  // below then sets the caller's own reference.
+  const out = mergeUpdate(target, {
     ...(source as Record<string, unknown>),
     geo: { ...(source as T).geo, map: undefined },
   })
@@ -306,6 +315,27 @@ export function mergeOptions<T extends { geo?: { map?: unknown } }>(target: T, s
   geo.map = map
   out.geo = geo as T['geo']
   return out
+}
+
+/** `merge`, except that an own key set to `undefined` deletes the key. */
+function mergeUpdate<T>(target: T, source: unknown): T {
+  if (!source || typeof source !== 'object') return target
+  const out: Record<string, unknown> = Array.isArray(target)
+    ? ([...target] as unknown as Record<string, unknown>)
+    : { ...(target as unknown as Record<string, unknown>) }
+
+  for (const [key, value] of Object.entries(source)) {
+    if (value === undefined) {
+      delete out[key]
+    } else if (Array.isArray(value)) {
+      out[key] = value.slice()
+    } else if (isPlainObject(value)) {
+      out[key] = isPlainObject(out[key]) ? mergeUpdate(out[key], value) : merge({}, value)
+    } else {
+      out[key] = value
+    }
+  }
+  return out as unknown as T
 }
 
 export function isPlainObject(v: unknown): v is Record<string, unknown> {
