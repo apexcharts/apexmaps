@@ -1170,6 +1170,7 @@ class ApexMaps extends BaseChart {
             items: series.colorScale.legendItems(),
             continuous: series.colorScale.continuous,
             gradient: legendGradient(series.colorScale),
+            zero: series.colorScale.zeroPosition(),
             seriesIndex: series.index,
           })
         }
@@ -1197,6 +1198,7 @@ class ApexMaps extends BaseChart {
             items: series.colorScale.legendItems(),
             continuous: series.colorScale.continuous,
             gradient: legendGradient(series.colorScale),
+            zero: series.colorScale.zeroPosition(),
             seriesIndex: series.index,
           })
         }
@@ -1210,6 +1212,7 @@ class ApexMaps extends BaseChart {
             items: series.colorScale.legendItems(),
             continuous: series.colorScale.continuous,
             gradient: legendGradient(series.colorScale),
+            zero: series.colorScale.zeroPosition(),
             seriesIndex: series.index,
           })
         }
@@ -1222,6 +1225,7 @@ class ApexMaps extends BaseChart {
           items: series.legendItems(),
           continuous: series.scale.continuous,
           gradient: legendGradient(series.scale),
+          zero: series.scale.zeroPosition(),
           seriesIndex: series.index,
         })
       }

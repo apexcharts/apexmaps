@@ -348,6 +348,11 @@ registerPalette('okabeIto', {
  * a sequential ramp. Choosing this automatically prevents the single most common
  * palette error: a sequential ramp on signed data, which hides the sign.
  *
+ * The anchoring is the scale's job, not this function's: a scale that took the
+ * diverging ramp from here maps zero to its neutral midpoint and puts a class
+ * break at zero (see `Scale`). A caller who names the palette gets the ramp
+ * spread over the domain as usual.
+ *
  */
 export function defaultPaletteFor(domain: [number, number]): string {
   const [lo, hi] = domain

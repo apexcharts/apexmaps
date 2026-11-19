@@ -199,6 +199,56 @@ describe('legend hover marker', () => {
       expect(left).toBeLessThan(100)
     }
   })
+
+  /** Signed values, mostly negative, on a continuous scale: anchored at zero. */
+  const signed = (scale: Record<string, unknown> = {}) => ({
+    series: [
+      {
+        name: 'Change',
+        joinBy: ['iso_a3', 'code'],
+        scale: { type: 'linear', ...scale },
+        data: [
+          { code: 'AAA', value: -8 },
+          { code: 'BBB', value: -5 },
+          { code: 'CCC', value: -1 },
+          { code: 'DDD', value: 2 },
+        ],
+      },
+    ],
+  })
+
+  it('ticks zero on a continuous bar anchored there, where the colour turns', async () => {
+    await render(signed())
+    const zero = el.querySelector('.apexmaps-legend-zero') as HTMLElement
+    expect(zero).not.toBeNull()
+    expect(zero.textContent).toBe('0')
+    // The domain is -8 to 2, so zero is 80% of the way along, the same place
+    // the hover marker goes for a value of zero.
+    expect(parseFloat(zero.style.left)).toBeCloseTo(80, 1)
+    const ends = [...el.querySelectorAll('.apexmaps-legend-gradient-labels > span')]
+      .filter((s) => !s.classList.contains('apexmaps-legend-zero'))
+      .map((s) => s.textContent)
+    expect(ends).toEqual(['-8', '2'])
+  })
+
+  it('formats the zero tick and the ends with the legend tick formatter', async () => {
+    await render({
+      ...signed(),
+      legend: { style: 'gradient', tickFormatter: (v: number) => `${v}%` },
+    })
+    const labels = [...el.querySelectorAll('.apexmaps-legend-gradient-labels > span')]
+    expect(labels.map((s) => s.textContent)).toEqual(['-8%', '2%', '0%'])
+  })
+
+  it('draws no zero tick on a bar that is not anchored at zero', async () => {
+    // A named palette is taken as given, so its ramp spans the domain as is.
+    await render(signed({ palette: 'rdbu' }))
+    expect(el.querySelector('.apexmaps-legend-zero')).toBeNull()
+    map?.destroy()
+    // Nor on data of one sign.
+    await render()
+    expect(el.querySelector('.apexmaps-legend-zero')).toBeNull()
+  })
 })
 
 describe('legend.position', () => {

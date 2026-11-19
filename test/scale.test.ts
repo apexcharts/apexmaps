@@ -10,6 +10,7 @@ import {
   parseColor,
   toHex,
   mix,
+  rampAt,
   sampleRamp,
   contrastRatio,
   readableOn,
@@ -224,6 +225,199 @@ describe('createScale', () => {
   it('handles a single-value dataset', () => {
     const scale = createScale([7, 7, 7])
     expect(scale.color(7)).not.toBe(scale.nullColor)
+  })
+})
+
+/**
+ * The diverging ramp chosen for signed data is anchored at zero.
+ *
+ * The ramp was chosen with that promise, but the colour was spread over the
+ * whole domain, so on population change from -8.13% to +1.35% zero landed far
+ * into the blue half and a small decline looked like growth. The classes broke
+ * by population alone, so one class held both shrinking and growing areas.
+ */
+describe('automatic diverging scale, anchored at zero', () => {
+  const rdbu = getPalette('rdbu')!.stops
+  const neutral = rdbu[(rdbu.length - 1) / 2]
+  /** Mixed-sign data, mostly negative, the shape of a census change map. */
+  const change = [
+    -8.13, -7.4, -6.9, -6.2, -5.8, -5.5, -5.1, -4.9, -4.6, -4.4, -4.1, -3.9, -3.7, -3.5, -3.2, -3.0,
+    -2.8, -2.6, -2.4, -2.1, -1.9, -1.6, -1.2, -0.9, -0.4, 0.3, 0.8, 1.35,
+  ]
+
+  it('colours zero at the ramp midpoint on an asymmetric domain', () => {
+    const scale = createScale([-8.13, -3, 1.35], { type: 'linear' })
+    expect(scale.paletteName).toBe('rdbu')
+    expect(scale.color(0)).toBe(rampAt(rdbu, 0.5))
+    expect(scale.color(0)).toBe(neutral)
+  })
+
+  it('gives equal magnitudes mirror colours on both sides', () => {
+    const scale = createScale([-8.13, -3, 1.35], { type: 'linear' })
+    const [lo, hi] = scale.domain
+    const extent = Math.max(-lo, hi)
+    const d = (0.5 * 8.13) / extent
+    expect(scale.color(-8.13)).toBe(rampAt(rdbu, 0.5 - d))
+    expect(scale.color(8.13)).toBe(rampAt(rdbu, 0.5 + d))
+    // +1.35 is paler than -8.13: further from the midpoint is darker.
+    expect(luminance(scale.color(1.35))).toBeGreaterThan(luminance(scale.color(-8.13)))
+  })
+
+  it('bends a sqrt scale away from zero on both sides alike', () => {
+    const scale = createScale([-8, 2], { type: 'sqrt', nice: false })
+    expect(scale.color(0)).toBe(neutral)
+    expect(scale.color(-2)).toBe(rampAt(rdbu, 0.5 - 0.5 * Math.sqrt(2 / 8)))
+    expect(scale.color(2)).toBe(rampAt(rdbu, 0.5 + 0.5 * Math.sqrt(2 / 8)))
+  })
+
+  it('keeps the real domain and shows only the ramp it reaches on the legend bar', () => {
+    const scale = createScale([-8, 2], { type: 'linear', nice: false })
+    expect(scale.domain).toEqual([-8, 2])
+    const stops = scale.gradientStops(11)
+    expect(stops[0].color).toBe(scale.color(-8))
+    expect(stops[stops.length - 1].color).toBe(scale.color(2))
+    // Zero is 80% along a bar running from -8 to 2, and the marker and the
+    // gradient agree there: both say neutral.
+    expect(scale.position(0)).toBeCloseTo(0.8, 10)
+    expect(stops[8].color).toBe(neutral)
+    const items = scale.legendItems()
+    expect(items.map((i) => i.label)).toEqual(['-8', '2'])
+    expect(items[0].color).toBe(scale.color(-8))
+    expect(items[1].color).toBe(scale.color(2))
+  })
+
+  it('puts a quantile break at zero so no class mixes signs', () => {
+    const scale = createScale(change)
+    expect(scale.classes).toBe(5)
+    expect(scale.breaks).toHaveLength(4)
+    expect(scale.breaks).toContain(0)
+    for (let c = 0; c < scale.colors.length; c++) {
+      const members = change.filter((v) => scale.classIndex(v) === c)
+      expect(members.length).toBeGreaterThan(0)
+      expect(members.every((v) => v < 0) || members.every((v) => v >= 0)).toBe(true)
+    }
+  })
+
+  it('draws negatives from the lower half and positives from the upper half', () => {
+    const scale = createScale(change)
+    const zeroAt = scale.breaks.indexOf(0) + 1
+    // Red half below zero, blue half above, never the neutral itself.
+    for (const color of scale.colors.slice(0, zeroAt)) {
+      expect(parseColor(color)![0]).toBeGreaterThan(parseColor(color)![2])
+    }
+    for (const color of scale.colors.slice(zeroAt)) {
+      expect(parseColor(color)![2]).toBeGreaterThan(parseColor(color)![0])
+    }
+    expect(scale.colors).not.toContain(neutral)
+    // Each side steps out from neutral to its own extreme's place on the
+    // symmetric ramp: the decline reaches the ramp's end, and the lone growth
+    // class stops where +1.35 sits against -8.13, pale, as on a continuous scale.
+    const below = zeroAt
+    expect(scale.colors[0]).toBe(rdbu[0])
+    expect(scale.colors[zeroAt - 1]).toBe(
+      sampleRamp(rdbu, below + 1, { from: 0, to: 0.5 })[below - 1],
+    )
+    expect(scale.colors[zeroAt]).toBe(
+      sampleRamp(rdbu, 2, { from: 0.5, to: 0.5 + (0.5 * 1.35) / 8.13 })[1],
+    )
+  })
+
+  /** OkLab lightness of a hex colour. */
+  const lightness = (color: string) => rgbToOklab(parseColor(color)!)[0]
+  /** Symmetric data with no zero in it: -40 to -2 and 2 to 40, in steps of 2. */
+  const symmetric = [
+    ...Array.from({ length: 20 }, (_, i) => -40 + i * 2),
+    ...Array.from({ length: 20 }, (_, i) => 2 + i * 2),
+  ]
+
+  it('mirrors the classes on mirrored data', () => {
+    const mirrored = [...change.map((v) => -v), ...change]
+    const scale = createScale(mirrored, { classes: 6 })
+    expect(scale.breaks[2]).toBe(0)
+    const n = scale.colors.length
+    for (let i = 0; i < n / 2; i++) {
+      // Same lightness, opposite hue: a mirror on the ramp.
+      const gap = Math.abs(lightness(scale.colors[i]) - lightness(scale.colors[n - 1 - i]))
+      expect(gap).toBeLessThan(0.03)
+    }
+  })
+
+  it('reaches both extremes on balanced data when the class count is odd', () => {
+    // Five classes split three and two, three split two and one. A shared step
+    // size ran the two-class side out of steps short of its end, so -40 was the
+    // darkest red and +40 only a mid blue.
+    for (const classes of [5, 3]) {
+      const scale = createScale(symmetric, { classes })
+      expect(scale.breaks, `${classes}`).toContain(0)
+      expect(scale.color(-40), `${classes}`).toBe(rdbu[0])
+      expect(scale.color(40), `${classes}`).toBe(rdbu[rdbu.length - 1])
+      expect(Math.abs(lightness(scale.color(-40)) - lightness(scale.color(40)))).toBeLessThan(0.03)
+    }
+    const equal = createScale(symmetric, { type: 'equalInterval', classes: 5 })
+    expect(Math.abs(lightness(equal.color(-40)) - lightness(equal.color(40)))).toBeLessThan(0.03)
+  })
+
+  it('does not let one extra zero decide which side is darker', () => {
+    const plain = createScale(symmetric, { classes: 5 })
+    const withZero = createScale([...symmetric, 0], { classes: 5 })
+    for (const scale of [plain, withZero]) {
+      expect(scale.color(-40)).toBe(rdbu[0])
+      expect(scale.color(40)).toBe(rdbu[rdbu.length - 1])
+    }
+  })
+
+  it('puts exact zeros in the first class above zero without breaks or classes of their own', () => {
+    // Six zeros used to count as the positive side's values: it took three
+    // classes and two of its breaks were zero too, leaving empty classes.
+    const values = [-5, -4, -3, -2, -1, 0, 0, 0, 0, 0, 0, 1, 2]
+    const scale = createScale(values)
+    expect(scale.breaks.filter((b) => b === 0)).toEqual([0])
+    expect(new Set(scale.breaks).size).toBe(scale.breaks.length)
+    expect(scale.counts.every((c) => c > 0)).toBe(true)
+    expect(scale.warnings.join(' ')).not.toMatch(/empty class/)
+    // Zero shares the class of the values just above it.
+    expect(scale.classIndex(0)).toBe(scale.classIndex(1))
+  })
+
+  it('gives a side no more quantile classes than it has distinct values', () => {
+    // Nine negatives but only two distinct ones: by count they would take three
+    // of five classes and one would be empty, while the five positives have
+    // room for the spare one.
+    const values = [-2, -1, -1, -1, -1, -1, -1, -1, -1, 1, 2, 3, 4, 5]
+    const scale = createScale(values)
+    expect(scale.colors).toHaveLength(5)
+    expect(scale.breaks.indexOf(0)).toBe(1)
+    expect(scale.counts.every((c) => c > 0)).toBe(true)
+  })
+
+  it('puts the break at zero for equal intervals and jenks too', () => {
+    for (const type of ['equalInterval', 'quantize', 'jenks', 'naturalBreaks'] as const) {
+      const scale = createScale(change, { type })
+      expect(scale.breaks, type).toContain(0)
+      expect(scale.breaks, type).toHaveLength(4)
+    }
+  })
+
+  it('leaves a named palette, a domain and explicit breaks alone', () => {
+    const named = createScale([-8.13, -3, 1.35], { type: 'linear', palette: 'rdbu', nice: false })
+    expect(named.color(0)).toBe(rampAt(rdbu, (0 - -8.13) / (1.35 - -8.13)))
+    const domained = createScale([-8.13, -3, 1.35], { type: 'linear', domain: [-10, 2] })
+    expect(domained.color(0)).toBe(rampAt(rdbu, 10 / 12))
+    expect(domained.domain).toEqual([-10, 2])
+    const thresholds = createScale(change, { type: 'threshold', breaks: [-5, -2, 1] })
+    expect(thresholds.breaks).toEqual([-5, -2, 1])
+    expect(thresholds.colors).toEqual(sampleRamp(rdbu, 4))
+    const quantile = createScale(change, { palette: 'rdbu' })
+    expect(quantile.breaks).not.toContain(0)
+    expect(quantile.colors).toEqual(sampleRamp(rdbu, 5))
+  })
+
+  it('leaves a sequential, all-positive scale exactly as before', () => {
+    const scale = createScale([1, 5, 10, 20, 50], { type: 'linear', nice: false })
+    expect(scale.paletteName).toBe('blues')
+    expect(scale.position(1)).toBe(0)
+    expect(scale.position(50)).toBe(1)
+    expect(scale.breaks).toEqual([])
   })
 })
 

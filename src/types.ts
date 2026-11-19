@@ -138,7 +138,18 @@ export interface ScaleOptions {
   type?: ScaleType
   /** Number of classes for classed scales. Default 5. */
   classes?: number
-  /** Registered palette name, or an explicit colour list (taken literally). */
+  /**
+   * Registered palette name, or an explicit colour list (taken literally).
+   *
+   * Unset, the scale picks a sequential ramp, or the diverging `'rdbu'` when
+   * the values straddle zero, and then anchors it at zero: zero is the ramp's
+   * neutral midpoint, equal magnitudes on either side get equal intensity, and
+   * a classed scale always has a break at 0. Naming a palette, `'rdbu'`
+   * included, or setting `domain` or threshold `breaks`, is taken as given and
+   * turns the anchoring off. To centre a named diverging palette yourself, give
+   * a continuous scale a domain symmetric about zero, or a threshold scale
+   * breaks that include 0.
+   */
   palette?: PaletteName | string[]
   domain?: [number, number]
   /** Explicit breaks, required by `type: 'threshold'`. */

@@ -41,6 +41,102 @@ const DEFAULT_NULL_COLOR = THEME_DEFAULTS.light.noData
  */
 export const DARK_NULL_COLOR = THEME_DEFAULTS.dark.noData
 
+/**
+ * Classed breaks for a scale anchored at zero: a break at 0, with the chosen
+ * method run on each side of it.
+ *
+ * Classes are shared between the sides in proportion to what the method divides
+ * (the number of values for quantile and jenks, the length of the side for equal
+ * intervals), with at least one class each, so the class count stays what was
+ * asked for. Quantile and jenks never give a side more classes than it has
+ * distinct values while the other side has room for them, since the surplus
+ * could only be empty classes.
+ *
+ * The side above zero is weighed and divided on values greater than zero. An
+ * exact zero falls in the first class at or above the break, the same rule
+ * `classIndex` applies to every break, but a run of zeros (census figures
+ * rounded to 0.0, say) must not claim classes of its own or become break
+ * values: that put several breaks at 0 and left empty classes between them.
+ *
+ * @returns The interior breaks, the class count below zero, and whether jenks had
+ *   to sample.
+ */
+function zeroAnchoredBreaks(
+  type: ScaleType,
+  sorted: number[],
+  [lo, hi]: [number, number],
+  classes: number,
+): { breaks: number[]; below: number; sampled: boolean } {
+  const negatives = sorted.filter((v) => v < 0)
+  const positives = sorted.filter((v) => v > 0)
+  const byLength = type === 'quantize' || type === 'equalInterval'
+  const weightBelow = byLength ? -lo : negatives.length
+  const weightAbove = byLength ? hi : positives.length
+  const share = Math.round((classes * weightBelow) / (weightBelow + weightAbove || 1))
+  let below = Math.max(1, Math.min(classes - 1, share))
+  let above = classes - below
+
+  if (!byLength) {
+    const roomBelow = new Set(negatives).size
+    const roomAbove = new Set(positives).size
+    if (below > roomBelow && above < roomAbove) {
+      const move = Math.min(below - roomBelow, roomAbove - above)
+      below -= move
+      above += move
+    } else if (above > roomAbove && below < roomBelow) {
+      const move = Math.min(above - roomAbove, roomBelow - below)
+      above -= move
+      below += move
+    }
+  }
+
+  if (byLength) {
+    return {
+      breaks: [...equalIntervalBreaks([lo, 0], below), 0, ...equalIntervalBreaks([0, hi], above)],
+      below,
+      sampled: false,
+    }
+  }
+  if (type === 'jenks' || type === 'naturalBreaks') {
+    const a = jenksBreaks(negatives, below)
+    const b = jenksBreaks(positives, above)
+    return { breaks: [...a.breaks, 0, ...b.breaks], below, sampled: a.sampled || b.sampled }
+  }
+  return {
+    breaks: [...quantileBreaks(negatives, below), 0, ...quantileBreaks(positives, above)],
+    below,
+    sampled: false,
+  }
+}
+
+/**
+ * Class colours for a scale anchored at zero: classes below zero from the lower
+ * half of the ramp, classes above it from the upper half, and none from the
+ * neutral midpoint, which belongs to zero itself and no class contains only that.
+ *
+ * Each side's classes step evenly out from neutral to the colour its own extreme
+ * has on the symmetric ramp, the one the continuous scale uses: the ramp runs
+ * from -extent to +extent, extent being the larger magnitude, so a side whose
+ * data reaches the extent ends on the ramp's extreme and a side that reaches a
+ * fifth of it ends a fifth of the way out. Equal magnitudes therefore get equal
+ * intensity however the classes happen to split. Symmetric data reaches both
+ * extremes when its five classes divide three and two, and a +1.35 beside a
+ * -8.13 stays pale whether it has one class or four.
+ */
+function zeroAnchoredColors(
+  stops: string[],
+  below: number,
+  above: number,
+  [lo, hi]: [number, number],
+): string[] {
+  const extent = Math.max(-lo, hi)
+  // n + 1 samples per side, the neutral midpoint being the one dropped.
+  const lower = sampleRamp(stops, below + 1, { from: 0.5 - (0.5 * -lo) / extent, to: 0.5 })
+  const upper = sampleRamp(stops, above + 1, { from: 0.5, to: 0.5 + (0.5 * hi) / extent })
+  // Outermost class first below zero, innermost first above it.
+  return [...lower.slice(0, below), ...upper.slice(1)]
+}
+
 /** Finite numbers only, ascending. */
 function cleanNumbers(values: readonly unknown[]): number[] {
   const out: number[] = []
@@ -234,6 +330,22 @@ export class Scale {
    * that sample the ramp later (a tooltip, an export). Unset for hex stops.
    */
   private _colorScope: { el: Element | null } | null = null
+  /**
+   * Set when the scale chose a diverging ramp itself because its data straddles
+   * zero: the largest magnitude on either side of zero, which maps to the ends of
+   * the ramp while zero maps to its neutral midpoint. Null on every other scale,
+   * including one whose caller named the palette or the domain.
+   *
+   * Symmetric, not stretched per side: the ramp runs from -extent to +extent, so
+   * equal magnitudes get equal intensity on both sides and a +1.35 beside a -8.13
+   * is drawn paler, as it should be. Stretching each side to its own extreme
+   * would paint the largest growth as darkly as the largest decline whatever
+   * their sizes. The scale's `domain` stays the data's (or its nice rounding),
+   * so the legend bar shows only the part of the ramp the data uses, still
+   * linear in value, and its end labels and the accessible description are the
+   * real range rather than a mirrored one.
+   */
+  private _zeroExtent: number | null = null
 
   constructor(
     values: readonly unknown[],
@@ -297,7 +409,37 @@ export class Scale {
     const classes = Math.max(2, Math.min(12, options.classes ?? 5))
     this.classes = classes
 
-    if (this.continuous) {
+    // The automatic diverging ramp is anchored at zero, which is what choosing it
+    // promises. Only when the scale made every choice itself: a named palette, a
+    // domain or explicit thresholds are the caller's, and are taken as given. Log
+    // is left out because a log scale over values at or below zero has no zero to
+    // anchor to.
+    const anchored =
+      options.palette == null &&
+      !options.domain &&
+      paletteKind === 'diverging' &&
+      this.type !== 'log' &&
+      !(this.type === 'threshold' && options.breaks?.length) &&
+      domain[0] < 0 &&
+      domain[1] > 0
+
+    if (anchored && this.continuous) {
+      this._zeroExtent = Math.max(-domain[0], domain[1])
+      this.breaks = []
+      this.colors = sampleRamp(stops, Math.max(2, classes), this._rampWindow())
+    } else if (anchored) {
+      if (this.type === 'threshold') {
+        this.warnings.push("type 'threshold' needs options.breaks; falling back to quantile")
+      }
+      const { breaks, below, sampled } = zeroAnchoredBreaks(this.type, sorted, domain, classes)
+      if (sampled) {
+        this.warnings.push(
+          `jenks breaks computed from a 2000-value sample of ${sorted.length} values; breaks are approximate`,
+        )
+      }
+      this.breaks = breaks
+      this.colors = zeroAnchoredColors(stops, below, classes - below, domain)
+    } else if (this.continuous) {
       this.breaks = []
       this.colors = sampleRamp(stops, Math.max(2, classes), this._rampWindow())
     } else {
@@ -353,8 +495,14 @@ export class Scale {
    * The slice of the palette to sample. Only sequential ramps get a light-end
    * inset: a diverging ramp needs both of its extremes and its true midpoint, and
    * an explicit colour list is the caller's own decision.
+   *
+   * A continuous scale anchored at zero samples only the part of the ramp its
+   * domain reaches, so the legend bar and its end swatches match the map.
    */
   private _rampWindow(): { from: number; to: number } {
+    if (this._zeroExtent != null) {
+      return { from: this._rampT(this.domain[0]), to: this._rampT(this.domain[1]) }
+    }
     return this.paletteKind === 'sequential'
       ? { from: SEQUENTIAL_LIGHT_INSET, to: 1 }
       : { from: 0, to: 1 }
@@ -428,15 +576,7 @@ export class Scale {
     if (value == null || value === '' || !Number.isFinite(n)) return this.nullColor
 
     if (this.continuous) {
-      const [lo, hi] = this.domain
-      let t = hi === lo ? 0.5 : (n - lo) / (hi - lo)
-      if (this.type === 'log') {
-        const safeLo = Math.max(lo, 1e-9)
-        const safeN = Math.max(n, 1e-9)
-        t = Math.log(safeN / safeLo) / Math.log(Math.max(hi, 1e-9) / safeLo)
-      } else if (this.type === 'sqrt') {
-        t = Math.sqrt(Math.max(0, t))
-      }
+      const t = this._rampT(n)
       // Hex stops, the default, take the direct call: this runs per feature.
       if (!this._colorScope) return rampAt(this.stops, t)
       return this._inScope(() => rampAt(this.stops, t))
@@ -525,6 +665,32 @@ export class Scale {
     return out
   }
 
+  /**
+   * Where a value falls along the ramp on a continuous scale, unclamped.
+   *
+   * Anchored at zero, zero is the midpoint and `_zeroExtent` either end, with the
+   * sqrt transform applied to each side's magnitude so it bends away from zero
+   * symmetrically rather than from the bottom of the domain.
+   */
+  private _rampT(n: number): number {
+    const extent = this._zeroExtent
+    if (extent != null) {
+      const r = n / extent
+      const bent = this.type === 'sqrt' ? Math.sign(r) * Math.sqrt(Math.abs(r)) : r
+      return 0.5 + 0.5 * bent
+    }
+    const [lo, hi] = this.domain
+    let t = hi === lo ? 0.5 : (n - lo) / (hi - lo)
+    if (this.type === 'log') {
+      const safeLo = Math.max(lo, 1e-9)
+      const safeN = Math.max(n, 1e-9)
+      t = Math.log(safeN / safeLo) / Math.log(Math.max(hi, 1e-9) / safeLo)
+    } else if (this.type === 'sqrt') {
+      t = Math.sqrt(Math.max(0, t))
+    }
+    return t
+  }
+
   private _inScope<T>(fn: () => T): T {
     return this._colorScope ? withColorScope(this._colorScope.el, fn) : fn()
   }
@@ -543,6 +709,19 @@ export class Scale {
       out.push({ offset: (i + 1) / n, color })
     })
     return out
+  }
+
+  /**
+   * Where zero sits along a continuous legend bar, from 0 to 1, or null when
+   * the scale is not anchored at zero.
+   *
+   * Only the anchored continuous scale has a zero worth marking: it is where the
+   * ramp turns from one hue to the other, and with the bar showing just the part
+   * of the ramp the data reaches it is rarely the middle of the bar. A classed
+   * scale anchored at zero already has a break there, so its legend ticks it.
+   */
+  zeroPosition(): number | null {
+    return this._zeroExtent == null ? null : this.position(0)
   }
 
   /**
@@ -569,15 +748,11 @@ export class Scale {
     const [lo, hi] = this.domain
 
     if (this.continuous) {
-      let t = hi === lo ? 0.5 : (n - lo) / (hi - lo)
-      if (this.type === 'log') {
-        const safeLo = Math.max(lo, 1e-9)
-        const safeN = Math.max(n, 1e-9)
-        t = Math.log(safeN / safeLo) / Math.log(Math.max(hi, 1e-9) / safeLo)
-      } else if (this.type === 'sqrt') {
-        t = Math.sqrt(Math.max(0, t))
-      }
-      return clamp01(t)
+      const t = this._rampT(n)
+      if (this._zeroExtent == null) return clamp01(t)
+      // The bar shows only the ramp window the domain reaches (`_rampWindow`).
+      const { from, to } = this._rampWindow()
+      return clamp01(to === from ? 0.5 : (t - from) / (to - from))
     }
 
     const bands = this.breaks.length + 1

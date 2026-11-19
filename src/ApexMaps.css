@@ -538,6 +538,12 @@
   height: 1.2em;
 }
 
+/* A continuous bar keeps its two end labels in the flow and adds zero, when its
+   ramp is anchored there, as a tick at its own place along the bar. */
+.apexmaps-legend-gradient-labels.has-zero {
+  position: relative;
+}
+
 .apexmaps-legend-tick {
   position: absolute;
   top: 0;

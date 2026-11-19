@@ -24,12 +24,25 @@ import type { LegendItem, LegendOptions, PixelShape, SizeLegendEntry } from '../
 /** Matches `.apexmaps-legend-swatch` in the stylesheet, less its 1px border. */
 const SWATCH_SIZE = 12
 
+/**
+ * How far from either end of a continuous bar, as a share of its length, the
+ * zero tick has to be to be drawn. Text cannot be measured here without a
+ * reflow, and closer than this a "0" would sit on the end label beside it.
+ */
+const ZERO_TICK_CLEARANCE = 0.12
+
 export interface LegendSection {
   title?: string
   /** Classed or gradient colour legend. */
   items?: LegendItem[]
   continuous?: boolean
   gradient?: { offset: number; color: string }[]
+  /**
+   * Where zero sits along a continuous bar, 0 to 1, when the scale anchors its
+   * ramp there. Ticked under the bar, because that is where the colour turns
+   * from one hue to the other and the two end labels do not say where.
+   */
+  zero?: number | null
   /** Nested-circle size legend, for proportional symbols. */
   sizes?: SizeLegendEntry[]
   /** Index of the series this section describes, for muting callbacks. */
@@ -135,7 +148,9 @@ export class Legend {
         : this.options.style
 
     if (style === 'gradient' && section.gradient?.length) {
-      wrap.appendChild(this.gradientBar(items, section.gradient, section.seriesIndex ?? 0))
+      wrap.appendChild(
+        this.gradientBar(items, section.gradient, section.seriesIndex ?? 0, section.zero),
+      )
     } else {
       wrap.appendChild(this.classList(items, section.seriesIndex ?? 0))
     }
@@ -203,6 +218,7 @@ export class Legend {
     items: LegendItem[],
     gradient: { offset: number; color: string }[],
     seriesIndex: number,
+    zero?: number | null,
   ): HTMLElement {
     const vertical = this.isVertical()
     const stops = gradient.map((s) => `${s.color} ${(s.offset * 100).toFixed(1)}%`).join(', ')
@@ -228,7 +244,7 @@ export class Legend {
         }),
         marker,
       ]),
-      this.gradientLabels(real, vertical),
+      this.gradientLabels(real, vertical, zero),
     ])
 
     if (nullItem) {
@@ -257,16 +273,38 @@ export class Legend {
    * labels. A classed bar has boundaries, and the boundary is the number the
    * reader needs: printing "10 to 20" under a band says the same thing twice and
    * leaves the band edge unlabelled, which is where the eye actually goes.
+   *
+   * The one number a continuous bar adds is zero, when the scale anchors its
+   * ramp there (`zero`): the point where decline turns to growth. It is left off
+   * when it would sit on top of an end label.
    */
-  private gradientLabels(real: LegendItem[], vertical: boolean): HTMLElement {
+  private gradientLabels(real: LegendItem[], vertical: boolean, zero?: number | null): HTMLElement {
     const format = this.options.tickFormatter ?? formatNumber
     const classed = real.length > 2 && real.every((i) => i.from != null && i.to != null)
 
     if (!classed) {
-      return html('div', { class: 'apexmaps-legend-gradient-labels' }, [
-        html('span', { text: real[0]?.label ?? '' }),
-        html('span', { text: real[real.length - 1]?.label ?? '' }),
-      ])
+      // The ends are formatted by `tickFormatter` too, as its type promises, so
+      // they read the same as a zero tick between them.
+      const end = (item: LegendItem | undefined, value: number | undefined) =>
+        this.options.tickFormatter && value != null
+          ? this.options.tickFormatter(value)
+          : (item?.label ?? '')
+      const first = real[0]
+      const last = real[real.length - 1]
+      const ends = [
+        html('span', { text: end(first, first?.from) }),
+        html('span', { text: end(last, last?.to) }),
+      ]
+      if (zero == null || zero < ZERO_TICK_CLEARANCE || zero > 1 - ZERO_TICK_CLEARANCE) {
+        return html('div', { class: 'apexmaps-legend-gradient-labels' }, ends)
+      }
+      const at = `${(zero * 100).toFixed(2)}%`
+      const tick = html('span', {
+        class: 'apexmaps-legend-tick apexmaps-legend-zero',
+        style: vertical ? { bottom: at } : { left: at },
+        text: format(0),
+      })
+      return html('div', { class: 'apexmaps-legend-gradient-labels has-zero' }, [...ends, tick])
     }
 
     const ticks = real.slice(1).map((item, i) => {

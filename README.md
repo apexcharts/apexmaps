@@ -550,6 +550,11 @@ dark value under `.apexmaps--dark` when the two should differ.
   exactly wrong when area encodes a value.
 - **Quantile classification with visible breaks.** Every class is populated and the actual break
   values appear in the legend, because classification silently changes a choropleth's conclusion.
+- **Signed data is anchored at zero.** When values straddle zero and no palette or domain is set,
+  the scale picks a diverging ramp, zero takes its neutral midpoint, and equal magnitudes get
+  equal intensity on either side, so a small gain beside a large loss reads as small. Classed
+  scales always break at zero. Name a palette, a domain or threshold breaks and the scale takes
+  them as given.
 - **Ramps sampled in OkLab.** Interpolating through sRGB turns ramp midpoints muddy grey, and readers
   infer magnitude from perceived lightness.
 - **No-data is its own colour.** An unmatched feature never falls into the lowest class, which would
