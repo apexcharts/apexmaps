@@ -51,6 +51,7 @@ export type {
   MarkerDatum,
   MarkerSeriesOptions,
   MarkerShape,
+  NormalizedFeature,
   Padding,
   PatternFillOptions,
   PatternType,

@@ -99,6 +99,7 @@ import type {
   ApexMapsEventName,
   ApexMapsOptions,
   CameraState,
+  DataLabelOptions,
   DrilldownContext,
   DrilldownOptions,
   GeoInput,
@@ -4305,7 +4306,7 @@ function resolveLabelText({
   formatter,
 }: {
   feature: NormalizedFeature
-  field?: string | ((datum: unknown) => string)
+  field?: DataLabelOptions['field']
   value: number | null
   formatter?: (context: { value: number | null; name?: string; key?: string }) => string
 }): string {

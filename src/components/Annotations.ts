@@ -36,7 +36,7 @@
 import { svg, empty } from '../utils/dom'
 import { markerPath, isPointAnchored } from '../renderers/Shapes'
 import type { SvgRenderer } from '../renderers/SvgRenderer'
-import type { Box } from './Labels'
+import { estimateTextWidth, type Box } from './Labels'
 import type { Viewport } from '../geo/Viewport'
 import type {
   AnnotationConnector,
@@ -329,8 +329,12 @@ export class Annotations {
     const padding = label.padding ?? DEFAULT_PADDING
     const bare = label.background === 'none'
     const lines = String(label.text).split('\n')
-    const longest = lines.reduce((max, line) => Math.max(max, line.length), 0)
-    const textWidth = longest * fontSize * 0.58
+    // Unset by default, so the chip inherits the chart's font as it always has.
+    const fontFamily = label.fontFamily || undefined
+    const textWidth = lines.reduce(
+      (max, line) => Math.max(max, estimateTextWidth(line, fontSize, fontFamily)),
+      0,
+    )
     const lineHeight = fontSize * 1.25
     const width = textWidth + padding * 2
     const height = lineHeight * lines.length + padding * 2
@@ -394,6 +398,7 @@ export class Annotations {
       'font-weight': label.fontWeight ?? 500,
       fill: label.color ?? 'var(--_apexmaps-fg, currentColor)',
     })
+    if (fontFamily) text.setAttribute('font-family', fontFamily)
 
     lines.forEach((line, i) => {
       const tspan = svg('tspan', { x: cx, text: line })

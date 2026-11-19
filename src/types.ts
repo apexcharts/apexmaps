@@ -218,7 +218,13 @@ export interface StrokeOptions {
 
 export interface SeriesLabelOptions {
   show?: boolean
-  field?: string | ((datum: unknown) => string)
+  /**
+   * Property to label each region with, or a function returning the text. The
+   * function is called once per region with the feature being labelled (its
+   * `key`, `name` and geometry `properties`), not with a data row: a label
+   * belongs to a region, and a region need not have a row.
+   */
+  field?: string | ((feature: NormalizedFeature) => string)
 }
 
 export interface MarkAnimationOptions {
@@ -1078,7 +1084,26 @@ export interface TooltipOptions {
 
 export interface DataLabelOptions {
   enabled?: boolean
-  field?: string | ((datum: unknown) => string)
+  /**
+   * Property to label each region with, or a function returning the text.
+   *
+   * Defaults to the field the map recommends, otherwise the region's name. A
+   * grid layout recommends its key (`JP-05`, `TX`), because its cells are sized
+   * for a short code, so a hex map labels by key unless this is set. The
+   * function is called once per region with the feature being labelled (its
+   * `key`, `name` and geometry `properties`), not with a data row: a label
+   * belongs to a region, and a region need not have a row. A layout cell's
+   * properties are only its key, name, column and row, so text that is not
+   * one of those (a prefecture's name in kanji, say) comes from a function that
+   * looks the key up:
+   *
+   * ```js
+   * dataLabels: { field: (f) => kanji[f.key] ?? f.key }
+   * ```
+   *
+   * `formatter`, when set, wins over this.
+   */
+  field?: string | ((feature: NormalizedFeature) => string)
   formatter?: (context: { value: number | null; name?: string; key?: string }) => string
   /** `'hide'` drops labels that would overlap. */
   collision?: 'hide' | 'none'
@@ -1086,6 +1111,12 @@ export interface DataLabelOptions {
   minFeatureArea?: number
   style?: {
     fontSize?: number
+    /**
+     * CSS font stack for the labels alone, e.g. a face with CJK glyphs for
+     * kanji labels on an otherwise Latin chart. Unset, labels inherit
+     * `chart.fontFamily`.
+     */
+    fontFamily?: string
     fontWeight?: number | string
     halo?: boolean
     haloColor?: string
@@ -1294,6 +1325,8 @@ export interface AnnotationLabel {
   offsetY?: number
   color?: string
   fontSize?: number
+  /** CSS font stack for this label. Unset, it inherits `chart.fontFamily`. */
+  fontFamily?: string
   fontWeight?: number | string
   /** Chip fill. `'none'` draws haloed text with no chip. */
   background?: string
@@ -1533,7 +1566,10 @@ export type ApexMapsEventName = keyof ApexMapsEventMap
 
 // --- internal shared shapes -------------------------------------------------
 
-/** A feature after ingest, with a resolved join key. */
+/**
+ * A feature after ingest, with a resolved join key. Public because it is what a
+ * `dataLabels.field` or series `labels.field` function is called with.
+ */
 export interface NormalizedFeature {
   key: string
   name?: string
